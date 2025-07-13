@@ -33,7 +33,7 @@ export default function LoginPage() {
           <div className="mx-auto mb-4 w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
             <Building2 className="w-6 h-6 text-white" />
           </div>
-          <CardTitle className="text-2xl font-bold">ConstructPro</CardTitle>
+          <CardTitle className="text-2xl font-bold">Virukshaa Construction Product</CardTitle>
           <CardDescription>Construction Management System</CardDescription>
         </CardHeader>
         <CardContent>

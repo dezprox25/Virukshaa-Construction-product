@@ -4,9 +4,11 @@ import './globals.css'
 import { AuthProvider } from '@/components/providers/auth-provider'
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.dev',
+  title: 'Virukshaa-Construction-product',
+  description: 'One of the Dezprox company products under building',
+  icons: {
+    icon: '/dezproxlogo.png',
+  },
 }
 
 const inter = Inter({ subsets: ['latin'] })
