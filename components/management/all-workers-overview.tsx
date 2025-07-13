@@ -388,7 +388,7 @@ export default function AllWorkersOverview() {
                       <TableCell>
                         <Badge className={getTypeColor(worker.type)}>
                           <span className="flex items-center gap-1">
-                            {getTypeIcon(worker.type)}
+                            {getTypeIcon(worker.type)}   
                             {worker.type}
                           </span>
                         </Badge>
