@@ -31,10 +31,11 @@ export async function GET(request: Request, { params }: Params) {
   }
 }
 
-export async function PUT(request: Request, { params }: Params) {
+export async function PUT(request: Request, context: Params) {
+  const { id } = context.params;
   try {
     await dbConnect();
-    const { id } = params;
+    
     const body = await request.json();
 
     const {

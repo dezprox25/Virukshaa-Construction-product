@@ -28,6 +28,7 @@ const PayrollManagement = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedRole, setSelectedRole] = useState('employee'); // Default to 'employee'
   const [isLoading, setIsLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<User>>({});
@@ -58,7 +59,8 @@ const PayrollManagement = () => {
         const endpoints = [
           { url: '/api/employees', role: 'employee' },
           { url: '/api/clients', role: 'client' },
-          { url: '/api/suppliers', role: 'supplier' }
+          { url: '/api/suppliers', role: 'supplier' },
+          { url: '/api/supervisors', role: 'supervisor' }
         ];
 
         // Fetch data from all endpoints
@@ -95,47 +97,8 @@ const PayrollManagement = () => {
         // If no data was fetched, use mock data as fallback
         if (allUsers.length === 0) {
           console.warn('No data received from APIs, using mock data');
-          // const mockUsers = [
-          //   {
-          //     _id: '1',
-          //     name: 'John Doe',
-          //     email: 'john@example.com',
-          //     role: 'employee',
-          //     salary: 25000,
-          //     totalPaid: 20000,
-          //     dueAmount: 5000,
-          //     lastPaymentDate: '2023-10-01',
-          //     status: 'active',
-          //     phone: '+1234567890'
-          //   },
-          //   {
-          //     _id: '2',
-          //     name: 'Acme Supplies',
-          //     email: 'acme@example.com',
-          //     role: 'supplier',
-          //     totalPaid: 150000,
-          //     dueAmount: 25000,
-          //     lastPaymentDate: '2023-09-28',
-          //     status: 'active',
-          //     phone: '+1987654321'
-          //   },
-          //   {
-          //     _id: '3',
-          //     name: 'Client Corp',
-          //     email: 'client@example.com',
-          //     role: 'client',
-          //     totalPaid: 500000,
-          //     dueAmount: 200000,
-          //     lastPaymentDate: '2023-10-10',
-          //     status: 'active',
-          //     phone: '+1122334455'
-          //   }
-          // ];
-          // setUsers(mockUsers);
-          // setFilteredUsers(mockUsers);
         } else {
           setUsers(allUsers);
-          setFilteredUsers(allUsers);
         }
       } catch (error) {
         console.error('Error in fetchAllData:', error);
@@ -148,23 +111,26 @@ const PayrollManagement = () => {
     fetchAllData();
   }, []);
 
-  // Update filtered users when search term changes
+  // Update filtered users when search term or role filter changes
   useEffect(() => {
-    const filtered = users.filter(user => 
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.role.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filtered = users.filter(user => {
+      const matchesRole = selectedRole === 'all' || user.role === selectedRole;
+      const matchesSearch = searchTerm === '' ||
+        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesRole && matchesSearch;
+    });
     setFilteredUsers(filtered);
-  }, [searchTerm, users]);
+  }, [searchTerm, users, selectedRole]);
 
   const handleEdit = (user: User) => {
     setEditingId(user._id);
+    const baseAmount = user.role === 'client' ? user.projectTotalAmount : user.salary;
     setEditForm({
-      salary: user.salary,
+      salary: baseAmount,
       totalPaid: user.totalPaid,
       dueAmount: user.dueAmount,
-      lastPaymentDate: user.lastPaymentDate
+      lastPaymentDate: user.lastPaymentDate,
     });
   };
 
@@ -173,20 +139,98 @@ const PayrollManagement = () => {
       const user = users.find(u => u._id === id);
       if (!user) return;
 
+      // Start with the editable form data
+      const payload: { [key: string]: any } = { ...editForm };
+
+      // Map UI fields back to the original database fields based on what might exist on the original user object
+      if (user.hasOwnProperty('paidAmount')) {
+        payload.paidAmount = payload.totalPaid;
+        delete payload.totalPaid;
+      }
+      if (user.hasOwnProperty('pendingAmount')) {
+        payload.pendingAmount = payload.dueAmount;
+        delete payload.dueAmount;
+      }
+      if (user.hasOwnProperty('monthlySalary')) {
+        payload.monthlySalary = payload.salary;
+        delete payload.salary;
+      }
+
+      // Handle client-specific amount field
+      if (user.role === 'client') {
+        payload.projectTotalAmount = payload.salary; 
+        delete payload.salary; 
+      }
+
+      // Ensure numeric values are numbers before sending
+      Object.keys(payload).forEach(key => {
+        if (['projectTotalAmount', 'salary', 'totalPaid', 'dueAmount', 'paidAmount', 'pendingAmount', 'monthlySalary'].includes(key)) {
+          payload[key] = Number(payload[key]);
+        }
+      });
+
       const response = await fetch(`/api/${user.role}s/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify(payload),
       });
 
-      if (!response.ok) throw new Error('Failed to update');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response' }));
+        console.error('API Error:', errorData);
+        throw new Error(`Failed to update. Server responded with: ${errorData.message || response.statusText}`);
+      }
+
+      // --- Log the payment transaction ---
+      const originalTotalPaid = user.totalPaid || 0;
+      const newTotalPaid = Number(editForm.totalPaid) || 0;
+      const paymentAmount = newTotalPaid - originalTotalPaid;
+
+      if (paymentAmount > 0) {
+        try {
+          const payrollPayload = {
+            user: user._id,
+            // Capitalize first letter to match the backend model enum
+            userRole: user.role.charAt(0).toUpperCase() + user.role.slice(1),
+            amount: paymentAmount,
+            paymentDate: new Date().toISOString(),
+            status: 'paid',
+            notes: `Payment of ${paymentAmount} recorded.`
+          };
+
+          const payrollResponse = await fetch('/api/payroll', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payrollPayload),
+          });
+
+          if (!payrollResponse.ok) {
+            toast.error('User updated, but failed to log payroll transaction.');
+          } else {
+            toast.success('Payroll transaction logged successfully.');
+          }
+        } catch (payrollError) {
+          console.error('Error logging payroll transaction:', payrollError);
+          toast.error('User updated, but there was an error logging the transaction.');
+        }
+      }
 
       // Update local state
-      const updatedUsers = users.map(u => 
-        u._id === id ? { ...u, ...editForm } : u
-      );
+      const updatedUsers = users.map(u => {
+        if (u._id === id) {
+          // Merge the original user data with the changes from the edit form to update the UI instantly
+          const updatedData = { ...u, ...editForm };
+
+          // If it was a client, also update the projectTotalAmount from the form's salary field
+          if (u.role === 'client') {
+            updatedData.projectTotalAmount = editForm.salary;
+          }
+          return updatedData;
+        }
+        return u;
+      });
       
       setUsers(updatedUsers);
       setEditingId(null);
@@ -198,10 +242,18 @@ const PayrollManagement = () => {
   };
 
   const handleInputChange = (field: string, value: string | number) => {
-    setEditForm(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setEditForm(prev => {
+      const newForm = { ...prev, [field]: value };
+
+      // Automatically calculate due amount when totalPaid changes
+      if (field === 'totalPaid') {
+        const salary = Number(newForm.salary) || 0;
+        const totalPaid = Number(value) || 0;
+        newForm.dueAmount = salary - totalPaid;
+      }
+      
+      return newForm;
+    });
   };
 
   const handleCancel = () => {
@@ -218,17 +270,9 @@ const PayrollManagement = () => {
   const suppliers = users.filter(user => user.role === 'supplier');
 
   const stats = [
-    { 
-      title: 'Clients', 
-      amount: clients.reduce((sum, user) => sum + (user.totalPaid || 0), 0),
-      due: clients.reduce((sum, user) => sum + (user.dueAmount || 0), 0),
-      count: clients.length,
-      description: 'Total received from clients',
-      color: 'bg-blue-100 text-blue-800',
-      border: 'border-l-4 border-blue-500'
-    },
-    { 
-      title: 'Employees', 
+    {
+      title: 'Employees',
+      role: 'employee',
       amount: employees.reduce((sum, user) => sum + (user.salary || 0), 0),
       due: employees.reduce((sum, user) => sum + (user.dueAmount || 0), 0),
       count: employees.length,
@@ -236,8 +280,20 @@ const PayrollManagement = () => {
       color: 'bg-green-100 text-green-800',
       border: 'border-l-4 border-green-500'
     },
-    { 
-      title: 'Supervisors', 
+    {
+      title: 'Clients',
+      role: 'client',
+      amount: clients.reduce((sum, user) => sum + (user.projectTotalAmount || 0), 0),
+      due: clients.reduce((sum, user) => sum + (user.dueAmount || 0), 0),
+      count: clients.length,
+      description: 'Total project value',
+      color: 'bg-blue-100 text-blue-800',
+      border: 'border-l-4 border-blue-500'
+    },
+ 
+    {
+      title: 'Supervisors',
+      role: 'supervisor',
       amount: supervisors.reduce((sum, user) => sum + (user.salary || 0), 0),
       due: supervisors.reduce((sum, user) => sum + (user.dueAmount || 0), 0),
       count: supervisors.length,
@@ -245,8 +301,9 @@ const PayrollManagement = () => {
       color: 'bg-purple-100 text-purple-800',
       border: 'border-l-4 border-purple-500'
     },
-    { 
-      title: 'Suppliers', 
+    {
+      title: 'Suppliers',
+      role: 'supplier',
       amount: suppliers.reduce((sum, user) => sum + (user.totalPaid || 0), 0),
       due: suppliers.reduce((sum, user) => sum + (user.dueAmount || 0), 0),
       count: suppliers.length,
@@ -300,7 +357,11 @@ const PayrollManagement = () => {
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat, index) => (
-          <Card key={index} className={`${stat.border} shadow-sm`}>
+          <Card 
+            key={index} 
+            className={`${stat.border} shadow-sm cursor-pointer transition-all hover:scale-105 ${selectedRole === stat.role ? 'ring-2 ring-primary' : ''}`}
+            onClick={() => setSelectedRole(stat.role)}
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
                 {stat.title}
@@ -349,7 +410,9 @@ const PayrollManagement = () => {
                 <TableHead>Name</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead className="text-right">Salary</TableHead>
+                <TableHead className="text-right">
+                  {selectedRole === 'client' ? 'Project Amount' : 'Salary'}
+                </TableHead>
                 <TableHead className="text-right">Paid</TableHead>
                 <TableHead className="text-right">Due</TableHead>
                 <TableHead>Last Payment</TableHead>
@@ -380,7 +443,11 @@ const PayrollManagement = () => {
                           className="w-24"
                         />
                       ) : (
-                        (user.role === 'employee' || user.role === 'supervisor') && user.salary ? formatCurrency(user.salary) : '-'
+                        user.role === 'client' 
+                          ? formatCurrency(user.projectTotalAmount || 0) 
+                          : (user.role === 'employee' || user.role === 'supervisor') && user.salary 
+                            ? formatCurrency(user.salary) 
+                            : '-'
                       )}
                     </TableCell>
                     <TableCell className="text-right">

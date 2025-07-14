@@ -48,10 +48,10 @@ type UpdateClientData = Partial<Omit<IClient, '_id' | 'createdAt' | 'updatedAt'>
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
   try {
-    const { id } = params;
+    const { id } = context.params;
     const data: UpdateClientData = await request.json();
 
     if (!Types.ObjectId.isValid(id)) {

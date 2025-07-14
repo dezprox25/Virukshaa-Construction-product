@@ -53,10 +53,11 @@ export async function GET(
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
+  const { id } = context.params;
   try {
-    if (!Types.ObjectId.isValid(params.id)) {
+    if (!Types.ObjectId.isValid(id)) {
       return NextResponse.json(
         { message: 'Invalid employee ID' },
         { status: 400 }
@@ -67,7 +68,7 @@ export async function PUT(
 
     await connectToDB()
     const updatedEmployee = await Employee.findByIdAndUpdate(
-      params.id,
+      id,
       { ...data },
       { new: true, runValidators: true }
     ).lean()
@@ -91,10 +92,11 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
+  const { id } = context.params;
   try {
-    if (!Types.ObjectId.isValid(params.id)) {
+    if (!Types.ObjectId.isValid(id)) {
       return NextResponse.json(
         { message: 'Invalid employee ID' },
         { status: 400 }
@@ -102,7 +104,7 @@ export async function DELETE(
     }
 
     await connectToDB()
-    const deletedEmployee = await Employee.findByIdAndDelete(params.id).lean()
+    const deletedEmployee = await Employee.findByIdAndDelete(id).lean()
 
     if (!deletedEmployee) {
       return NextResponse.json(

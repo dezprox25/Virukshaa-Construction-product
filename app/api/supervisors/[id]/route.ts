@@ -31,14 +31,15 @@ export async function GET(
 // UPDATE supervisor
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
+  const { id } = context.params;
   try {
     const body = await request.json();
     await connectToDB();
     
     const updatedSupervisor = await Supervisor.findByIdAndUpdate(
-      params.id,
+      id,
       { $set: body },
       { new: true, runValidators: true }
     );
