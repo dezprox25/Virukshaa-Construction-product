@@ -1,4 +1,5 @@
-import mongoose, { Connection } from "mongoose";
+import mongoose from "mongoose";
+
 
 // Type for cached connection
 interface CachedConnection {
@@ -12,7 +13,8 @@ declare global {
   var mongoose: CachedConnection;
 }
 
-const MONGODB_URI = process.env.MONGODB_URI;
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://dezprox25:catlover6208@cluster0.jbcrgrb.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+console.log('Attempting to read MONGODB_URI:', MONGODB_URI);
 
 if (!MONGODB_URI) {
   throw new Error(
