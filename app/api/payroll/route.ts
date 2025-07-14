@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     await connectToDB();
 
     const newPayrollEntry = await Payroll.create({
-      user,
+      user,  
       userRole,
       amount,
       paymentDate: paymentDate || new Date(),
