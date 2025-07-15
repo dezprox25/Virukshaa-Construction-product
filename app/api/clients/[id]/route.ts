@@ -44,37 +44,44 @@ export async function GET(
   }
 }
 
-type UpdateClientData = Partial<Omit<IClient, '_id' | 'createdAt' | 'updatedAt'>>;
-
 export async function PUT(
   request: Request,
-  context: { params: { id: string } }
+  { params }: { params: { id: string } }
 ) {
-  try {
-    const { id } = context.params;
-    const data: UpdateClientData = await request.json();
+  const { id } = params;
 
+  try {
     if (!Types.ObjectId.isValid(id)) {
       return NextResponse.json({ message: 'Invalid client ID' }, { status: 400 });
     }
 
-    await connectToDB();
+    const body = await request.json();
 
-    const updatePayload: any = {
-      ...data,
-      updatedAt: new Date(),
-    };
-
-    // Only add avatar if it's defined
-    if (data.avatar !== undefined) {
-      updatePayload.avatar = data.avatar;
+    // Convert date strings to Date objects
+    if (body.lastPaymentDate && typeof body.lastPaymentDate === 'string') {
+      body.lastPaymentDate = new Date(body.lastPaymentDate);
     }
 
+    // Create a clean update object with only allowed fields
+    const updateData: Partial<IClient> = {};
+    const allowedFields: (keyof IClient)[] = [
+      'name', 'email', 'phone', 'company', 'address', 'city', 'state',
+      'postalCode', 'taxId', 'website', 'status', 'projectTotalAmount',
+      'totalPaid', 'dueAmount', 'lastPaymentDate', 'avatar'
+    ];
+
+    allowedFields.forEach(field => {
+      if (body[field] !== undefined) {
+        (updateData as any)[field] = body[field];
+      }
+    });
+
+    await connectToDB();
     const updatedClient = await Client.findByIdAndUpdate(
       id,
-      updatePayload,
+      updateData,
       { new: true, runValidators: true }
-    ).lean().exec();
+    ).lean();
 
     if (!updatedClient) {
       return NextResponse.json({ message: 'Client not found' }, { status: 404 });
@@ -82,7 +89,7 @@ export async function PUT(
 
     return NextResponse.json(toClientResponse(updatedClient));
   } catch (error) {
-    console.error('Error updating client:', error);
+    console.error(`Error updating client ${id}:`, error);
     return NextResponse.json({ message: 'Failed to update client' }, { status: 500 });
   }
 }

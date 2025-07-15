@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Search, Download, PlusCircle, Filter, Save, X, Edit } from "lucide-react";
 import { toast } from "sonner";
+import { jsPDF } from "jspdf";
 
 type User = {
   _id: string;
@@ -28,10 +29,12 @@ const PayrollManagement = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedRole, setSelectedRole] = useState('employee'); // Default to 'employee'
+  const [selectedRole, setSelectedRole] = useState('supervisor'); // Default to 'employee'
   const [isLoading, setIsLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<Partial<User>>({});
+  const [editForm, setEditForm] = useState<User | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Helper function to fetch data with error handling
   const fetchWithErrorHandling = async (url: string) => {
@@ -82,8 +85,8 @@ const PayrollManagement = () => {
           name: user.name || user.companyName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown',
           email: user.email || `${user.role}-${Date.now()}@example.com`,
           role: user.role || 'employee',
-          salary: typeof user.salary === 'string' 
-            ? parseFloat(user.salary.replace(/[^0-9.]/g, '')) 
+          salary: typeof user.salary === 'string'
+            ? parseFloat(user.salary.replace(/[^0-9.]/g, ''))
             : Number(user.salary || user.monthlySalary || 0),
           totalPaid: Number(user.totalPaid || user.paidAmount || 0),
           dueAmount: Number(user.dueAmount || user.pendingAmount || 0),
@@ -125,141 +128,187 @@ const PayrollManagement = () => {
 
   const handleEdit = (user: User) => {
     setEditingId(user._id);
-    const baseAmount = user.role === 'client' ? user.projectTotalAmount : user.salary;
-    setEditForm({
-      salary: baseAmount,
-      totalPaid: user.totalPaid,
-      dueAmount: user.dueAmount,
-      lastPaymentDate: user.lastPaymentDate,
-    });
+    setEditForm({ ...user });
   };
 
-  const handleSave = async (id: string) => {
+  const handleSave = async () => {
+    if (!editForm || !editForm.role || isSaving) return;
+
+    setIsSaving(true);
+    const apiPath = `/api/${editForm.role.toLowerCase()}s`;
+    const userId = editForm._id;
+
+    // Find the original user state to calculate the payment amount
+    const originalUser = users.find(u => u._id === userId);
+    const originalPaid = originalUser ? originalUser.totalPaid : 0;
+    const paymentAmount = editForm.totalPaid - originalPaid;
+
     try {
-      const user = users.find(u => u._id === id);
-      if (!user) return;
-
-      // Start with the editable form data
-      const payload: { [key: string]: any } = { ...editForm };
-
-      // Map UI fields back to the original database fields based on what might exist on the original user object
-      if (user.hasOwnProperty('paidAmount')) {
-        payload.paidAmount = payload.totalPaid;
-        delete payload.totalPaid;
-      }
-      if (user.hasOwnProperty('pendingAmount')) {
-        payload.pendingAmount = payload.dueAmount;
-        delete payload.dueAmount;
-      }
-      if (user.hasOwnProperty('monthlySalary')) {
-        payload.monthlySalary = payload.salary;
-        delete payload.salary;
-      }
-
-      // Handle client-specific amount field
-      if (user.role === 'client') {
-        payload.projectTotalAmount = payload.salary; 
-        delete payload.salary; 
-      }
-
-      // Ensure numeric values are numbers before sending
-      Object.keys(payload).forEach(key => {
-        if (['projectTotalAmount', 'salary', 'totalPaid', 'dueAmount', 'paidAmount', 'pendingAmount', 'monthlySalary'].includes(key)) {
-          payload[key] = Number(payload[key]);
-        }
-      });
-
-      const response = await fetch(`/api/${user.role}s/${id}`, {
+      const response = await fetch(`${apiPath}/${userId}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response' }));
-        console.error('API Error:', errorData);
-        throw new Error(`Failed to update. Server responded with: ${errorData.message || response.statusText}`);
+        throw new Error('Failed to save data');
       }
 
-      // --- Log the payment transaction ---
-      const originalTotalPaid = user.totalPaid || 0;
-      const newTotalPaid = Number(editForm.totalPaid) || 0;
-      const paymentAmount = newTotalPaid - originalTotalPaid;
-
-      if (paymentAmount > 0) {
-        try {
-          const payrollPayload = {
-            user: user._id,
-            // Capitalize first letter to match the backend model enum
-            userRole: user.role.charAt(0).toUpperCase() + user.role.slice(1),
-            amount: paymentAmount,
-            paymentDate: new Date().toISOString(),
-            status: 'paid',
-            notes: `Payment of ${paymentAmount} recorded.`
-          };
-
-          const payrollResponse = await fetch('/api/payroll', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payrollPayload),
-          });
-
-          if (!payrollResponse.ok) {
-            toast.error('User updated, but failed to log payroll transaction.');
-          } else {
-            toast.success('Payroll transaction logged successfully.');
-          }
-        } catch (payrollError) {
-          console.error('Error logging payroll transaction:', payrollError);
-          toast.error('User updated, but there was an error logging the transaction.');
-        }
-      }
+      const updatedUser = await response.json();
 
       // Update local state
-      const updatedUsers = users.map(u => {
-        if (u._id === id) {
-          // Merge the original user data with the changes from the edit form to update the UI instantly
-          const updatedData = { ...u, ...editForm };
+      setUsers(prev =>
+        prev.map(u => (u._id === updatedUser._id ? { ...u, ...updatedUser } : u))
+      );
 
-          // If it was a client, also update the projectTotalAmount from the form's salary field
-          if (u.role === 'client') {
-            updatedData.projectTotalAmount = editForm.salary;
-          }
-          return updatedData;
-        }
-        return u;
-      });
-      
-      setUsers(updatedUsers);
+      // Log the payment transaction only if a payment was made
+      if (paymentAmount > 0) {
+        await fetch('/api/payroll', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user: userId,
+            userRole: editForm.role,
+            amount: paymentAmount, // Log the actual amount paid in this transaction
+            paymentDate: new Date(),
+            status: 'paid',
+            notes: `Payment of ${paymentAmount} recorded.`,
+          }),
+        });
+      }
+
+      setEditForm(null);
       setEditingId(null);
-      toast.success('Payment details updated successfully');
+      toast.success('Saved successfully!');
     } catch (error) {
-      console.error('Error updating payment:', error);
-      toast.error('Failed to update payment details');
+      console.error('Save error:', error);
+      toast.error('Failed to save. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleInputChange = (field: string, value: string | number) => {
     setEditForm(prev => {
+      if (!prev) return prev;
       const newForm = { ...prev, [field]: value };
 
-      // Automatically calculate due amount when totalPaid changes
-      if (field === 'totalPaid') {
-        const salary = Number(newForm.salary) || 0;
-        const totalPaid = Number(value) || 0;
-        newForm.dueAmount = salary - totalPaid;
+      const baseAmount = Number(newForm.salary) || 0;
+      const totalPaid = Number(newForm.totalPaid) || 0;
+      newForm.dueAmount = baseAmount - totalPaid;
+
+      if (field === 'totalPaid' && Number(value) > 0) {
+        newForm.lastPaymentDate = new Date().toISOString();
       }
-      
+
       return newForm;
     });
   };
 
+
+  const handleExportToPDF = () => {
+    setIsExporting(true);
+
+    try {
+      // Create a new PDF document
+      const doc = new jsPDF();
+      const currentDate = new Date().toLocaleDateString();
+
+      // Add title and date
+      doc.setFontSize(18);
+      doc.text('Payroll Management Report', 14, 22);
+      doc.setFontSize(10);
+      doc.text(`Generated on: ${currentDate}`, 14, 30);
+
+      // Group users by role
+      const roles = ['employee', 'supervisor', 'client', 'supplier'];
+      let startY = 40;
+
+      roles.forEach(role => {
+        const roleUsers = users.filter(user => user.role === role);
+        if (roleUsers.length === 0) return;
+
+        // Add role header
+        doc.setFontSize(14);
+        doc.text(`${role.charAt(0).toUpperCase() + role.slice(1)}s`, 14, startY);
+        startY += 10;
+
+        // Set up table
+        const headers = ['Name', 'Email', 'Phone', 'Salary', 'Total Paid', 'Due', 'Last Payment', 'Status'];
+        const columnWidths = [20, 43, 23, 20, 18, 18, 40, 20];
+        const rowHeight = 10;
+        const margin = 5;
+
+        // Draw table headers
+        let x = margin;
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        headers.forEach((header, i) => {
+          doc.text(header, x, startY);
+          x += columnWidths[i];
+        });
+
+        // Draw line under headers
+        startY += 4;
+        doc.line(margin, startY, margin + columnWidths.reduce((a, b) => a + b, 0), startY);
+        startY += 4;
+
+        // Draw table rows
+        doc.setFont('helvetica', 'normal');
+        roleUsers.forEach(user => {
+          if (startY > 280) { // Check if we need a new page
+            doc.addPage();
+            startY = 20;
+          }
+
+          const row = [
+            user.name || 'N/A',
+            user.email || 'N/A',
+            user.phone || 'N/A',
+            user.salary ? `$${user.salary.toFixed(2)}` : 'N/A',
+            `$${user.totalPaid?.toFixed(2) || '0.00'}`,
+            `$${user.dueAmount?.toFixed(2) || '0.00'}`,
+            user.lastPaymentDate || 'N/A',
+            user.status || 'N/A'
+          ];
+
+          x = margin;
+          row.forEach((cell, i) => {
+            // Split text if it's too long for the column
+            const splitText = doc.splitTextToSize(cell, columnWidths[i] - 2);
+            doc.text(splitText, x + 2, startY + 5);
+            x += columnWidths[i];
+          });
+
+          startY += rowHeight;
+
+          // Draw line between rows
+          if (startY < 280) {
+            doc.line(margin, startY, margin + columnWidths.reduce((a, b) => a + b, 0), startY);
+            startY += 5;
+          }
+        });
+
+        // Add space between role sections
+        startY += 15;
+      });
+
+      // Save the PDF
+      doc.save(`payroll-report-${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success('PDF exported successfully!');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate PDF');
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   const handleCancel = () => {
     setEditingId(null);
-    setEditForm({});
+    setEditForm(null);
   };
+
 
 
 
@@ -271,6 +320,16 @@ const PayrollManagement = () => {
 
   const stats = [
     {
+      title: 'Supervisors',
+      role: 'supervisor',
+      amount: supervisors.reduce((sum, user) => sum + (user.salary || 0), 0),
+      due: supervisors.reduce((sum, user) => sum + (user.dueAmount || 0), 0),
+      count: supervisors.length,
+      description: 'Supervisor payments',
+      color: 'bg-purple-100 text-purple-800',
+
+    },
+    {
       title: 'Employees',
       role: 'employee',
       amount: employees.reduce((sum, user) => sum + (user.salary || 0), 0),
@@ -278,7 +337,7 @@ const PayrollManagement = () => {
       count: employees.length,
       description: 'Total salary to be paid',
       color: 'bg-green-100 text-green-800',
-      border: 'border-l-4 border-green-500'
+
     },
     {
       title: 'Clients',
@@ -288,19 +347,9 @@ const PayrollManagement = () => {
       count: clients.length,
       description: 'Total project value',
       color: 'bg-blue-100 text-blue-800',
-      border: 'border-l-4 border-blue-500'
+
     },
- 
-    {
-      title: 'Supervisors',
-      role: 'supervisor',
-      amount: supervisors.reduce((sum, user) => sum + (user.salary || 0), 0),
-      due: supervisors.reduce((sum, user) => sum + (user.dueAmount || 0), 0),
-      count: supervisors.length,
-      description: 'Supervisor payments',
-      color: 'bg-purple-100 text-purple-800',
-      border: 'border-l-4 border-purple-500'
-    },
+
     {
       title: 'Suppliers',
       role: 'supplier',
@@ -309,7 +358,7 @@ const PayrollManagement = () => {
       count: suppliers.length,
       description: 'Supplier payments',
       color: 'bg-amber-100 text-amber-800',
-      border: 'border-l-4 border-amber-500'
+
     },
   ];
 
@@ -339,10 +388,16 @@ const PayrollManagement = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-8 gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1"
+            onClick={handleExportToPDF}
+            disabled={isExporting}
+          >
             <Download className="h-3.5 w-3.5" />
             <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-              Export
+              {isExporting ? 'Exporting...' : 'Export'}
             </span>
           </Button>
           <Button size="sm" className="h-8 gap-1">
@@ -357,16 +412,16 @@ const PayrollManagement = () => {
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat, index) => (
-          <Card 
-            key={index} 
-            className={`${stat.border} shadow-sm cursor-pointer transition-all hover:scale-105 ${selectedRole === stat.role ? 'ring-2 ring-primary' : ''}`}
+          <Card
+            key={index}
+            className={`shadow-sm cursor-pointer transition-all hover:scale-105 ${selectedRole === stat.role ? `${stat.color}` : ''}`}
             onClick={() => setSelectedRole(stat.role)}
           >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
                 {stat.title}
               </CardTitle>
-              <div className={`h-8 w-8 rounded-full flex items-center justify-center ${stat.color}`}>
+              <div className={`h-8 w-8 rounded-full flex items-center justify-center `}>
                 {stat.count}
               </div>
             </CardHeader>
@@ -435,27 +490,27 @@ const PayrollManagement = () => {
                     </TableCell>
                     <TableCell>{user.email}</TableCell>
                     <TableCell className="text-right">
-                      {editingId === user._id ? (
+                      {editingId === user._id && editForm ? (
                         <Input
                           type="number"
                           value={editForm.salary || ''}
-                          onChange={(e) => handleInputChange('salary', Number(e.target.value))}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleInputChange('salary', Number(e.target.value))}
                           className="w-24"
                         />
                       ) : (
-                        user.role === 'client' 
-                          ? formatCurrency(user.projectTotalAmount || 0) 
-                          : (user.role === 'employee' || user.role === 'supervisor') && user.salary 
-                            ? formatCurrency(user.salary) 
+                        user.role === 'client'
+                          ? formatCurrency(user.projectTotalAmount || 0)
+                          : (user.role === 'employee' || user.role === 'supervisor') && user.salary
+                            ? formatCurrency(user.salary)
                             : '-'
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      {editingId === user._id ? (
+                      {editingId === user._id && editForm ? (
                         <Input
                           type="number"
                           value={editForm.totalPaid || ''}
-                          onChange={(e) => handleInputChange('totalPaid', Number(e.target.value))}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleInputChange('totalPaid', Number(e.target.value))}
                           className="w-24"
                         />
                       ) : (
@@ -463,29 +518,21 @@ const PayrollManagement = () => {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      {editingId === user._id ? (
-                        <Input
-                          type="number"
-                          value={editForm.dueAmount || ''}
-                          onChange={(e) => handleInputChange('dueAmount', Number(e.target.value))}
-                          className="w-24"
-                        />
-                      ) : user.dueAmount > 0 ? (
-                        <span className="text-red-600">{formatCurrency(user.dueAmount)}</span>
+                      {editingId === user._id && editForm ? (
+                        <span className="text-muted-foreground">{formatCurrency(editForm.dueAmount || 0)}</span>
                       ) : (
-                        <span className="text-green-600">Paid</span>
+                        user.dueAmount > 0 ? (
+                          <span className="text-red-600">{formatCurrency(user.dueAmount)}</span>
+                        ) : (
+                          <span className="text-green-600">Paid</span>
+                        )
                       )}
                     </TableCell>
                     <TableCell>
-                      {editingId === user._id ? (
-                        <Input
-                          type="date"
-                          value={editForm.lastPaymentDate?.toString().split('T')[0] || ''}
-                          onChange={(e) => handleInputChange('lastPaymentDate', e.target.value)}
-                          className="w-32"
-                        />
+                      {editingId === user._id && editForm ? (
+                        <span className="text-xs text-muted-foreground">{new Date(editForm.lastPaymentDate || Date.now()).toLocaleDateString()}</span>
                       ) : (
-                        user.lastPaymentDate || 'N/A'
+                        user.lastPaymentDate ? new Date(user.lastPaymentDate).toLocaleDateString() : 'N/A'
                       )}
                     </TableCell>
                     <TableCell>
@@ -493,33 +540,18 @@ const PayrollManagement = () => {
                         {user.status}
                       </Badge>
                     </TableCell>
-                    <TableCell className="space-x-1">
+                    <TableCell className="space-x-1 text-right">
                       {editingId === user._id ? (
                         <>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 p-0"
-                            onClick={() => handleSave(user._id)}
-                          >
-                            <Save className="h-4 w-4 text-green-600" />
+                          <Button variant="ghost" size="icon" onClick={handleSave} disabled={isSaving}>
+                            <Save className="h-4 w-4" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 p-0"
-                            onClick={handleCancel}
-                          >
-                            <X className="h-4 w-4 text-red-600" />
+                          <Button variant="ghost" size="icon" onClick={handleCancel}>
+                            <X className="h-4 w-4" />
                           </Button>
                         </>
                       ) : (
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8 p-0"
-                          onClick={() => handleEdit(user)}
-                        >
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}>
                           <Edit className="h-4 w-4" />
                         </Button>
                       )}
@@ -529,7 +561,7 @@ const PayrollManagement = () => {
               ) : (
                 <TableRow>
                   <TableCell colSpan={9} className="h-24 text-center">
-                    No users found
+                    No users found for &quot;{selectedRole}&quot;.
                   </TableCell>
                 </TableRow>
               )}

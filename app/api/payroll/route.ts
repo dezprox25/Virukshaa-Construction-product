@@ -16,11 +16,19 @@ export async function POST(request: Request) {
       );
     }
 
+    // Bulletproof normalization: match 'userRole' to allowed enum values regardless of case
+    let normalizedUserRole = userRole;
+    const allowedUserRoles = ['Employee', 'Supervisor', 'Client', 'Supplier'];
+    const match = allowedUserRoles.find(r => r.toLowerCase() === String(userRole).toLowerCase());
+    if (match) {
+      normalizedUserRole = match;
+    }
+
     await connectToDB();
 
     const newPayrollEntry = await Payroll.create({
       user,  
-      userRole,
+      userRole: normalizedUserRole,
       amount,
       paymentDate: paymentDate || new Date(),
       status: status || 'paid',

@@ -808,10 +808,10 @@ export default function SuppliersManagement() {
                 <Phone className="w-4 h-4 text-muted-foreground" />
                 <span>{supplier.phone}</span>
               </div>
-              <div className="flex items-center gap-2 text-sm">
+              {/* <div className="flex items-center gap-2 text-sm">
                 <Mail className="w-4 h-4 text-muted-foreground" />
                 <span>{supplier.email}</span>
-              </div>
+              </div> */}
               <div className="flex items-center gap-2 text-sm">
                 <MapPin className="w-4 h-4 text-muted-foreground" />
                 <span>{supplier.address}</span>
@@ -856,10 +856,10 @@ export default function SuppliersManagement() {
                 <Edit className="w-4 h-4 mr-2" />
                 Edit
               </Button>
-              <Button variant="outline" size="sm" className="flex-1 bg-transparent">
+              {/* <Button variant="outline" size="sm" className="flex-1 bg-transparent">
                 <Mail className="w-4 h-4 mr-2" />
                 Contact
-              </Button>
+              </Button> */}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="destructive" size="sm">
@@ -961,9 +961,9 @@ export default function SuppliersManagement() {
                     >
                       <Edit className="w-4 h-4" />
                     </Button>
-                    <Button variant="outline" size="sm">
+                    {/* <Button variant="outline" size="sm">
                       <Mail className="w-4 h-4" />
-                    </Button>
+                    </Button> */}
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="destructive" size="sm">

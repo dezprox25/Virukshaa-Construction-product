@@ -28,19 +28,46 @@ export async function GET(
   }
 }
 
+import { ISupervisor } from '@/models/Supervisor';
+import { Types } from 'mongoose';
+
+// ... (keep existing GET and DELETE functions)
+
 // UPDATE supervisor
 export async function PUT(
   request: Request,
-  context: { params: { id: string } }
+  { params }: { params: { id: string } }
 ) {
-  const { id } = context.params;
+  const { id } = params;
   try {
+    if (!Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ message: 'Invalid supervisor ID' }, { status: 400 });
+    }
+
     const body = await request.json();
     await connectToDB();
+
+    // Convert date strings to Date objects
+    if (body.lastPaymentDate && typeof body.lastPaymentDate === 'string') {
+      body.lastPaymentDate = new Date(body.lastPaymentDate);
+    }
+
+    // Create a clean update object with only allowed fields
+    const updateData: Partial<ISupervisor> = {};
+    const allowedFields: (keyof ISupervisor)[] = [
+      'name', 'email', 'phone', 'salary', 'address', 'status', 'avatar',
+      'totalPaid', 'dueAmount', 'lastPaymentDate'
+    ];
+
+    allowedFields.forEach(field => {
+      if (body[field] !== undefined) {
+        (updateData as any)[field] = body[field];
+      }
+    });
     
     const updatedSupervisor = await Supervisor.findByIdAndUpdate(
       id,
-      { $set: body },
+      updateData,
       { new: true, runValidators: true }
     );
     

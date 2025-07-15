@@ -10,6 +10,9 @@ export interface ISupplier extends Document {
   paymentType: 'Cash' | 'Credit';
   address: string;
   status: 'Active' | 'Inactive';
+  totalPaid?: number;
+  dueAmount?: number;
+  lastPaymentDate?: Date;
   avatar?: string;
 }
 
@@ -31,6 +34,9 @@ const supplierSchema = new Schema<ISupplier>({
     enum: ['Active', 'Inactive'],
     default: 'Active'
   },
+  totalPaid: { type: Number, default: 0 },
+  dueAmount: { type: Number, default: 0 },
+  lastPaymentDate: { type: Date },
   avatar: { type: String }
 }, {
   timestamps: true

@@ -13,6 +13,9 @@ export interface IClient extends Document {
   website?: string;
   status: 'Active' | 'Inactive';
   projectTotalAmount: number;
+  totalPaid?: number;
+  dueAmount?: number;
+  lastPaymentDate?: Date;
   avatar?: string; // Optional avatar URL
   createdAt: Date;
   updatedAt: Date;
@@ -36,6 +39,9 @@ const clientSchema = new Schema<IClient>(
       default: 'Active'
     },
     projectTotalAmount: { type: Number, required: true },
+    totalPaid: { type: Number, default: 0 },
+    dueAmount: { type: Number, default: 0 },
+    lastPaymentDate: { type: Date },
     avatar: { type: String }, // Optional avatar URL
   },
   { timestamps: true }

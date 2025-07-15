@@ -28,7 +28,7 @@ const employeeSchema = new Schema<IEmployee>({
     enum: [
       'Mason', 'Carpenter', 'Electrician', 'Plumber', 
       'Heavy Equipment Operator', 'Safety Inspector', 'Laborer', 
-      'Welder', 'Painter', 'Roofer', 'HVAC Technician', 'Concrete Worker'
+      'Welder', 'Painter', 'Roofer', 'HVAC Technician', 'Concrete Worker', 'Employee'
     ]
   },
   salary: { type: Number, required: true },
@@ -38,7 +38,7 @@ const employeeSchema = new Schema<IEmployee>({
     enum: ['Daily', 'Monthly', 'Contract'],
   },
   status: { 
-    type: String, 
+    type: String,   
     enum: ['Active', 'On Leave', 'Inactive'],
     default: 'Active'
   },
@@ -53,6 +53,4 @@ const employeeSchema = new Schema<IEmployee>({
 }, { timestamps: true });
 
 // Create the model or return existing one to prevent recompilation errors
-const Employee = mongoose.models.Employee || mongoose.model<IEmployee>('Employee', employeeSchema);
-
-export default Employee;
+export default mongoose.models.Employee || mongoose.model<IEmployee>('Employee', employeeSchema);
