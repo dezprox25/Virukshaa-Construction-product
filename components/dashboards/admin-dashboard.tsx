@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import ClientsManagement from "@/components/management/clients-management"
 import DashboardLayout from "@/components/layout/dashboard-layout"
 import { Users, FolderOpen, Truck, UserCheck, DollarSign, FileText, AlertCircle, Info, Eye, Mail } from "lucide-react"
+import { ChartContainer, ChartTooltipContent, ChartLegendContent } from "@/components/ui/chart"
+import * as RechartsPrimitive from "recharts"
 import MaterialsManagement from "@/components/management/materials-management"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -682,14 +684,177 @@ export default function AdminDashboard() {
       );
     }
 
+    // Prepare data for the chart
+    const chartData = [
+      {
+        name: 'Supervisors',
+        value: dashboardData?.totalSupervisors || 0,
+        color: 'hsl(142.1, 76.2%, 36.3%)', // Green
+      },
+      {
+        name: 'Employees',
+        value: dashboardData?.totalEmployees || 0,
+        color: 'hsl(221.2, 83.2%, 53.3%)', // Blue
+      },
+      {
+        name: 'Clients',
+        value: dashboardData?.totalClients || 0,
+        color: 'hsl(262.1, 83.3%, 57.8%)', // Purple
+      },
+      {
+        name: 'Reports',
+        value: dashboardData?.totalReports || 0,
+        color: 'hsl(0, 84.2%, 60.2%)', // Red
+      },
+    ];
+
+    const totalItems = chartData.reduce((sum, item) => sum + item.value, 0);
+
     return (
-      <div className="w-full h-full flex items-center justify-center">
-        <div className="text-center p-6">
-          <p className="text-2xl font-bold">{dashboardData?.totalClients || 0}</p>
-          <p className="text-muted-foreground">Total Clients</p>
-          <p className="text-sm text-muted-foreground mt-2">
-            Click on any stat card to view detailed information
+      <div className="w-full h-full p-6">
+        {/* <div className="mb-6">
+          <h2 className="text-2xl font-bold">Overview Dashboard</h2>
+          <p className="text-muted-foreground">
+            Total items: {totalItems.toLocaleString()}
           </p>
+        </div> */}
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Chart */}
+          <div className="md:col-span-2 bg-card rounded-lg border p-6">
+            <h3 className="text-lg font-medium mb-4">Distribution Overview</h3>
+            <div className="h-[250px]">
+              <ChartContainer
+                config={{
+                  supervisors: {
+                    label: 'Supervisors',
+                    color: 'hsl(142.1, 76.2%, 36.3%)',
+                  },
+                  employees: {
+                    label: 'Employees',
+                    color: 'hsl(221.2, 83.2%, 53.3%)',
+                  },
+                  suppliers: {
+                    label: 'Suppliers',
+                    color: 'hsl(38, 92%, 50%)',
+                  },
+                  clients: {
+                    label: 'Clients',
+                    color: 'hsl(262.1, 83.3%, 57.8%)',
+                  },
+                  reports: {
+                    label: 'Reports',
+                    color: 'hsl(0, 84.2%, 60.2%)',
+                  },
+                }}
+              >
+                <RechartsPrimitive.PieChart>
+                  <RechartsPrimitive.Pie
+                    data={chartData}
+                    cx="50%"
+                    cy="30%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    {chartData.map((entry, index) => (
+                      <RechartsPrimitive.Cell
+                        key={`cell-${index}`}
+                        fill={entry.color}
+                        stroke="#fff"
+                        strokeWidth={2}
+                      />
+                    ))}
+                  </RechartsPrimitive.Pie>
+                  <RechartsPrimitive.Tooltip
+                    content={
+                      <ChartTooltipContent
+                        formatter={(value, name) => {
+                          const label = chartData.find(item => item.name === name)?.name || name;
+                          const labelStr = String(label);
+                          const isPeople = ['Supervisors', 'Employees', 'Suppliers', 'Clients'].includes(labelStr);
+                          return [
+                            `${value} ${isPeople ? (value === 1 ? labelStr.slice(0, -1) : labelStr) : labelStr}`,
+                            '',
+                          ];
+                        }}
+                      />
+                    }
+                  />
+                  {/* <RechartsPrimitive.Legend
+                    content={({ payload }) => (
+                      <div className="mt-4 flex flex-wrap justify-center gap-4">
+                        {payload?.map((entry, index) => (
+                          <div key={`legend-${index}`} className="flex items-center gap-1.5">
+                            <div 
+                              className="h-3 w-3 rounded-full" 
+                              style={{ backgroundColor: entry.color }}
+                            />
+                            <span className="text-xs">{entry.value}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({((chartData.find(d => d.name === entry.value)?.value || 0) / Math.max(1, totalItems) * 100).toFixed(1)}%)
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  /> */}
+                </RechartsPrimitive.PieChart>
+              </ChartContainer>
+            </div>
+          </div>
+          
+          {/* Stats */}
+          <div className="space-y-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Total Items</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold">{totalItems.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">Across all categories</p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">By Category</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {chartData.map((item) => {
+                  const percentage = (item.value / Math.max(1, totalItems) * 100).toFixed(1);
+                  return (
+                    <div key={item.name} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="h-3 w-3 rounded-full flex-shrink-0" 
+                            style={{ backgroundColor: item.color }}
+                          />
+                          <span>{item.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{item.value.toLocaleString()}</span>
+                          <span className="text-muted-foreground text-xs w-10 text-right">{percentage}%</span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full rounded-full" 
+                          style={{
+                            width: `${percentage}%`,
+                            backgroundColor: item.color,
+                            opacity: 0.6
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     );
@@ -773,7 +938,8 @@ export default function AdminDashboard() {
                   {selectedStat ? `Viewing details for ${selectedStat}` : 'Select a card to view details'}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="h-[400px]">
+              <CardContent className="min-h-[400px]">
+               
                 {renderDetailsTable()}
               </CardContent>
             </Card>

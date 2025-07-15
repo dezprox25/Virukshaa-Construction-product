@@ -4,13 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-// import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '../ui/form';
-import { useToast } from '../ui/use-toast';
-import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
-import { Loader2, Upload, Edit, Save, X, Pencil } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from "@/components/ui/input"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { useToast } from '@/components/ui/use-toast';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Loader2, Upload, Edit, Save, X, Pencil, Link } from 'lucide-react';
+import { FormDescription } from "@/components/ui/form";
 
 // Define form schema using Zod
 const formSchema = z.object({
@@ -45,6 +45,8 @@ const AdminSetting = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>('');
+  const [logoUrl, setLogoUrl] = useState<string>('');
+  const [showUrlInput, setShowUrlInput] = useState(false);
   const [profileData, setProfileData] = useState<any>(null);
   const { toast } = useToast();
 
@@ -134,16 +136,102 @@ const AdminSetting = () => {
     fetchAdminData();
   }, [form, toast]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (!file) return;
+
+    // Check file type (allow only images)
+    if (!file.type.match('image.*')) {
+      toast({
+        title: 'Invalid file type',
+        description: 'Please upload an image file (JPEG, PNG, etc.)',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Check file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast({
+        title: 'File too large',
+        description: 'Please upload an image smaller than 2MB',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      
+      // For local preview
       const reader = new FileReader();
-      reader.onloadend = () => {
+      reader.onload = () => {
         setPreviewUrl(reader.result as string);
       };
       reader.readAsDataURL(file);
-      form.setValue('logo', file);
+      
+      // Update the profile data with the new logo
+      setProfileData((prev: any) => ({
+        ...prev,
+        logo: URL.createObjectURL(file),
+      }));
+      
+      // Reset URL input state
+      setShowUrlInput(false);
+      setLogoUrl('');
+      
+    } catch (error) {
+      console.error('Error processing logo:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to process logo',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
     }
+  };
+  
+  const handleUrlSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!logoUrl) return;
+    
+    try {
+      // Basic URL validation
+      new URL(logoUrl);
+      
+      setPreviewUrl(logoUrl);
+      setProfileData((prev: any) => ({
+        ...prev,
+        logo: logoUrl,
+      }));
+      
+      toast({
+        title: 'Success',
+        description: 'Logo URL updated',
+      });
+      
+      // Reset URL input state
+      setShowUrlInput(false);
+      setLogoUrl('');
+      
+    } catch (error) {
+      toast({
+        title: 'Invalid URL',
+        description: 'Please enter a valid image URL',
+        variant: 'destructive',
+      });
+    }
+  };
+  
+  const handleRemoveLogo = () => {
+    setPreviewUrl('');
+    setLogoUrl('');
+    setProfileData((prev: any) => ({
+      ...prev,
+      logo: '',
+    }));
+    setShowUrlInput(false);
   };
 
   const onSubmit = async (data: FormValues) => {
@@ -203,6 +291,9 @@ const AdminSetting = () => {
       
       // Exit edit mode
       setIsEditing(false);
+      
+      // Dispatch custom event to notify other components about the profile update
+      window.dispatchEvent(new Event('profileUpdated'));
     } catch (error) {
       console.error('Error updating profile:', error);
       toast({
@@ -294,12 +385,31 @@ const AdminSetting = () => {
                   <h3 className="text-lg font-semibold text-gray-800 mb-4">Company Logo</h3>
                   <div className="flex flex-col items-center">
                     <div className="relative group">
-                      <Avatar className="h-32 w-32 border-4 border-white shadow-lg">
-                        <AvatarImage src={previewUrl} alt="Company Logo" />
-                        <AvatarFallback className="text-2xl font-bold bg-blue-100 text-blue-600">
-                          {profileData.companyName?.charAt(0) || 'C'}
-                        </AvatarFallback>
-                      </Avatar>
+                      <label htmlFor="logo-upload" className="cursor-pointer">
+                        <input
+                          id="logo-upload"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleFileChange}
+                          disabled={isLoading}
+                        />
+                        <div className="relative">
+                          <Avatar className="h-32 w-32 border-4 border-white shadow-lg group-hover:opacity-80 transition-opacity">
+                            <AvatarImage 
+                              src={previewUrl || '/default-logo.png'} 
+                              alt="Company Logo" 
+                              className="object-cover"
+                            />
+                            <AvatarFallback className="text-2xl font-bold bg-blue-100 text-blue-600">
+                              {profileData.companyName?.charAt(0) || 'C'}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
+                            <Pencil className="h-8 w-8 text-white" />
+                          </div>
+                        </div>
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -351,34 +461,85 @@ const AdminSetting = () => {
                     {/* Logo Upload */}
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                       <h3 className="text-lg font-semibold text-gray-800 mb-4">Company Logo</h3>
-                      <div className="flex flex-col items-center">
-                        <div className="relative group mb-4">
-                          <Avatar className="h-32 w-32 border-4 border-white shadow-lg">
-                            <AvatarImage src={previewUrl} alt="Company Logo" />
-                            <AvatarFallback className="text-2xl font-bold bg-blue-100 text-blue-600">
-                              {form.watch('companyName')?.charAt(0) || 'C'}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <Pencil className="h-6 w-6 text-white" />
+                      <div className="space-y-4">
+                        <div className="flex flex-col items-center">
+                          <div className="relative group mb-4">
+                            <Avatar className="h-32 w-32 border-4 border-white shadow-lg">
+                              <AvatarImage 
+                                src={previewUrl || profileData?.logo} 
+                                alt="Company Logo" 
+                                className="object-cover"
+                              />
+                              <AvatarFallback className="text-2xl font-bold bg-blue-100 text-blue-600">
+                                {form.watch('companyName')?.charAt(0) || 'C'}
+                              </AvatarFallback>
+                            </Avatar>
+                            {(previewUrl || profileData?.logo) && (
+                              <button
+                                onClick={handleRemoveLogo}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+                                type="button"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            )}
                           </div>
-                        </div>
-                        <div className="w-full text-center">
-                          <input
-                            type="file"
-                            id="logo-upload"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={handleFileChange}
-                          />
-                          <label
-                            htmlFor="logo-upload"
-                            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer transition-colors"
-                          >
-                            <Upload className="h-4 w-4 mr-2" />
-                            Change Logo
-                          </label>
-                          <p className="mt-2 text-xs text-gray-500">JPG, PNG, or WebP. Max 2MB</p>
+                          
+                          {showUrlInput ? (
+                            <form onSubmit={handleUrlSubmit} className="w-full space-y-2">
+                              <div className="flex gap-2">
+                                <Input
+                                  type="url"
+                                  placeholder="Enter image URL"
+                                  value={logoUrl}
+                                  onChange={(e) => setLogoUrl(e.target.value)}
+                                  className="flex-1"
+                                />
+                                <Button type="submit" size="sm" disabled={!logoUrl.trim() || isLoading}>
+                                  Save
+                                </Button>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-xs"
+                                onClick={() => setShowUrlInput(false)}
+                              >
+                                Cancel
+                              </Button>
+                            </form>
+                          ) : (
+                            <div className="flex flex-col space-y-2 w-full">
+                              <div className="flex gap-2">
+                                <input
+                                  type="file"
+                                  id="logo-upload"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={handleFileChange}
+                                />
+                                <label
+                                  htmlFor="logo-upload"
+                                  className="flex-1 inline-flex items-center justify-center px-3 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer transition-colors"
+                                >
+                                  <Upload className="h-4 w-4 mr-2" />
+                                  Upload
+                                </label>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setShowUrlInput(true)}
+                                  className="flex-1"
+                                >
+                                  <Link className="h-4 w-4 mr-2" />
+                                  URL
+                                </Button>
+                              </div>
+                              <p className="text-xs text-gray-500 text-center">JPG, PNG, or WebP. Max 2MB</p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
