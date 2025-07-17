@@ -2,12 +2,17 @@ import mongoose, { Schema, Document } from 'mongoose';
 import connectToDB from '@/lib/db';
 
 // Define the interface for the AdminProfile document
-interface IAdminProfile extends Document {
+export interface IAdminProfile extends Document {
   companyName: string;
   adminName: string;
   email: string;
+  username?: string;
   password: string;
-  logo?: string;
+  website?: string;
+  bio?: string;
+  profileImage?: string;
+  showJobTitle?: boolean;
+  searchQuery?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -17,8 +22,13 @@ const AdminProfileSchema = new Schema<IAdminProfile>({
   companyName: { type: String, required: true },
   adminName: { type: String, required: true },
   email: { type: String, required: true, unique: true },
+  username: { type: String },
   password: { type: String, required: true },
-  logo: { type: String },
+  website: { type: String },
+  bio: { type: String },
+  profileImage: { type: String },
+  showJobTitle: { type: Boolean, default: true },
+  searchQuery: { type: String },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });

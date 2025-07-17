@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import ClientsManagement from "@/components/management/clients-management"
 import DashboardLayout from "@/components/layout/dashboard-layout"
-import { Users, FolderOpen, Truck, UserCheck, DollarSign, FileText, AlertCircle, Info, Eye, Mail } from "lucide-react"
+import { Users, FolderOpen, Truck, UserCheck, DollarSign, FileText, AlertCircle, Info, Eye, Mail, ExternalLink } from "lucide-react"
 import { ChartContainer, ChartTooltipContent, ChartLegendContent } from "@/components/ui/chart"
 import * as RechartsPrimitive from "recharts"
 import MaterialsManagement from "@/components/management/materials-management"
@@ -22,6 +22,7 @@ import Reportmanagement from '@/components/management/report-management'
 import PayrollManagement from "@/components/management/payroll-management"
 import AdminSetting from "@/components/management/admin-setting"
 import { Skeleton } from "@/components/ui/skeleton"
+import UserDetailsModal from "@/components/ui/user-details-model"
 
 interface ApiResponse<T> {
   success: boolean;
@@ -138,6 +139,11 @@ export default function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedStat, setSelectedStat] = useState<string | null>(null);
+
+  // Modal state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [selectedUserType, setSelectedUserType] = useState<'supervisor' | 'employee' | 'client' | 'material'>('supervisor');
 
   const fetchDashboardData = async () => {
     try {
@@ -392,6 +398,31 @@ export default function AdminDashboard() {
     fetchDashboardData();
   }, []);
 
+  const handleViewDetails = (user: any, type: 'supervisor' | 'employee' | 'client' | 'material') => {
+    setSelectedUser(user);
+    setSelectedUserType(type);
+    setIsModalOpen(true);
+  };
+
+  const handleViewMore = (type: string) => {
+    switch(type) {
+      case 'supervisors':
+        setActiveSection('supervisors');
+        break;
+      case 'employees':
+        setActiveSection('employees');
+        break;
+      case 'clients':
+        setActiveSection('clients');
+        break;
+      case 'materials':
+        setActiveSection('materials');
+        break;
+      default:
+        setActiveSection('dashboard');
+    }
+  };
+
   const stats = [
     {
       id: 'clients',
@@ -503,11 +534,12 @@ export default function AdminDashboard() {
                   <TableCell>{supervisor.projects?.length || 0}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button variant="outline" size="sm">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleViewDetails(supervisor, 'supervisor')}
+                      >
                         <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        <Mail className="w-4 h-4" />
                       </Button>
                     </div>
                   </TableCell>
@@ -554,7 +586,11 @@ export default function AdminDashboard() {
                   <TableCell>{new Date(material.lastUpdated).toLocaleDateString()}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button variant="outline" size="sm">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleViewDetails(material, 'material')}
+                      >
                         <Eye className="w-4 h-4" />
                       </Button>
                     </div>
@@ -606,11 +642,12 @@ export default function AdminDashboard() {
                   <TableCell>{new Date(employee.joinDate).toLocaleDateString()}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button variant="outline" size="sm">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleViewDetails(employee, 'employee')}
+                      >
                         <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        <Mail className="w-4 h-4" />
                       </Button>
                     </div>
                   </TableCell>
@@ -652,11 +689,12 @@ export default function AdminDashboard() {
                   <TableCell>{client.projects?.length || 0}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button variant="outline" size="sm">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleViewDetails(client, 'client')}
+                      >
                         <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        <Mail className="w-4 h-4" />
                       </Button>
                     </div>
                   </TableCell>
@@ -711,14 +749,7 @@ export default function AdminDashboard() {
     const totalItems = chartData.reduce((sum, item) => sum + item.value, 0);
 
     return (
-      <div className="w-full h-full p-6">
-        {/* <div className="mb-6">
-          <h2 className="text-2xl font-bold">Overview Dashboard</h2>
-          <p className="text-muted-foreground">
-            Total items: {totalItems.toLocaleString()}
-          </p>
-        </div> */}
-        
+      <div className="w-full h-full p-6  ">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Chart */}
           <div className="md:col-span-2 bg-card rounded-lg border p-6">
@@ -782,24 +813,6 @@ export default function AdminDashboard() {
                       />
                     }
                   />
-                  {/* <RechartsPrimitive.Legend
-                    content={({ payload }) => (
-                      <div className="mt-4 flex flex-wrap justify-center gap-4">
-                        {payload?.map((entry, index) => (
-                          <div key={`legend-${index}`} className="flex items-center gap-1.5">
-                            <div 
-                              className="h-3 w-3 rounded-full" 
-                              style={{ backgroundColor: entry.color }}
-                            />
-                            <span className="text-xs">{entry.value}</span>
-                            <span className="text-xs text-muted-foreground">
-                              ({((chartData.find(d => d.name === entry.value)?.value || 0) / Math.max(1, totalItems) * 100).toFixed(1)}%)
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  /> */}
                 </RechartsPrimitive.PieChart>
               </ChartContainer>
             </div>
@@ -890,7 +903,7 @@ export default function AdminDashboard() {
         return <AdminSetting />;
       default:
         return (
-          <div className="space-y-6">
+          <div className="space-y-6  ">
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md flex items-center">
                 <AlertCircle className="h-5 w-5 mr-2" />
@@ -903,13 +916,13 @@ export default function AdminDashboard() {
               {stats.map((stat) => (
                 <Card 
                   key={stat.id} 
-                  className={`h-[120px] hover:shadow-md transition-shadow cursor-pointer ${
-                    selectedStat === stat.id ? 'ring-2 ring-primary' : ''
+                  className={`h-[120px] hover:shadow-xl border-none transition-shadow cursor-pointer ${
+                    selectedStat === stat.id ? 'shadow-lg' : ''
                   }`}
                   onClick={() => setSelectedStat(selectedStat === stat.id ? null : stat.id)}
                 >
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">{stat.title}</CardTitle>
+                    <CardTitle className="text-sm  text-[#00B140] font-semibold">{stat.title}</CardTitle>
                     <div className={`p-2 rounded-full ${stat.color.replace('text', 'bg')} bg-opacity-10`}>
                       <stat.icon className={`h-4 w-4 ${stat.color}`} />
                     </div>
@@ -939,8 +952,19 @@ export default function AdminDashboard() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="min-h-[400px]">
-               
-                {renderDetailsTable()}
+                <div className="space-y-4">
+                  {renderDetailsTable()}
+                  <div className="flex justify-center">
+                    <Button 
+                      variant="outline" 
+                      size="lg"
+                      onClick={() => handleViewMore(selectedStat || 'dashboard')}
+                    >
+                      <ExternalLink className="w-5 h-5 mr-2" />
+                      View More in {selectedStat ? selectedStat.charAt(0).toUpperCase() + selectedStat.slice(1) : 'Dashboard'}
+                    </Button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -953,7 +977,6 @@ export default function AdminDashboard() {
       <DashboardLayout userRole="admin" activeSection={activeSection} onSectionChange={setActiveSection}>
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
-            <h1 className="text-3xl font-bold">Admin Dashboard</h1>
             {error && (
               <Button onClick={fetchDashboardData} variant="outline">
                 Retry
@@ -963,6 +986,14 @@ export default function AdminDashboard() {
           {renderContent()}
         </div>
       </DashboardLayout>
+
+      {/* User Details Modal */}
+      <UserDetailsModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        data={selectedUser}
+        type={selectedUserType}
+      />
     </div>
   );
 }

@@ -6,53 +6,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  FolderOpen,
-  DollarSign,
-  Calendar,
-  MessageSquare,
-  Camera,
-  Home,
-  CreditCard,
-  Settings,
-  Bell,
-  TrendingUp,
-  Clock,
-  Menu,
-  LogOut,
-  User,
-} from "lucide-react"
+import { Bell, Camera, Clock, DollarSign, FolderOpen, Home, MessageSquare, Settings, TrendingUp, CreditCard,Calendar } from "lucide-react"
 import ClientProjectsManagement from "@/components/management/client-projects"
 import ClientPaymentsManagement from "@/components/management/client-payments"
 import ClientFeedbackManagement from "@/components/management/client-feedback"
 import ClientSettingsManagement from "@/components/management/client-settings"
-
-const sidebarItems = [
-  { title: "Dashboard", icon: Home, key: "dashboard" },
-  { title: "My Projects", icon: FolderOpen, key: "projects" },
-  { title: "Payments", icon: CreditCard, key: "payments" },
-  { title: "Feedback", icon: MessageSquare, key: "feedback" },
-  { title: "Settings", icon: Settings, key: "settings" },
-]
+import DashboardLayout from "@/components/layout/dashboard-layout"
 
 export default function ClientDashboard() {
   const [activeSection, setActiveSection] = useState("dashboard")
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const router = useRouter()
 
-  const handleLogout = () => {
-    localStorage.removeItem("userRole")
-    localStorage.removeItem("userEmail")
-    router.push("/")
+  const handleSectionChange = (section: string) => {
+    setActiveSection(section)
   }
 
   const projectStats = [
@@ -146,7 +112,14 @@ export default function ClientDashboard() {
   }
 
   const getSectionTitle = () => {
-    const section = sidebarItems.find((item) => item.key === activeSection)
+    const sections = [
+      { key: 'dashboard', title: 'Dashboard' },
+      { key: 'projects', title: 'My Projects' },
+      { key: 'payments', title: 'Payments' },
+      { key: 'feedback', title: 'Feedback' },
+      { key: 'settings', title: 'Settings' }
+    ]
+    const section = sections.find((item) => item.key === activeSection)
     return section ? section.title : "Dashboard"
   }
 
@@ -345,106 +318,12 @@ export default function ClientDashboard() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Sidebar */}
-      <div
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
-      >
-        <div className="flex flex-col h-full">
-          <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">Client Portal</h2>
-            <Button variant="ghost" size="sm" className="lg:hidden" onClick={() => setSidebarOpen(false)}>
-              ×
-            </Button>
-          </div>
-          <nav className="flex-1 px-4 py-6 space-y-2">
-            {sidebarItems.map((item) => (
-              <button
-                key={item.key}
-                onClick={() => {
-                  setActiveSection(item.key)
-                  setSidebarOpen(false)
-                }}
-                className={`w-full flex items-center gap-3 px-3 py-2 text-left rounded-lg transition-colors ${
-                  activeSection === item.key
-                    ? "bg-blue-50 text-blue-700 border-r-2 border-blue-600"
-                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                }`}
-              >
-                <item.icon className="w-5 h-5" />
-                <span className="font-medium">{item.title}</span>
-              </button>
-            ))}
-          </nav>
-        </div>
-      </div>
-
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden" onClick={() => setSidebarOpen(false)} />
-      )}
-
-      {/* Main content */}
-      <div className="flex-1 flex flex-col lg:ml-0">
-        {/* Header */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" className="lg:hidden" onClick={() => setSidebarOpen(true)}>
-              <Menu className="w-5 h-5" />
-            </Button>
-            <div className="flex items-center gap-2">
-              <span className="text-gray-600">Client Portal</span>
-              <span className="text-gray-400">/</span>
-              <span className="text-gray-900 font-medium">{getSectionTitle()}</span>
-            </div>
-          </div>
-
-          {/* User Menu */}
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon">
-              <Bell className="w-5 h-5" />
-            </Button>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src="/placeholder-user.jpg" alt="User" />
-                    <AvatarFallback className="bg-blue-100 text-blue-600">MC</AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">Michael Chen</p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {localStorage.getItem("userEmail") || "michael.chen@example.com"}
-                    </p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setActiveSection("settings")}>
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Profile</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setActiveSection("settings")}>
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Settings</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="text-red-600">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Log out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </header>
-
-        {/* Dashboard content */}
-        <main className="flex-1 overflow-auto p-6">{renderContent()}</main>
-      </div>
-    </div>
+    <DashboardLayout 
+      userRole="client" 
+      activeSection={activeSection}
+      onSectionChange={handleSectionChange}
+    >
+      {renderContent()}
+    </DashboardLayout>
   )
 }

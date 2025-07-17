@@ -172,13 +172,15 @@ export default function DashboardLayout({
     setSidebarOpen(false)
   }
 
+
+  // bg-[#051118] 
   const Sidebar = ({ mobile = false }) => (
-    <div className={`flex flex-col h-full ${mobile ? "w-full" : "w-64"} bg-white border-r`}>
-      <div className="flex items-center gap-2 p-6 border-b">
+    <div className={`flex flex-col h-full ${mobile ? "w-full" : "w-64"} bg-[#F0F0F0] shadow-md`}>
+      <div className="flex items-center gap-2 p-6">
         <div className="w-8 h-8 rounded-lg flex items-center justify-center">
-          <Building2 className="w-5 h-5 text-black" />
+          <Building2 className="w-5 h-5 text-[#37db44]" />
         </div>
-        <span className="font-bold text-xl">Virukshaa</span>
+        <span className="font-bold text-xl text-[#37db44]">Virukshaa</span>
       </div>
 
       <nav className="flex-1 p-4 space-y-2">
@@ -187,7 +189,7 @@ export default function DashboardLayout({
             key={item.id}
             variant={activeSection === item.id ? "default" : "ghost"}
             className={`w-full justify-start gap-3 ${
-              activeSection === item.id ? "bg-blue-600 text-white hover:bg-blue-700" : "hover:bg-gray-100"
+              activeSection === item.id ? "bg-[#fff] text-[#316b35] hover:bg-[#fff] hover:shadow-lg shadow-md transition-shadow" : "hover:bg-[#F9F9F9] hover:text-[#000] text-[#051118]"
             }`}
             onClick={() => handleNavClick(item.id)}
           >
@@ -226,7 +228,7 @@ export default function DashboardLayout({
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="bg-white border-b px-6 py-4 flex items-center justify-between">
+        <header className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h1 className="text-xl relative left-10 font-semibold">
               {userRole.charAt(0).toUpperCase() + userRole.slice(1)} - {getSectionTitle()}
