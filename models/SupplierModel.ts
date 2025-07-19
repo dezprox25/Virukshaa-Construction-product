@@ -4,6 +4,8 @@ export interface ISupplier extends Document {
   companyName: string;
   contactPerson: string;
   email: string;
+  username: string;
+  password: string;
   phone: string;
   materialTypes: string[];
   supplyStartDate?: Date;
@@ -20,6 +22,8 @@ const supplierSchema = new Schema<ISupplier>({
   companyName: { type: String, required: true },
   contactPerson: { type: String, required: true },
   email: { type: String, required: true, unique: true },
+  username: { type: String, required: true, unique: true },
+  password: { type: String, required: true, select: false },
   phone: { type: String, required: true },
   materialTypes: [{ type: String, required: true }],
   supplyStartDate: { type: Date },
@@ -40,6 +44,14 @@ const supplierSchema = new Schema<ISupplier>({
   avatar: { type: String }
 }, {
   timestamps: true
+});
+
+// Create text index for search
+supplierSchema.index({
+  companyName: 'text',
+  email: 'text',
+  username: 'text',
+  contactPerson: 'text'
 });
 
 // Create the model or retrieve it if it already exists to prevent OverwriteModelError

@@ -23,16 +23,37 @@ export async function POST(request: Request) {
     const body = await request.json()
     await connectToDB()
     
-    // Check if supervisor with email already exists
-    const existingSupervisor = await Supervisor.findOne({ email: body.email })
+    // Check if supervisor with email or username already exists
+    const existingSupervisor = await Supervisor.findOne({
+      $or: [
+        { email: body.email },
+        { username: body.username }
+      ]
+    });
+    
     if (existingSupervisor) {
-      return NextResponse.json(
-        { message: 'Supervisor with this email already exists' },
-        { status: 400 }
-      )
+      if (existingSupervisor.email === body.email) {
+        return NextResponse.json(
+          { message: 'Supervisor with this email already exists' },
+          { status: 400 }
+        );
+      }
+      if (existingSupervisor.username === body.username) {
+        return NextResponse.json(
+          { message: 'Username is already taken' },
+          { status: 400 }
+        );
+      }
     }
 
-    const newSupervisor = new Supervisor(body);
+    // Hash password before saving
+    const bcrypt = await import('bcryptjs');
+    const hashedPassword = await bcrypt.hash(body.password, 10);
+    
+    const newSupervisor = new Supervisor({
+      ...body,
+      password: hashedPassword
+    });
 
     const savedSupervisor = await newSupervisor.save()
     return NextResponse.json(savedSupervisor, { status: 201 })

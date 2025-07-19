@@ -9,6 +9,8 @@ const toClientEmployee = (employee: any) => ({
   name: employee.name,
   email: employee.email,
   phone: employee.phone,
+  username: employee.username,
+  password: employee.password,
   role: employee.role,
   salary: employee.salary,
   workType: employee.workType,

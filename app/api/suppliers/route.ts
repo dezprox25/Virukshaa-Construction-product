@@ -25,6 +25,8 @@ export async function POST(request: Request) {
       companyName,
       contactPerson,
       email,
+      username,
+      password,
       phone,
       materialTypes,
       paymentType,
@@ -33,22 +35,43 @@ export async function POST(request: Request) {
       avatar,
     } = body;
 
-    if (!companyName || !contactPerson || !email || !phone || !materialTypes || !paymentType || !address) {
+    if (!companyName || !contactPerson || !email || !username || !password || !phone || !materialTypes || !paymentType || !address) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const existingSupplier = await Supplier.findOne({ email });
+    // Check if email or username already exists
+    const existingSupplier = await Supplier.findOne({
+      $or: [
+        { email },
+        { username }
+      ]
+    });
+    
     if (existingSupplier) {
-      return NextResponse.json(
-        { error: "A supplier with this email already exists" },
-        { status: 400 }
-      );
+      if (existingSupplier.email === email) {
+        return NextResponse.json(
+          { error: "A supplier with this email already exists" },
+          { status: 400 }
+        );
+      }
+      if (existingSupplier.username === username) {
+        return NextResponse.json(
+          { error: "This username is already taken" },
+          { status: 400 }
+        );
+      }
     }
+
+    // Hash password
+    const bcrypt = await import('bcryptjs');
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     const newSupplier = new Supplier({
       companyName,
       contactPerson,
       email,
+      username,
+      password: hashedPassword,
       phone,
       materialTypes,
       paymentType,

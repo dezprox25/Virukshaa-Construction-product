@@ -11,6 +11,8 @@ export interface IEmployee extends Document {
   joinDate: Date;
   endDate?: Date;
   address: string;
+  username: string;
+  password: string;
   avatar?: string;
   department?: string;
   totalPaid?: number;
@@ -45,6 +47,8 @@ const employeeSchema = new Schema<IEmployee>({
   joinDate: { type: Date, required: true },
   endDate: { type: Date },
   address: { type: String, default: '' },
+  username: { type: String, required: true, unique: true },
+  password: { type: String, required: true, select: false },
   avatar: { type: String, required: false },
   department: { type: String, required: false },
   totalPaid: { type: Number, default: 0, required: false },

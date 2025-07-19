@@ -71,6 +71,8 @@ interface Employee {
   status: "Active" | "On Leave" | "Inactive"
   joinDate: string
   endDate?: string
+  username: string
+  password: string
   address: string
   avatar?: string
   department?: string
@@ -104,6 +106,8 @@ export default function EmployeesManagement() {
     joinDate: new Date(),
     endDate: undefined as Date | undefined,
     address: "",
+    username: "",
+    password: "",
   })
 
   const roles = [
@@ -158,11 +162,11 @@ export default function EmployeesManagement() {
           ...employee,
           attendance: att
             ? {
-                present: att.status === 'Present',
-                checkIn: att.checkIn || '',
-                checkOut: att.checkOut || '',
-                _attendanceId: att._id,
-              }
+              present: att.status === 'Present',
+              checkIn: att.checkIn || '',
+              checkOut: att.checkOut || '',
+              _attendanceId: att._id,
+            }
             : undefined,
         };
       });
@@ -235,6 +239,8 @@ export default function EmployeesManagement() {
       joinDate: new Date(),
       endDate: undefined,
       address: "",
+      username: "",
+      password: "",
     })
   }
 
@@ -251,6 +257,8 @@ export default function EmployeesManagement() {
       status: employee.status,
       joinDate: new Date(employee.joinDate),
       endDate: employee.endDate ? new Date(employee.endDate) : undefined,
+      username: employee.username,
+      password: employee.password,
     })
     setIsAddDialogOpen(true)
   }
@@ -480,31 +488,31 @@ export default function EmployeesManagement() {
                       <button
                         className={`rounded px-2 py-1 flex items-center gap-1 text-xs font-medium transition-colors ${employee.attendance?.present ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
                         onClick={async () => {
-  // Compute new status
-  const newPresent = !employee.attendance?.present;
-  // Get today's date in YYYY-MM-DD
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, '0');
-  const dd = String(today.getDate()).padStart(2, '0');
-  const dateStr = `${yyyy}-${mm}-${dd}`;
-  // Send to API
-  try {
-    await fetch('/api/attendance', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        employeeId: employee._id,
-        date: dateStr,
-        status: newPresent ? 'Present' : 'Absent',
-      })
-    });
-  } catch (e) {
-    // Optionally show an error toast
-  }
-  // Refetch employees and attendance to sync UI with DB
-  fetchEmployees();
-}}
+                          // Compute new status
+                          const newPresent = !employee.attendance?.present;
+                          // Get today's date in YYYY-MM-DD
+                          const today = new Date();
+                          const yyyy = today.getFullYear();
+                          const mm = String(today.getMonth() + 1).padStart(2, '0');
+                          const dd = String(today.getDate()).padStart(2, '0');
+                          const dateStr = `${yyyy}-${mm}-${dd}`;
+                          // Send to API
+                          try {
+                            await fetch('/api/attendance', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                employeeId: employee._id,
+                                date: dateStr,
+                                status: newPresent ? 'Present' : 'Absent',
+                              })
+                            });
+                          } catch (e) {
+                            // Optionally show an error toast
+                          }
+                          // Refetch employees and attendance to sync UI with DB
+                          fetchEmployees();
+                        }}
                         title="Toggle Present/Absent"
                         type="button"
                       >
@@ -679,6 +687,29 @@ export default function EmployeesManagement() {
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     placeholder="Enter email address"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="username">Username *</Label>
+                  <Input
+                    id="username"
+                    value={formData.username}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    placeholder="Enter username"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password *</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder="Enter password"
+                    required
                   />
                 </div>
               </div>

@@ -50,10 +50,25 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       body.supplyStartDate = new Date(body.supplyStartDate);
     }
 
+    // Check if username is being updated and if it's already taken
+    if (body.username) {
+      const existingUser = await Supplier.findOne({ 
+        username: body.username, 
+        _id: { $ne: id } 
+      });
+      
+      if (existingUser) {
+        return NextResponse.json(
+          { error: 'This username is already taken' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Create a clean update object with only allowed fields
     const updateData: Partial<ISupplier> = {};
     const allowedFields: (keyof ISupplier)[] = [
-      'companyName', 'contactPerson', 'email', 'phone', 'materialTypes',
+      'companyName', 'contactPerson', 'email', 'username', 'phone', 'materialTypes',
       'paymentType', 'address', 'status', 'supplyStartDate', 'avatar',
       'totalPaid', 'dueAmount', 'lastPaymentDate'
     ];
@@ -64,6 +79,12 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       }
     });
 
+    // Handle password update separately to hash it
+    if (body.password) {
+      const bcrypt = await import('bcryptjs');
+      updateData.password = await bcrypt.hash(body.password, 10);
+    }
+    
     const updatedSupplier = await Supplier.findByIdAndUpdate(
       id,
       updateData,

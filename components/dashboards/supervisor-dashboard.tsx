@@ -15,6 +15,7 @@ import ProjectsManagement from "@/components/management/supervisor-projects"
 import DailyLogsManagement from "@/components/management/daily-logs"
 import AttendanceManagement from "@/components/management/attendance-management"
 import MaterialsManagement from "@/components/management/materials-management"
+import EmployeeManagement from "@/components/management/employees-management"
 
 export default function SupervisorDashboard() {
   const [activeSection, setActiveSection] = useState("dashboard")
@@ -63,10 +64,12 @@ export default function SupervisorDashboard() {
 
   const renderContent = () => {
     switch (activeSection) {
-      case "projects":
+      case "task":
         return <ProjectsManagement />
-      case "logs":
+      case "employee":
         return <DailyLogsManagement />
+      case "team":
+        return <EmployeeManagement />
       case "attendance":
         return <AttendanceManagement />
       case "materials":

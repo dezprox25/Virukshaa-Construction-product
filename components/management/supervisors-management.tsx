@@ -588,6 +588,8 @@ interface Supervisor {
   avatar?: string
   createdAt: string
   updatedAt: string
+  username: string
+  password: string
   attendance?: {
     present: boolean
     checkIn?: string
@@ -602,6 +604,8 @@ const initialFormData = {
   salary: 0,
   address: "",
   status: 'Active' as 'Active' | 'On Leave' | 'Inactive',
+  username: "",  
+  password: ""   
 }
 
 export default function SupervisorsManagement() {
@@ -662,11 +666,11 @@ export default function SupervisorsManagement() {
           ...supervisor,
           attendance: att
             ? {
-                present: att.status === 'Present',
-                checkIn: att.checkIn || '',
-                checkOut: att.checkOut || '',
-                _attendanceId: att._id,
-              }
+              present: att.status === 'Present',
+              checkIn: att.checkIn || '',
+              checkOut: att.checkOut || '',
+              _attendanceId: att._id,
+            }
             : undefined,
         };
       });
@@ -738,6 +742,8 @@ export default function SupervisorsManagement() {
       salary: supervisor.salary,
       address: supervisor.address,
       status: supervisor.status,
+      username: supervisor.username,
+      password: supervisor.password
     })
     setIsAddDialogOpen(true)
   }
@@ -776,8 +782,8 @@ export default function SupervisorsManagement() {
       const response = await fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          ...taskFormData, 
+        body: JSON.stringify({
+          ...taskFormData,
           assignedTo: selectedSupervisorForTask,
           startDate: taskFormData.startDate?.toISOString(),
           endDate: taskFormData.endDate?.toISOString(),
@@ -905,9 +911,9 @@ export default function SupervisorsManagement() {
                 <Edit className="w-4 h-4 mr-2" />
                 Edit
               </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 className="flex-1 bg-transparent"
                 onClick={() => openTaskForm(supervisor._id)}
               >
@@ -1038,8 +1044,8 @@ export default function SupervisorsManagement() {
                     >
                       <Edit className="w-4 h-4" />
                     </Button>
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={() => openTaskForm(supervisor._id)}
                     >
@@ -1187,6 +1193,29 @@ export default function SupervisorsManagement() {
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     placeholder="Enter email address"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="username">Username *</Label>
+                  <Input
+                    id="username"
+                    value={formData.username || ''}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    placeholder="Enter username"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">{editingSupervisor ? 'New Password' : 'Password *'}</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={formData.password || ''}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder={editingSupervisor ? 'Leave blank to keep current' : 'Enter password'}
+                    required={!editingSupervisor}
                   />
                 </div>
               </div>

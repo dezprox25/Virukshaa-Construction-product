@@ -52,10 +52,21 @@ export async function PUT(
       body.lastPaymentDate = new Date(body.lastPaymentDate);
     }
 
+    // Check if username is being updated and if it's already taken
+    if (body.username) {
+      const existingUser = await Supervisor.findOne({ username: body.username, _id: { $ne: id } });
+      if (existingUser) {
+        return NextResponse.json(
+          { message: 'Username is already taken' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Create a clean update object with only allowed fields
     const updateData: Partial<ISupervisor> = {};
     const allowedFields: (keyof ISupervisor)[] = [
-      'name', 'email', 'phone', 'salary', 'address', 'status', 'avatar',
+      'name', 'email', 'username', 'phone', 'salary', 'address', 'status', 'avatar',
       'totalPaid', 'dueAmount', 'lastPaymentDate'
     ];
 
@@ -64,6 +75,12 @@ export async function PUT(
         (updateData as any)[field] = body[field];
       }
     });
+
+    // Handle password update separately to hash it
+    if (body.password) {
+      const bcrypt = await import('bcryptjs');
+      updateData.password = await bcrypt.hash(body.password, 10);
+    }
     
     const updatedSupervisor = await Supervisor.findByIdAndUpdate(
       id,

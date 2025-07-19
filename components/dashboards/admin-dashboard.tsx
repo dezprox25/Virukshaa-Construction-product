@@ -17,7 +17,6 @@ import SuppliersManagement from "@/components/management/suppliers-management"
 import EmployeesManagement from "@/components/management/employees-management"
 import AllWorkersOverview from "@/components/management/all-workers-overview"
 import UserManagement from "@/components/management/user-management"
-import ProjectsManagement from "@/components/management/projects-management"
 import Reportmanagement from '@/components/management/report-management'
 import PayrollManagement from "@/components/management/payroll-management"
 import AdminSetting from "@/components/management/admin-setting"
@@ -881,8 +880,6 @@ export default function AdminDashboard() {
     switch (activeSection) {
       case "users":
         return <UserManagement />;
-      case "projects":
-        return <ProjectsManagement />;
       case "supervisors":
         return <SupervisorsManagement />;
       case "suppliers":

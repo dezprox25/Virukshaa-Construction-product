@@ -139,9 +139,9 @@ export default function DashboardLayout({
       case "supervisor":
         return [
           ...baseItems,
-          { icon: FolderOpen, label: "Projects", href: "projects", id: "projects" },
+          { icon: FolderOpen, label: "Task", href: "task", id: "task" },
+          { icon: Users, label: "Employee", href: "employee", id: "employee" },   
           { icon: ClipboardList, label: "Daily Logs", href: "logs", id: "logs" },
-          { icon: Users, label: "Attendance", href: "attendance", id: "attendance" },
           { icon: Package, label: "Materials", href: "materials", id: "materials" },
         ]
       case "client":
