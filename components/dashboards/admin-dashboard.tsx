@@ -22,6 +22,8 @@ import PayrollManagement from "@/components/management/payroll-management"
 import AdminSetting from "@/components/management/admin-setting"
 import { Skeleton } from "@/components/ui/skeleton"
 import UserDetailsModal from "@/components/ui/user-details-model"
+import MessageBox from "@/components/common/MessageBox"
+
 
 interface ApiResponse<T> {
   success: boolean;
@@ -118,6 +120,7 @@ interface ApiData {
   materials: ApiResponse<any[]>;
   reports: ApiResponse<any[]>;
   payroll: ApiResponse<Payroll[]>;
+  message:ApiResponse<any[]>;
 }
 
 export default function AdminDashboard() {
@@ -416,6 +419,9 @@ export default function AdminDashboard() {
         break;
       case 'materials':
         setActiveSection('materials');
+        break;
+      case 'message':
+        setActiveSection('message');
         break;
       default:
         setActiveSection('dashboard');
@@ -896,6 +902,8 @@ export default function AdminDashboard() {
         return <Reportmanagement />;
       case "payroll":
         return <PayrollManagement />;
+      case "message":
+        return <MessageBox userType="admin" title="Messages" conversationId="default-conversation" />;
       case "settings":
         return <AdminSetting />;
       default:

@@ -134,7 +134,9 @@ export default function DashboardLayout({
           { icon: Package, label: "Materials", href: "materials", id: "materials" },
           { icon: ClipboardList, label: "Reports", href: "reports", id: "reports" },
           { icon: MessageSquare, label: "Payroll", href: "payroll", id: "payroll" },
+          { icon: MessageSquare, label: "Messages", href: "message", id: "message" },
           { icon: Settings, label: "Settings", href: "settings", id: "settings" },
+
         ]
       case "supervisor":
         return [

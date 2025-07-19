@@ -1,23 +1,23 @@
 import React from 'react';
 import MessageBox from '../common/MessageBox';
 
-interface ClientMessageBoxProps {
+interface AdminMessageBoxProps {
   conversationId: string;
-  adminName?: string;
+  clientName: string;
   className?: string;
   onBack?: () => void;
 }
 
-const ClientMessageBox: React.FC<ClientMessageBoxProps> = ({
+const AdminMessageBox: React.FC<AdminMessageBoxProps> = ({
   conversationId,
-  adminName = 'Admin',
+  clientName,
   className = '',
   onBack,
 }) => {
   return (
     <MessageBox
-      userType="client"
-      title={adminName}
+      userType="admin"
+      title={clientName}
       conversationId={conversationId}
       onBack={onBack}
       className={className}
@@ -25,4 +25,4 @@ const ClientMessageBox: React.FC<ClientMessageBoxProps> = ({
   );
 };
 
-export default ClientMessageBox;
+export default AdminMessageBox;

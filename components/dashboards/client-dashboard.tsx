@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import MessageBox from "@/components/common/MessageBox"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -10,7 +11,7 @@ import { Bell, Camera, Clock, DollarSign, FolderOpen, MessageSquare, TrendingUp,
 import DashboardLayout from "@/components/layout/dashboard-layout"
 import ClientProjectsManagement from "@/components/management/client-projects"
 import ClientPaymentsManagement from "@/components/management/client-payments"
-import ClientMessageBoxManagement from "@/components/management/client-messagebox"
+// import c from "@/components/common/MessageBox"
 import ClientSettingsManagement from "@/components/management/client-settings"
 
 // Types
@@ -278,9 +279,9 @@ export default function ClientDashboard() {
           </>
         )
       case 'payments':
-        return <ClientPaymentsManagement />
+        return <MessageBox userType="client" title="Messages" conversationId="default-conversation" />
       case 'message':
-        return <ClientMessageBoxManagement />
+        return <MessageBox userType="client" title="Messages" conversationId="client-messages" />
       case 'settings':
         return <ClientSettingsManagement />
       default:
