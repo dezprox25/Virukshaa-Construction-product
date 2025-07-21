@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Building2, Users, Truck, ClipboardList } from "lucide-react"
+import { Building2, Users, ClipboardList } from "lucide-react"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -16,14 +16,68 @@ export default function LoginPage() {
   const router = useRouter()
 
   const handleLogin = async (role: string) => {
-    setIsLoading(true)
-    // Simulate authentication
-    setTimeout(() => {
-      localStorage.setItem("userRole", role)
-      localStorage.setItem("userEmail", email)
-      router.push("/dashboard")
-      setIsLoading(false)
-    }, 1000)
+    setIsLoading(true);
+    
+    try {
+      // For demo roles, use the existing flow
+      if (role === 'superadmin' || role === 'client') {
+        localStorage.setItem("userRole", role);
+        localStorage.setItem("userEmail", email);
+        router.push("/dashboard");
+        return;
+      }
+      
+      // For supervisor login
+      if (role === 'supervisor') {
+        const response = await fetch('/api/supervisors/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password }),
+        });
+
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error || 'Login failed');
+        }
+        
+        // Login successful
+        localStorage.setItem("userRole", "supervisor");
+        localStorage.setItem("userEmail", data.user.email);
+        localStorage.setItem("userName", data.user.name || 'Supervisor');
+        router.push("/dashboard");
+        return;
+      }
+
+      // For admin login, use the login API
+      const response = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Login failed');
+      }
+      
+      // Login successful
+      localStorage.setItem("userRole", "admin");
+      localStorage.setItem("userEmail", data.user.email);
+      localStorage.setItem("adminName", data.user.adminName || 'Admin');
+      router.push("/dashboard");
+    } catch (error) {
+      console.error('Login error:', error);
+      // Simple error handling
+      alert(error instanceof Error ? error.message : 'Login failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -64,44 +118,59 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </div>
-              <Button className="w-full" onClick={() => handleLogin("admin")} disabled={isLoading}>
-                {isLoading ? "Signing in..." : "Sign In"}
-              </Button>
+
+              <div className="space-y-3">
+                <Button 
+                  onClick={() => handleLogin("admin")} 
+                  disabled={isLoading} 
+                  className={`w-full ${isLoading ? "bg-gray-400" : ""}`}
+                >
+                  {isLoading ? "Signing in..." : "Sign In as Admin"}
+                </Button>
+                <div className="relative flex items-center py-2">
+                  <div className="flex-grow border-t border-gray-300"></div>
+                  <span className="flex-shrink mx-4 text-gray-500 text-sm">OR</span>
+                  <div className="flex-grow border-t border-gray-300"></div>
+                </div>
+                <Button 
+                  variant="outline"
+                  onClick={() => handleLogin("supervisor")} 
+                  disabled={isLoading} 
+                  className="w-full"
+                >
+                  Sign In as Supervisor
+                </Button>
+              </div>
             </TabsContent>
 
             <TabsContent value="demo" className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <Button
                   variant="outline"
-                  className="h-20 flex flex-col gap-2 bg-transparent"
-                  onClick={() => handleLogin("admin")}
+                  className="h-24 flex flex-col gap-2 bg-transparent"
+                  onClick={() => handleLogin("superadmin")}
                 >
-                  <Users className="w-5 h-5" />
-                  <span className="text-xs">Super Admin</span>
+                  <Users className="w-6 h-6 text-blue-600" />
+                  <span className="font-medium">Super Admin</span>
+                  <span className="text-xs text-muted-foreground">Full system access</span>
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-20 flex flex-col gap-2 bg-transparent"
+                  className="h-24 flex flex-col gap-2 bg-transparent"
                   onClick={() => handleLogin("supervisor")}
                 >
-                  <ClipboardList className="w-5 h-5" />
-                  <span className="text-xs">Supervisor</span>
+                  <ClipboardList className="w-6 h-6 text-green-600" />
+                  <span className="font-medium">Supervisor</span>
+                  <span className="text-xs text-muted-foreground">Project management</span>
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-20 flex flex-col gap-2 bg-transparent"
+                  className="h-24 flex flex-col gap-2 bg-transparent"
                   onClick={() => handleLogin("client")}
                 >
-                  <Building2 className="w-5 h-5" />
-                  <span className="text-xs">Client</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-20 flex flex-col gap-2 bg-transparent"
-                  onClick={() => handleLogin("supplier")}
-                >
-                  <Truck className="w-5 h-5" />
-                  <span className="text-xs">Supplier</span>
+                  <Building2 className="w-6 h-6 text-purple-600" />
+                  <span className="font-medium">Client</span>
+                  <span className="text-xs text-muted-foreground">Project tracking</span>
                 </Button>
               </div>
             </TabsContent>

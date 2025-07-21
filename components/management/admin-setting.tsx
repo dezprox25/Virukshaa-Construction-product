@@ -1,7 +1,7 @@
-
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
-import { Search, Bold, Italic, Link, List, ListOrdered, X } from 'lucide-react';
+import { Search, Bold, Italic, Link, List, ListOrdered, X  } from 'lucide-react';
 import { IAdminProfile } from '@/models/AdminProfile';
+import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 
 interface INotification {
   id: string;
@@ -80,6 +80,12 @@ const SettingsContent = () => {
   });
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [showPassword, setShowPassword] = useState({
+    current: false,
+    new: false,
+    confirm: false
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const notificationsPerPage = 3;
@@ -186,7 +192,6 @@ const SettingsContent = () => {
   ];
 
   // State for loading and feedback
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<{
     type: 'success' | 'error' | null;
     message: string;
@@ -212,8 +217,8 @@ const SettingsContent = () => {
     setPasswordSuccess('');
 
     try {
-      const response = await fetch('/api/admin/profile', {
-        method: 'PUT',
+      const response = await fetch('/api/admin/change-password', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           currentPassword: passwordForm.currentPassword,
@@ -224,12 +229,12 @@ const SettingsContent = () => {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to update password');
+        throw new Error(data.message || 'Failed to update password');
       }
 
       // Update the password history from the response
-      if (data.data?.passwordHistory) {
-        setPasswordHistory(data.data.passwordHistory);
+      if (data.passwordHistory) {
+        setPasswordHistory(data.passwordHistory);
       }
 
       // Clear the form on success
@@ -641,26 +646,52 @@ const SettingsContent = () => {
 
               <div className="col-span-3 sm:col-span-2">
                 <label htmlFor="current-password" className="block text-sm font-medium text-gray-700">Current password</label>
-                <input
-                  type="password"
-                  name="current-password"
-                  id="current-password"
-                  value={passwordForm.currentPassword}
-                  onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                />
+                <div className="relative mt-1 rounded-md shadow-sm">
+                  <input
+                    type={showPassword.current ? "text" : "password"}
+                    name="current-password"
+                    id="current-password"
+                    value={passwordForm.currentPassword}
+                    onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
+                    className="block w-full border border-gray-300 rounded-md py-2 pl-3 pr-10 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  />
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700"
+                    onClick={() => setShowPassword({...showPassword, current: !showPassword.current})}
+                  >
+                    {showPassword.current ? (
+                      <EyeSlashIcon className="h-5 w-5" aria-hidden="true" />
+                    ) : (
+                      <EyeIcon className="h-5 w-5" aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
               </div>
 
               <div className="col-span-3 sm:col-span-2">
                 <label htmlFor="new-password" className="block text-sm font-medium text-gray-700">New password</label>
-                <input
-                  type="password"
-                  name="new-password"
-                  id="new-password"
-                  value={passwordForm.newPassword}
-                  onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                />
+                <div className="relative mt-1 rounded-md shadow-sm">
+                  <input
+                    type={showPassword.new ? "text" : "password"}
+                    name="new-password"
+                    id="new-password"
+                    value={passwordForm.newPassword}
+                    onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                    className="block w-full border border-gray-300 rounded-md py-2 pl-3 pr-10 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  />
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700"
+                    onClick={() => setShowPassword({...showPassword, new: !showPassword.new})}
+                  >
+                    {showPassword.new ? (
+                      <EyeSlashIcon className="h-5 w-5" aria-hidden="true" />
+                    ) : (
+                      <EyeIcon className="h-5 w-5" aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
                 <p className="mt-1 text-xs text-gray-500">
                   Must be at least 8 characters long and include a number and special character.
                 </p>
@@ -668,14 +699,27 @@ const SettingsContent = () => {
 
               <div className="col-span-3 sm:col-span-2">
                 <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700">Confirm new password</label>
-                <input
-                  type="password"
-                  name="confirm-password"
-                  id="confirm-password"
-                  value={passwordForm.confirmPassword}
-                  onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                />
+                <div className="relative mt-1 rounded-md shadow-sm">
+                  <input
+                    type={showPassword.confirm ? "text" : "password"}
+                    name="confirm-password"
+                    id="confirm-password"
+                    value={passwordForm.confirmPassword}
+                    onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                    className="block w-full border border-gray-300 rounded-md py-2 pl-3 pr-10 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                  />
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700"
+                    onClick={() => setShowPassword({...showPassword, confirm: !showPassword.confirm})}
+                  >
+                    {showPassword.confirm ? (
+                      <EyeSlashIcon className="h-5 w-5" aria-hidden="true" />
+                    ) : (
+                      <EyeIcon className="h-5 w-5" aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
               </div>
 
               {passwordError && (
