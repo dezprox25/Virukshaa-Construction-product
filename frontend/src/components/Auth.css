@@ -1,0 +1,133 @@
+body {
+  margin: 0;
+  background-color: #f4f6f8;
+}
+
+.auth-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+.auth-box {
+  background-color: #ffffff;
+  padding: 40px 40px;
+  border-radius: 16px;
+  width: 500px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.auth-logo-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.auth-logo {
+  width: 32px;
+  height: 32px;
+  margin-right: 8px;
+}
+
+.auth-brand {
+  font-size: 24px;
+  font-weight: bold;
+  color: #16a34a; 
+  margin: 0;
+}
+
+.auth-subtitle {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 24px;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.auth-form label {
+  font-size: 14px;
+  margin-bottom: 5px;
+  color: #333;
+  font-weight: 500;
+}
+
+.auth-form input {
+  padding: 10px 12px;
+  font-size: 15px;
+  margin-bottom: 18px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  outline: none;
+  width: 100%;
+}
+
+.auth-password-field {
+  position: relative;
+  width: 100%;
+}
+
+.auth-password-field input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 35px 10px 12px; 
+  font-size: 15px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  outline: none;
+}
+
+.auth-eye-icon {
+  position: absolute;
+  right: 15px;
+  top: 33%;
+  transform: translateY(-50%);
+  font-size: 16px;
+  color: #777;
+  cursor: pointer;
+}
+
+
+.auth-button {
+  background-color: #1a1a1a;
+  color: #fff;
+  padding: 10px;
+  border: none;
+  font-size: 15px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 10px;
+}
+
+.auth-button:hover {
+  background-color: #333;
+}
+
+.auth-footer {
+  margin-top: 20px;
+  font-size: 14px;
+  text-align: center;
+}
+
+.auth-footer span {
+  color: #0077cc;
+  cursor: pointer;
+}
+
+.auth-heading {
+  font-size: 20px;
+  font-weight: bold;
+  margin-top: 10px;
+  margin-bottom: 15px;
+  color: #1a1a1a;
+}
+
+* {
+  box-sizing: border-box;
+}
