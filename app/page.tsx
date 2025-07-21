@@ -20,33 +20,12 @@ export default function LoginPage() {
     
     try {
       // For demo roles, use the existing flow
-      if (role === 'superadmin' || role === 'client') {
-        localStorage.setItem("userRole", role);
+      if (role !== 'admin') {
+        const validRoles = ['superadmin', 'supervisor', 'client'];
+        const userRole = validRoles.includes(role) ? role : 'client';
+        
+        localStorage.setItem("userRole", userRole);
         localStorage.setItem("userEmail", email);
-        router.push("/dashboard");
-        return;
-      }
-      
-      // For supervisor login
-      if (role === 'supervisor') {
-        const response = await fetch('/api/supervisors/login', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email, password }),
-        });
-
-        const data = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(data.error || 'Login failed');
-        }
-        
-        // Login successful
-        localStorage.setItem("userRole", "supervisor");
-        localStorage.setItem("userEmail", data.user.email);
-        localStorage.setItem("userName", data.user.name || 'Supervisor');
         router.push("/dashboard");
         return;
       }
@@ -119,28 +98,13 @@ export default function LoginPage() {
                 />
               </div>
 
-              <div className="space-y-3">
-                <Button 
-                  onClick={() => handleLogin("admin")} 
-                  disabled={isLoading} 
-                  className={`w-full ${isLoading ? "bg-gray-400" : ""}`}
-                >
-                  {isLoading ? "Signing in..." : "Sign In as Admin"}
-                </Button>
-                <div className="relative flex items-center py-2">
-                  <div className="flex-grow border-t border-gray-300"></div>
-                  <span className="flex-shrink mx-4 text-gray-500 text-sm">OR</span>
-                  <div className="flex-grow border-t border-gray-300"></div>
-                </div>
-                <Button 
-                  variant="outline"
-                  onClick={() => handleLogin("supervisor")} 
-                  disabled={isLoading} 
-                  className="w-full"
-                >
-                  Sign In as Supervisor
-                </Button>
-              </div>
+              <Button 
+                onClick={() => handleLogin("admin")} 
+                disabled={isLoading}
+                className={`  w-full ${isLoading ? "bg-gray-400" : ""}`}
+              >
+                {isLoading ? "Signing in..." : "Sign In"}
+              </Button>
             </TabsContent>
 
             <TabsContent value="demo" className="space-y-4">

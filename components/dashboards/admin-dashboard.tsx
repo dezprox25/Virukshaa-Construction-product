@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { PayrollDetails } from "@/components/payroll/payroll-details"
 import ClientsManagement from "@/components/management/clients-management"
 import DashboardLayout from "@/components/layout/dashboard-layout"
 import { Users, FolderOpen, Truck, UserCheck, DollarSign, FileText, AlertCircle, Info, Eye, Mail, ExternalLink } from "lucide-react"
@@ -11,7 +13,6 @@ import * as RechartsPrimitive from "recharts"
 import MaterialsManagement from "@/components/management/materials-management"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
 import SupervisorsManagement from "@/components/management/supervisors-management"
 import SuppliersManagement from "@/components/management/suppliers-management"
 import EmployeesManagement from "@/components/management/employees-management"
@@ -22,7 +23,7 @@ import PayrollManagement from "@/components/management/payroll-management"
 import AdminSetting from "@/components/management/admin-setting"
 import { Skeleton } from "@/components/ui/skeleton"
 import UserDetailsModal from "@/components/ui/user-details-model"
-import MessageBox from "@/components/common/MessageBox"
+import MessagingPanel from "@/components/messaging/MessagingPanel"
 
 
 interface ApiResponse<T> {
@@ -38,7 +39,15 @@ interface Client {
 }
 
 interface Payroll {
-  amount: string | number;
+  _id: string;
+  user: string | { _id: string; name: string; email?: string };
+  userRole: 'Employee' | 'Supervisor' | 'Client' | 'Supplier';
+  amount: number;
+  paymentDate: string | Date;
+  status: 'paid' | 'pending' | 'failed';
+  notes?: string;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
 }
 
 interface DashboardData {
@@ -48,6 +57,7 @@ interface DashboardData {
   totalMaterials: number;
   totalPayroll: number;
   totalReports: number;
+  payrollData: Payroll[];
   recentProjects: Array<{
     id?: string;
     name: string;
@@ -136,7 +146,8 @@ export default function AdminDashboard() {
     clientsData: [],
     employeesData: [],
     supervisorsData: [],
-    materialsData: []
+    materialsData: [],
+    payrollData: []
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -145,7 +156,7 @@ export default function AdminDashboard() {
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
-  const [selectedUserType, setSelectedUserType] = useState<'supervisor' | 'employee' | 'client' | 'material'>('supervisor');
+  const [selectedUserType, setSelectedUserType] = useState<'supervisor' | 'employee' | 'client' | 'material' | 'payroll'>('supervisor');
 
   const fetchDashboardData = async () => {
     try {
@@ -287,23 +298,27 @@ export default function AdminDashboard() {
         }
       }, null, 2));
 
+      // Process payroll data
+      const payrollData = Array.isArray(data.payroll?.data) 
+        ? data.payroll.data.map((item: any) => ({
+            ...item,
+            _id: item._id?.toString(),
+            paymentDate: item.paymentDate || new Date(),
+            amount: typeof item.amount === 'string' ? parseFloat(item.amount) : item.amount || 0
+          }))
+        : [];
+
       // Process data for the dashboard
       const dashboardUpdate: DashboardData = {
         totalClients: Array.isArray(data.clients?.data) ? data.clients.data.length : 0,
         totalSupervisors: Array.isArray(data.supervisors?.data) ? data.supervisors.data.length : 0,
         totalEmployees: Array.isArray(data.employees?.data) ? data.employees.data.length : 0,
         totalMaterials: Array.isArray(data.materials?.data) ? data.materials.data.length : 0,
-        totalPayroll: Array.isArray(data.payroll?.data) 
-          ? data.payroll.data.reduce((sum: number, item: any) => {
-              const amount = typeof item.amount === 'string' 
-                ? parseFloat(item.amount) 
-                : typeof item.amount === 'number' 
-                  ? item.amount 
-                  : 0;
-              return sum + (isNaN(amount) ? 0 : amount);
-            }, 0)
-          : 0,
+        totalPayroll: payrollData
+          .filter((item: any) => item.status === 'paid')
+          .reduce((sum: number, item: any) => sum + (isNaN(item.amount) ? 0 : item.amount), 0),
         totalReports: 0,
+        payrollData,
         recentProjects: Array.isArray(data.clients?.data) 
           ? data.clients.data.slice(0, 5).map((client: any) => ({
               name: client.name || 'Unnamed Client',
@@ -400,7 +415,7 @@ export default function AdminDashboard() {
     fetchDashboardData();
   }, []);
 
-  const handleViewDetails = (user: any, type: 'supervisor' | 'employee' | 'client' | 'material') => {
+  const handleViewDetails = (user: any, type: 'supervisor' | 'employee' | 'client' | 'material' | 'payroll') => {
     setSelectedUser(user);
     setSelectedUserType(type);
     setIsModalOpen(true);
@@ -498,6 +513,88 @@ export default function AdminDashboard() {
   );
 
   const renderDetailsTable = () => {
+    if (selectedStat === 'payroll' && dashboardData?.payrollData && dashboardData.payrollData.length > 0) {
+      return (
+        <div className="h-full overflow-y-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead>Payment Date</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Notes</TableHead>
+                {/* <TableHead>Actions</TableHead> */}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {dashboardData.payrollData.slice(0, 5).map((payment) => (
+                <TableRow key={payment._id}>
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback>
+                          {typeof payment.user === 'object' && payment.user?.name 
+                            ? payment.user.name.split(' ').map(n => n[0]).join('') 
+                            : typeof payment.user === 'string' 
+                              ? payment.user.split(' ').map(n => n[0]).join('')
+                              : 'P'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="font-medium truncate max-w-[150px]">
+                        {typeof payment.user === 'object' 
+                          ? payment.user?.name 
+                          : payment.user || 'Unknown User'}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="capitalize">
+                      {payment.userRole?.toLowerCase() || '-'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    ${typeof payment.amount === 'number' 
+                      ? payment.amount.toFixed(2) 
+                      : '0.00'}
+                  </TableCell>
+                  <TableCell>
+                    {payment.paymentDate 
+                      ? new Date(payment.paymentDate).toLocaleDateString() 
+                      : '-'}
+                  </TableCell>
+                  <TableCell>
+                    <Badge 
+                      variant={
+                        payment.status === 'paid' ? 'default' : 
+                        payment.status === 'pending' ? 'secondary' : 'destructive'
+                      }
+                    >
+                      {payment.status?.charAt(0).toUpperCase() + payment.status?.slice(1) || 'Unknown'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="max-w-[200px] truncate">
+                    {payment.notes || '-'}
+                  </TableCell>
+                  {/* <TableCell>
+                    <div className="flex gap-1">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleViewDetails(payment, 'payroll')}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </TableCell> */}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      );
+    }
     if (selectedStat === 'supervisors' && dashboardData?.supervisorsData && dashboardData.supervisorsData.length > 0) {
       return (
         <div className="h-full overflow-y-auto">
@@ -901,9 +998,15 @@ export default function AdminDashboard() {
       case "reports":
         return <Reportmanagement />;
       case "payroll":
-        return <PayrollManagement />;
+        return (
+        <PayrollManagement />
+        );
       case "message":
-        return <MessageBox userType="admin" title="Messages" conversationId="default-conversation" />;
+        return (
+          <div className="h-[calc(100vh-200px)] bg-white rounded-lg shadow-sm">
+            <MessagingPanel />
+          </div>
+        );
       case "settings":
         return <AdminSetting />;
       default:

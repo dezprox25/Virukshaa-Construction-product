@@ -1,5 +1,5 @@
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
-import { Search, Bold, Italic, Link, List, ListOrdered, X  } from 'lucide-react';
+import { Search, Bold, Italic, Link, List, ListOrdered, X } from 'lucide-react';
 import { IAdminProfile } from '@/models/AdminProfile';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 
@@ -26,7 +26,7 @@ interface IPasswordHistory {
 }
 
 const SettingsContent = () => {
-  const [activeTab, setActiveTab] = useState('Profile');
+  const [activeTab, setActiveTab] = useState('My Details');
   const [selectedNotification, setSelectedNotification] = useState<INotification | null>(null);
   const [formData, setFormData] = useState<Omit<Partial<IAdminProfile>, 'bio'> & { bio: string; searchQuery: string }>({
     username: '',
@@ -50,12 +50,12 @@ const SettingsContent = () => {
           ...data,
           searchQuery: prev.searchQuery // Keep the search query
         }));
-        
+
         // Update notifications if they exist in the response
         if (data.notifications) {
           setNotifications(data.notifications);
         }
-        
+
         // Update password history if it exists in the response
         if (data.passwordHistory) {
           setPasswordHistory(data.passwordHistory);
@@ -100,12 +100,12 @@ const SettingsContent = () => {
     const notification = notifications.find(n => n.id === id);
     if (notification) {
       setSelectedNotification(notification);
-      
+
       // Mark as read in the UI immediately for better UX
       setNotifications(notifications.map(n =>
         n.id === id ? { ...n, read: true } : n
       ));
-      
+
       // Update the notification as read in the backend
       try {
         await fetch('/api/admin/profile', {
@@ -123,15 +123,15 @@ const SettingsContent = () => {
 
   const deleteNotification = async (id: string, event: React.MouseEvent) => {
     event.stopPropagation(); // Prevent triggering the parent click
-    
+
     // Optimistic UI update
     const newNotifications = notifications.filter(n => n.id !== id);
     setNotifications(newNotifications);
-    
+
     if (selectedNotification?.id === id) {
       setSelectedNotification(null);
     }
-    
+
     // Update the backend
     try {
       await fetch('/api/admin/profile', {
@@ -151,7 +151,7 @@ const SettingsContent = () => {
   const markAllAsRead = async () => {
     // Update UI immediately for better UX
     setNotifications(notifications.map(n => ({ ...n, read: true })));
-    
+
     // Update the backend
     try {
       await fetch('/api/admin/profile', {
@@ -261,7 +261,7 @@ const SettingsContent = () => {
 
     try {
       console.log('Submitting form data:', formData);
-      
+
       const response = await fetch('/api/admin/profile', {
         method: 'PUT',
         headers: {
@@ -317,7 +317,7 @@ const SettingsContent = () => {
             <div className="p-2 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">My Details</h2>
             </div>
-            
+
             <div className="bg-white shadow overflow-hidden sm:rounded-lg">
               <div className="px-4 py-5 sm:px-6">
                 <h3 className="text-lg leading-6 font-medium text-gray-900">Profile Information</h3>
@@ -343,13 +343,13 @@ const SettingsContent = () => {
                       {formData.companyName || 'Not provided'}
                     </dd>
                   </div>
-                
+
                   <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                     <dt className="text-sm font-medium text-gray-500">Website</dt>
                     <dd className="mt-1 text-sm text-blue-600 hover:text-blue-500 sm:mt-0 sm:col-span-2">
                       {formData.website ? (
-                        <a href={formData.website.startsWith('http') ? formData.website : `https://${formData.website}`} 
-                          target="_blank" 
+                        <a href={formData.website.startsWith('http') ? formData.website : `https://${formData.website}`}
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="hover:underline">
                           {formData.website}
@@ -590,15 +590,14 @@ const SettingsContent = () => {
               <div className="pt-5 border-t border-gray-200">
                 {/* Status Message */}
                 {submitStatus.type && (
-                  <div className={`mb-4 p-3 rounded-md ${
-                    submitStatus.type === 'success' 
-                      ? 'bg-green-50 text-green-800' 
+                  <div className={`mb-4 p-3 rounded-md ${submitStatus.type === 'success'
+                      ? 'bg-green-50 text-green-800'
                       : 'bg-red-50 text-red-800'
-                  }`}>
+                    }`}>
                     <p className="text-sm">{submitStatus.message}</p>
                   </div>
                 )}
-                
+
                 <div className="flex justify-end">
                   <button
                     type="button"
@@ -614,11 +613,10 @@ const SettingsContent = () => {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className={`ml-3 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white ${
-                      isSubmitting 
-                        ? 'bg-green-400' 
+                    className={`ml-3 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white ${isSubmitting
+                        ? 'bg-green-400'
                         : 'bg-green-600 hover:bg-green-700'
-                    } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500`}
+                      } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500`}
                   >
                     {isSubmitting ? (
                       <>
@@ -652,13 +650,13 @@ const SettingsContent = () => {
                     name="current-password"
                     id="current-password"
                     value={passwordForm.currentPassword}
-                    onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
                     className="block w-full border border-gray-300 rounded-md py-2 pl-3 pr-10 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                   />
                   <button
                     type="button"
                     className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700"
-                    onClick={() => setShowPassword({...showPassword, current: !showPassword.current})}
+                    onClick={() => setShowPassword({ ...showPassword, current: !showPassword.current })}
                   >
                     {showPassword.current ? (
                       <EyeSlashIcon className="h-5 w-5" aria-hidden="true" />
@@ -677,13 +675,13 @@ const SettingsContent = () => {
                     name="new-password"
                     id="new-password"
                     value={passwordForm.newPassword}
-                    onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
                     className="block w-full border border-gray-300 rounded-md py-2 pl-3 pr-10 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                   />
                   <button
                     type="button"
                     className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700"
-                    onClick={() => setShowPassword({...showPassword, new: !showPassword.new})}
+                    onClick={() => setShowPassword({ ...showPassword, new: !showPassword.new })}
                   >
                     {showPassword.new ? (
                       <EyeSlashIcon className="h-5 w-5" aria-hidden="true" />
@@ -705,13 +703,13 @@ const SettingsContent = () => {
                     name="confirm-password"
                     id="confirm-password"
                     value={passwordForm.confirmPassword}
-                    onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
                     className="block w-full border border-gray-300 rounded-md py-2 pl-3 pr-10 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
                   />
                   <button
                     type="button"
                     className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700"
-                    onClick={() => setShowPassword({...showPassword, confirm: !showPassword.confirm})}
+                    onClick={() => setShowPassword({ ...showPassword, confirm: !showPassword.confirm })}
                   >
                     {showPassword.confirm ? (
                       <EyeSlashIcon className="h-5 w-5" aria-hidden="true" />
@@ -834,8 +832,8 @@ const SettingsContent = () => {
                         </div>
                         <div className="ml-2 flex-shrink-0 flex items-center">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${notification.priority === 'high' ? 'bg-red-100 text-red-800' :
-                              notification.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-gray-100 text-gray-800'
+                            notification.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-gray-100 text-gray-800'
                             }`}>
                             {notification.priority || 'Low'}
                           </span>
@@ -955,7 +953,7 @@ const SettingsContent = () => {
       <div className="bg-white border-b border-gray-200 px-8 py-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold text-gray-900">Settings</h1>
-          <div className="relative w-64">
+          {/* <div className="relative w-64">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
@@ -972,7 +970,7 @@ const SettingsContent = () => {
                 <X className="w-4 h-4" />
               </button>
             )}
-          </div>
+          </div> */}
         </div>
       </div>
 

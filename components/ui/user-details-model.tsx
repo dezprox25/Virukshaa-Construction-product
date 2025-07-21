@@ -29,7 +29,7 @@ interface UserDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
   data: any;
-  type: 'supervisor' | 'employee' | 'client' | 'material';
+  type: 'supervisor' | 'employee' | 'client' | 'material' | 'payroll';
 }
 
 const UserDetailsModal: React.FC<UserDetailsModalProps> = ({

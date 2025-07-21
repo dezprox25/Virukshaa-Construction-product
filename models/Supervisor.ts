@@ -1,4 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 export interface ISupervisor extends Document {
   name: string;
@@ -40,5 +41,23 @@ supervisorSchema.index({
   email: 'text',
   username: 'text'
 });
+
+// Hash password before saving
+supervisorSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
+  
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error as Error);
+  }
+});
+
+// Method to compare password
+supervisorSchema.methods.comparePassword = async function(candidatePassword: string): Promise<boolean> {
+  return bcrypt.compare(candidatePassword, this.password);
+};
 
 export default mongoose.models.Supervisor || mongoose.model<ISupervisor>('Supervisor', supervisorSchema);

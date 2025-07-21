@@ -1,6 +1,23 @@
 import { NextResponse } from 'next/server';
 import connectToDB from '@/lib/db';
-import Payroll from '@/models/PayrollModel'; // Use the correct model for transactions
+import Payroll from '@/models/PayrollModel';
+
+// GET all payroll records
+export async function GET() {
+  try {
+    await connectToDB();
+    const payrollRecords = await Payroll.find({})
+      .populate('user', 'name email') // Populate user data with name and email
+      .sort({ paymentDate: -1 });
+    return NextResponse.json(payrollRecords);
+  } catch (error) {
+    console.error('Error fetching payroll records:', error);
+    return NextResponse.json(
+      { message: 'Failed to fetch payroll records' },
+      { status: 500 }
+    );
+  }
+}
 
 // POST a new payroll transaction
 export async function POST(request: Request) {

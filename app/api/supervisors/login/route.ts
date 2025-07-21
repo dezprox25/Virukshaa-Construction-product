@@ -26,8 +26,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // Check if password matches
-    const isMatch = await bcrypt.compare(password, supervisor.password);
+    // Check if password matches using the model's method
+    const isMatch = await supervisor.comparePassword(password);
 
     if (!isMatch) {
       return NextResponse.json(
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error('Supervisor login error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 500 }
     );
   }
