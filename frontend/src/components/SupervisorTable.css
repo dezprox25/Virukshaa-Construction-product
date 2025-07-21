@@ -1,0 +1,93 @@
+.supervisor-box {
+  background: white;
+  padding: 0px 20px;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  margin-bottom: 20px;
+}
+
+.supervisor-header h2 {
+  font-size: 28px;
+  margin-bottom: 4px;
+}
+
+.supervisor-header p {
+  font-size: 14px;
+  color: #666;
+  margin-top: 0px;
+  margin-bottom: 28px;
+}
+
+.supervisor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.supervisor-card {
+  background: #ffffff;
+  border: 1px solid #dedede;
+  border-radius: 10px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.supervisor-card:hover{
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.supervisor-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.supervisor-top h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.supervisor-top p {
+  margin: 0;
+  font-size: 14px;
+  color: #555;
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+
+.supervisor-icon {
+  font-size: 24px;
+  color: #555;
+  background: #eee;
+  padding: 8px;
+  border-radius: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0px;
+}
+
+.supervisor-detail {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+.supervisor-button {
+  margin-top: 14px;
+  padding: 8px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+}
+
+.supervisor-button:hover{
+    background-color: #f3f3f3;
+}

@@ -1,0 +1,153 @@
+.attendance-page {
+  display: flex;
+  background: #f6f7f9;
+  height: 100vh;
+}
+
+.attendance-main {
+  flex: 1;
+  padding: 20px 32px 32px; 
+}
+
+.top-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+  padding-left: 8px;
+}
+
+.top-header h1 {
+  font-size: 32px;
+  font-weight: 700;
+  margin: 0;
+  padding: 0;
+}
+
+.top-header p {
+  color: #888;
+  font-size: 16px;
+  margin-top: 2px;
+}
+
+.add-btn {
+  background: #000;
+  color: #fff;
+  padding: 14px 32px;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+
+
+.attendance-box {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px 26px;
+
+  box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+}
+
+.box-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.box-header h2 {
+  font-size: 26px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.box-header p {
+  color: #777;
+  font-size: 14px;
+  margin: 4px 0 0;
+}
+
+.attendance-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.attendance-table th,
+.attendance-table td {
+  padding: 16px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.attendance-table tbody tr:last-child td {
+  border-bottom: none; 
+}
+
+.attendance-table th {
+  color: #817d7d;
+  font-weight: 500;
+  font-size: 16px;
+}
+
+.attendance-table td {
+  font-size: 15px;
+  font-weight: 400;
+  color: #000;
+}
+
+.status-btn {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  text-transform: lowercase;
+}
+
+.present {
+  background: #000;
+  color: #fff;
+}
+
+.absent {
+  background: #f1f1f1;
+  color: #000;
+}
+
+.icon-btn {
+  background: #fff;
+  border: 1px solid #ddd;
+  padding: 6px 8px;
+  border-radius: 6px;
+  margin-right: 8px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.popup-box {
+  background: #fff;
+  border-radius: 10px;
+  padding: 30px;
+  width: 420px;
+  max-height: 95vh;
+  overflow-y: auto;
+}
