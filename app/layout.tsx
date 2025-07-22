@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/components/providers/auth-provider'
+import { ClientProvider } from '@/contexts/ClientContext'
 
 export const metadata: Metadata = {
   title: 'Virukshaa-Construction-product',
@@ -22,7 +23,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className} suppressHydrationWarning>
         <AuthProvider>
-          {children}
+          <ClientProvider>
+            {children}
+          </ClientProvider>
         </AuthProvider>
       </body>
     </html>

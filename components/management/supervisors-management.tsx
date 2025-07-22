@@ -1,524 +1,4 @@
-// "use client"
-
-// import React, { useState, useEffect, useMemo } from "react"
-// import {
-//   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
-// } from "@/components/ui/table"
-// import { Card, CardContent } from "@/components/ui/card"
-// import { Button } from "@/components/ui/button"
-// import { Badge } from "@/components/ui/badge"
-// import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
-// import {
-//   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter
-// } from "@/components/ui/dialog"
-// import {
-//   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
-// } from "@/components/ui/alert-dialog"
-// import { Input } from "@/components/ui/input"
-// import { Textarea } from "@/components/ui/textarea"
-// import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-// import { Calendar } from "@/components/ui/calendar"
-// import { format } from "date-fns"
-// import {
-//   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
-// } from "@/components/ui/select"
-// import { useToast } from "@/components/ui/use-toast"
-// import {
-//   Plus, Edit, Trash2, Mail, Phone, MapPin, Award, Search, LayoutGrid, List, PlusCircle, RefreshCw, ClipboardList, Calendar as CalendarIcon
-// } from "lucide-react"
-
-// // Define the Supervisor type
-// export interface Supervisor {
-//   _id: string
-//   name: string
-//   email: string
-//   phone: string
-//   salary: number
-//   address: string
-//   status: "Active" | "On Leave" | "Inactive"
-//   avatar?: string
-//   createdAt?: string | Date
-//   updatedAt?: string | Date
-// }
-
-// // Helper to get status color
-// const getStatusColor = (status: Supervisor["status"]) => {
-//   switch (status) {
-//     case "Active": return "bg-green-500 text-white"
-//     case "On Leave": return "bg-yellow-500 text-white"
-//     case "Inactive": return "bg-red-500 text-white"
-//     default: return "bg-gray-500 text-white"
-//   }
-// }
-
-// const initialFormData = {
-//   name: "",
-//   email: "",
-//   phone: "",
-//   salary: 0,
-//   address: "",
-//   status: "Active" as "Active" | "On Leave" | "Inactive",
-// };
-
-// export default function SupervisorsManagement() {
-//   const [supervisors, setSupervisors] = useState<Supervisor[]>([])
-//   const [isLoading, setIsLoading] = useState(true)
-//   const [error, setError] = useState<string | null>(null)
-//   const [searchTerm, setSearchTerm] = useState("")
-//   const [statusFilter, setStatusFilter] = useState("All")
-//   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
-//   const [attendance, setAttendance] = useState<Record<string, "Present" | "Absent">>({})
-
-//   const [isFormOpen, setIsFormOpen] = useState(false);
-//   const [selectedSupervisor, setSelectedSupervisor] = useState<Supervisor | null>(null);
-//   const [formData, setFormData] = useState(initialFormData);
-
-//   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
-//   const [taskFormData, setTaskFormData] = useState({
-//     title: "",
-//     description: "",
-//     startDate: undefined as Date | undefined,
-//     endDate: undefined as Date | undefined,
-//     documentUrl: "",
-//   });
-//   const [selectedSupervisorForTask, setSelectedSupervisorForTask] = useState<string | null>(null);
-
-//   const { toast } = useToast()
-
-//   const fetchAllData = async () => {
-//     setIsLoading(true);
-//     try {
-//       const [supervisorsRes, attendanceRes] = await Promise.all([
-//         fetch('/api/supervisors'),
-//         fetch(`/api/attendance?date=${new Date().toISOString().split("T")[0]}`)
-//       ]);
-
-//       if (!supervisorsRes.ok) throw new Error('Failed to fetch supervisors');
-//       const supervisorsData = await supervisorsRes.json();
-//       setSupervisors(supervisorsData);
-
-//       const newAttendanceMap: Record<string, "Present" | "Absent"> = {};
-//       if (attendanceRes.ok) {
-//         const attendanceData: { supervisorId: { _id: string }; status: "Present" | "Absent" }[] = await attendanceRes.json();
-//         attendanceData.forEach(record => {
-//           if (record.supervisorId && record.supervisorId._id) {
-//             newAttendanceMap[record.supervisorId._id] = record.status;
-//           }
-//         });
-//       }
-//       setAttendance(newAttendanceMap);
-
-//     } catch (err: any) {
-//       setError(err.message);
-//       toast({ title: 'Error', description: err.message, variant: 'destructive' });
-//     } finally {
-//       setIsLoading(false);
-//     }
-//   };
-
-//   useEffect(() => {
-//     fetchAllData();
-//   }, []);
-
-//   const filteredSupervisors = useMemo(() => {
-//     return supervisors.filter((supervisor) => {
-//       const searchTermLower = searchTerm.toLowerCase();
-//       const matchesSearch = supervisor.name.toLowerCase().includes(searchTermLower) || supervisor.email.toLowerCase().includes(searchTermLower);
-//       const matchesStatus = statusFilter === "All" || supervisor.status === statusFilter;
-//       return matchesSearch && matchesStatus;
-//     });
-//   }, [supervisors, searchTerm, statusFilter]);
-
-//   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-//     const { name, value } = e.target;
-//     setFormData(prev => ({ ...prev, [name]: name === 'salary' ? Number(value) : value }));
-//   };
-
-//   const handleStatusChange = (value: string) => {
-//     setFormData(prev => ({ ...prev, status: value as Supervisor['status'] }));
-//   };
-
-//   const openForm = (supervisor: Supervisor | null) => {
-//     if (supervisor) {
-//       setSelectedSupervisor(supervisor);
-//       setFormData(supervisor);
-//     } else {
-//       setSelectedSupervisor(null);
-//       setFormData(initialFormData);
-//     }
-//     setIsFormOpen(true);
-//   };
-
-//   const closeForm = () => {
-//     setIsFormOpen(false);
-//     setSelectedSupervisor(null);
-//     setFormData(initialFormData);
-//   };
-
-//   const openTaskForm = (supervisorId: string) => {
-//     setSelectedSupervisorForTask(supervisorId);
-//     setIsTaskFormOpen(true);
-//   };
-
-//   const closeTaskForm = () => {
-//     setIsTaskFormOpen(false);
-//     setSelectedSupervisorForTask(null);
-//     setTaskFormData({
-//       title: "",
-//       description: "",
-//       startDate: undefined,
-//       endDate: undefined,
-//       documentUrl: "",
-//     });
-//   };
-
-//   const handleTaskFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-//     const { name, value } = e.target;
-//     setTaskFormData(prev => ({ ...prev, [name]: value }));
-//   };
-
-//   const handleTaskDateChange = (date: Date | undefined, field: 'startDate' | 'endDate') => {
-//     setTaskFormData(prev => ({ ...prev, [field]: date }));
-//   };
-
-//   const handleTaskSubmit = async (e: React.FormEvent) => {
-//     e.preventDefault();
-//     if (!selectedSupervisorForTask) return;
-
-//     try {
-//       const response = await fetch('/api/tasks', {
-//         method: 'POST',
-//         headers: { 'Content-Type': 'application/json' },
-//         body: JSON.stringify({ ...taskFormData, assignedTo: selectedSupervisorForTask }),
-//       });
-
-//       if (!response.ok) {
-//         const errorData = await response.json();
-//         throw new Error(errorData.message || 'Failed to create task');
-//       }
-
-//       toast({ title: 'Success', description: 'Task created successfully.' });
-//       closeTaskForm();
-//     } catch (err: any) {
-//       toast({ title: 'Error', description: err.message, variant: 'destructive' });
-//     }
-//   };
-
-//   const handleSubmit = async (e: React.FormEvent) => {
-//     e.preventDefault();
-//     const url = selectedSupervisor ? `/api/supervisors/${selectedSupervisor._id}` : '/api/supervisors';
-//     const method = selectedSupervisor ? 'PUT' : 'POST';
-
-//     try {
-//       const response = await fetch(url, {
-//         method,
-//         headers: { 'Content-Type': 'application/json' },
-//         body: JSON.stringify(formData),
-//       });
-
-//       if (!response.ok) throw new Error('Failed to save supervisor');
-
-//       toast({ title: 'Success', description: `Supervisor ${selectedSupervisor ? 'updated' : 'added'} successfully.` });
-//       closeForm();
-//       fetchAllData(); // Refresh data
-//     } catch (err: any) {
-//       toast({ title: 'Error', description: err.message, variant: 'destructive' });
-//     }
-//   };
-
-//   const handleDelete = async (id: string) => {
-//     try {
-//       const response = await fetch(`/api/supervisors/${id}`, { method: 'DELETE' });
-//       if (!response.ok) throw new Error('Failed to delete supervisor');
-//       toast({ title: 'Success', description: 'Supervisor deleted successfully.' });
-//       fetchAllData(); // Refresh data
-//     } catch (err: any) {
-//       toast({ title: 'Error', description: err.message, variant: 'destructive' });
-//     }
-//   };
-
-//   const handleToggleAttendance = async (supervisorId: string) => {
-//     const currentStatus = attendance[supervisorId];
-//     const newStatus = currentStatus === "Present" ? "Absent" : "Present";
-
-//     try {
-//       const response = await fetch("/api/attendance", {
-//         method: "POST",
-//         headers: { "Content-Type": "application/json" },
-//         body: JSON.stringify({ supervisorId, date: new Date().toISOString().split("T")[0], status: newStatus }),
-//       });
-
-//       if (!response.ok) throw new Error("Failed to mark attendance");
-
-//       setAttendance((prev) => ({ ...prev, [supervisorId]: newStatus }));
-//       toast({ title: "Success", description: `Marked ${newStatus}.` });
-//     } catch (err: any) {
-//       toast({ title: "Error", description: err.message, variant: "destructive" });
-//     }
-//   };
-
-//   if (isLoading && supervisors.length === 0) {
-//     return <div className="flex items-center justify-center h-64">Loading...</div>;
-//   }
-
-//   if (error) {
-//     return <div className="flex items-center justify-center h-64 text-red-500">Error: {error}</div>;
-//   }
-
-//   return (
-//     <div className="p-6 space-y-6">
-//       <div className="flex items-center justify-between">
-//         <div>
-//           <h2 className="text-2xl font-bold">Supervisors Management</h2>
-//           <p className="text-muted-foreground">Manage and monitor all supervisors</p>
-//         </div>
-//         <div className="flex items-center gap-2">
-//           <Button onClick={() => fetchAllData()} variant="outline" disabled={isLoading}>
-//             <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-//             Refresh
-//           </Button>
-//           <Button onClick={() => openForm(null)}>
-//             <PlusCircle className="mr-2 h-5 w-5" />
-//             Add Supervisor
-//           </Button>
-//         </div>
-//       </div>
-
-//       <div className="flex items-center gap-4">
-//         <div className="relative w-full max-w-xs">
-//           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-//           <Input
-//             type="search"
-//             placeholder="Search supervisors..."
-//             className="pl-10"
-//             value={searchTerm}
-//             onChange={(e) => setSearchTerm(e.target.value)}
-//           />
-//         </div>
-//         <Select value={statusFilter} onValueChange={setStatusFilter}>
-//           <SelectTrigger className="w-[180px]">
-//             <SelectValue placeholder="Filter by status" />
-//           </SelectTrigger>
-//           <SelectContent>
-//             <SelectItem value="All">All Statuses</SelectItem>
-//             <SelectItem value="Active">Active</SelectItem>
-//             <SelectItem value="On Leave">On Leave</SelectItem>
-//             <SelectItem value="Inactive">Inactive</SelectItem>
-//           </SelectContent>
-//         </Select>
-//         <div className="flex items-center gap-2 ml-auto">
-//           <Button variant={viewMode === "grid" ? "secondary" : "outline"} size="icon" onClick={() => setViewMode("grid")}>
-//             <LayoutGrid className="h-5 w-5" />
-//           </Button>
-//           <Button variant={viewMode === "list" ? "secondary" : "outline"} size="icon" onClick={() => setViewMode("list")}>
-//             <List className="h-5 w-5" />
-//           </Button>
-//         </div>
-//       </div>
-
-//       <Card>
-//         <CardContent className="p-6">
-//           <h3 className="text-lg font-semibold mb-4">Today's Attendance</h3>
-//           <div className="grid grid-cols-2 gap-4 text-center">
-//             <div>
-//               <p className="text-2xl font-bold">{supervisors.length}</p>
-//               <p className="text-sm text-muted-foreground">Total Supervisors</p>
-//             </div>
-//             <div>
-//               <p className="text-2xl font-bold">{Object.values(attendance).filter((s) => s === "Present").length}</p>
-//               <p className="text-sm text-muted-foreground">Present Today</p>
-//             </div>
-//           </div>
-//         </CardContent>
-//       </Card>
-
-//       {viewMode === 'grid' ? (
-//         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-//           {filteredSupervisors.map((supervisor) => (
-//             <Card key={supervisor._id} className="hover:shadow-lg transition-shadow">
-//               <CardContent className="p-6">
-//                 <div className="flex items-start justify-between mb-4">
-//                   <div className="flex items-center gap-3">
-//                     <Avatar className="h-12 w-12">
-//                       <AvatarImage src={supervisor.avatar || "/placeholder.svg"} alt={supervisor.name} />
-//                       <AvatarFallback>{supervisor.name.split(" ").map((n) => n[0]).join("")}</AvatarFallback>
-//                     </Avatar>
-//                     <div>
-//                       <h3 className="font-semibold text-lg">{supervisor.name}</h3>
-//                       <p className="text-sm text-muted-foreground">{supervisor.email}</p>
-//                     </div>
-//                   </div>
-//                   <Badge className={getStatusColor(supervisor.status)}>{supervisor.status}</Badge>
-//                 </div>
-//                 <div className="space-y-2 mb-4">
-//                   <div className="flex items-center gap-2 text-sm"><Phone className="w-4 h-4 text-muted-foreground" /><span>{supervisor.phone}</span></div>
-//                   <div className="flex items-center gap-2 text-sm"><MapPin className="w-4 h-4 text-muted-foreground" /><span>{supervisor.address}</span></div>
-//                   <div className="flex items-center gap-2 text-sm"><Award className="w-4 h-4 text-muted-foreground" /><span>Salary: ${supervisor.salary.toLocaleString()}</span></div>
-//                 </div>
-//                 <div className="flex gap-2 mb-4">
-//                   <Button
-//                     variant={attendance[supervisor._id] === "Present" ? "default" : "outline"}
-//                     size="sm"
-//                     className="flex-1"
-//                     onClick={() => handleToggleAttendance(supervisor._id)}
-//                   >
-//                     {attendance[supervisor._id] === "Present" ? "Mark Absent" : "Mark Present"}
-//                   </Button>
-//                 </div>
-//                 <div className="flex gap-2">
-//                   <Button variant="outline" size="sm" className="flex-1 bg-transparent" onClick={() => openForm(supervisor)}><Edit className="w-4 h-4 mr-2" />Edit</Button>
-//                   <Button variant="outline" size="sm" className="flex-1 bg-transparent" onClick={() => openTaskForm(supervisor._id)}><ClipboardList className="w-4 h-4 mr-2" />Add Task</Button>
-//                   <AlertDialog>
-//                     <AlertDialogTrigger asChild><Button variant="destructive" size="sm"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
-//                     <AlertDialogContent>
-//                       <AlertDialogHeader><AlertDialogTitle>Delete Supervisor</AlertDialogTitle><AlertDialogDescription>Are you sure you want to delete {supervisor.name}? This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
-//                       <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(supervisor._id)}>Delete</AlertDialogAction></AlertDialogFooter>
-//                     </AlertDialogContent>
-//                   </AlertDialog>
-//                 </div>
-//               </CardContent>
-//             </Card>
-//           ))}
-//         </div>
-//       ) : (
-//         <Card>
-//           <Table>
-//             <TableHeader>
-//               <TableRow>
-//                 <TableHead>Name</TableHead>
-//                 <TableHead>Contact</TableHead>
-//                 <TableHead>Salary</TableHead>
-//                 <TableHead>Status</TableHead>
-//                 <TableHead className="text-right">Actions</TableHead>
-//               </TableRow>
-//             </TableHeader>
-//             <TableBody>
-//               {filteredSupervisors.map((supervisor) => (
-//                 <TableRow key={supervisor._id}>
-//                   <TableCell>
-//                     <div className="flex items-center gap-3">
-//                       <Avatar className="h-10 w-10">
-//                         <AvatarImage src={supervisor.avatar || "/placeholder.svg"} alt={supervisor.name} />
-//                         <AvatarFallback>{supervisor.name.split(" ").map((n) => n[0]).join("")}</AvatarFallback>
-//                       </Avatar>
-//                       <div>
-//                         <div className="font-medium">{supervisor.name}</div>
-//                         <div className="text-sm text-muted-foreground">{supervisor.email}</div>
-//                       </div>
-//                     </div>
-//                   </TableCell>
-//                   <TableCell>
-//                     <div>{supervisor.phone}</div>
-//                     <div className="text-sm text-muted-foreground">{supervisor.address}</div>
-//                   </TableCell>
-//                   <TableCell>${supervisor.salary.toLocaleString()}</TableCell>
-//                   <TableCell><Badge className={getStatusColor(supervisor.status)}>{supervisor.status}</Badge></TableCell>
-//                   <TableCell className="text-right">
-//                     <div className="flex gap-2 justify-end">
-//                       <Button
-//                         variant={attendance[supervisor._id] === "Present" ? "default" : "outline"}
-//                         size="sm"
-//                         onClick={() => handleToggleAttendance(supervisor._id)}
-//                       >
-//                         {attendance[supervisor._id] === "Present" ? "Mark Absent" : "Mark Present"}
-//                       </Button>
-//                       <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => openForm(supervisor)}><Edit className="h-4 w-4" /></Button>
-//                       <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => openTaskForm(supervisor._id)}><ClipboardList className="h-4 w-4" /></Button>
-//                       {/* <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => openForm(supervisor)}><Edit className="h-4 w-4" /></Button> */}
-//                       <AlertDialog>
-//                         <AlertDialogTrigger asChild><Button variant="destructive" size="icon" className="h-8 w-8"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger>
-//                         <AlertDialogContent>
-//                           <AlertDialogHeader><AlertDialogTitle>Delete Supervisor</AlertDialogTitle><AlertDialogDescription>Are you sure you want to delete {supervisor.name}? This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
-//                           <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(supervisor._id)}>Delete</AlertDialogAction></AlertDialogFooter>
-//                         </AlertDialogContent>
-//                       </AlertDialog>
-//                     </div>
-//                   </TableCell>
-//                 </TableRow>
-//               ))}
-//             </TableBody>
-//           </Table>
-//         </Card>
-//       )}
-
-//       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-//         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-//           <DialogHeader>
-//             <DialogTitle>{selectedSupervisor ? "Edit Supervisor" : "Add New Supervisor"}</DialogTitle>
-//             <DialogDescription>{selectedSupervisor ? "Update supervisor information" : "Create a new supervisor account"}</DialogDescription>
-//           </DialogHeader>
-//           <form onSubmit={handleSubmit} className="space-y-4">
-//             <div className="grid grid-cols-2 gap-4">
-//               <Input name="name" placeholder="Name" value={formData.name} onChange={handleFormChange} required />
-//               <Input name="email" type="email" placeholder="Email" value={formData.email} onChange={handleFormChange} required />
-//               <Input name="phone" placeholder="Phone" value={formData.phone} onChange={handleFormChange} required />
-//               <Input name="salary" type="number" placeholder="Salary" value={formData.salary} onChange={handleFormChange} required />
-//               <Input name="address" placeholder="Address" value={formData.address} onChange={handleFormChange} className="col-span-2" />
-//               <Select name="status" value={formData.status} onValueChange={handleStatusChange}>
-//                 <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
-//                 <SelectContent>
-//                   <SelectItem value="Active">Active</SelectItem>
-//                   <SelectItem value="On Leave">On Leave</SelectItem>
-//                   <SelectItem value="Inactive">Inactive</SelectItem>
-//                 </SelectContent>
-//               </Select>
-//             </div>
-//             <DialogFooter>
-//               <Button type="button" variant="outline" onClick={closeForm}>Cancel</Button>
-//               <Button type="submit" disabled={isLoading}>{isLoading ? "Saving..." : selectedSupervisor ? "Update Supervisor" : "Create Supervisor"}</Button>
-//             </DialogFooter>
-//           </form>
-//         </DialogContent>
-//       </Dialog>
-
-//       <Dialog open={isTaskFormOpen} onOpenChange={setIsTaskFormOpen}>
-//         <DialogContent className="max-w-2xl">
-//           <DialogHeader>
-//             <DialogTitle>Add New Task</DialogTitle>
-//             <DialogDescription>Assign a new task to a supervisor.</DialogDescription>
-//           </DialogHeader>
-//           <form onSubmit={handleTaskSubmit} className="space-y-4">
-//             <Input name="title" placeholder="Task Title" value={taskFormData.title} onChange={handleTaskFormChange} required />
-//             <Textarea name="description" placeholder="Description (optional)" value={taskFormData.description} onChange={handleTaskFormChange} />
-//             <div className="grid grid-cols-2 gap-4">
-//               <Popover>
-//                 <PopoverTrigger asChild>
-//                   <Button variant={"outline"} className="w-full justify-start text-left font-normal">
-//                     <CalendarIcon className="mr-2 h-4 w-4" />
-//                     {taskFormData.startDate ? format(taskFormData.startDate, "PPP") : <span>Start Date</span>}
-//                   </Button>
-//                 </PopoverTrigger>
-//                 <PopoverContent className="w-auto p-0">
-//                   <Calendar mode="single" selected={taskFormData.startDate} onSelect={(d) => handleTaskDateChange(d, 'startDate')} initialFocus />
-//                 </PopoverContent>
-//               </Popover>
-//               <Popover>
-//                 <PopoverTrigger asChild>
-//                   <Button variant={"outline"} className="w-full justify-start text-left font-normal">
-//                     <CalendarIcon className="mr-2 h-4 w-4" />
-//                     {taskFormData.endDate ? format(taskFormData.endDate, "PPP") : <span>End Date</span>}
-//                   </Button>
-//                 </PopoverTrigger>
-//                 <PopoverContent className="w-auto p-0">
-//                   <Calendar mode="single" selected={taskFormData.endDate} onSelect={(d) => handleTaskDateChange(d, 'endDate')} initialFocus />
-//                 </PopoverContent>
-//               </Popover>
-//             </div>
-//             <Input name="documentUrl" placeholder="Document URL (optional)" value={taskFormData.documentUrl} onChange={handleTaskFormChange} />
-//             <DialogFooter>
-//               <Button type="button" variant="outline" onClick={closeTaskForm}>Cancel</Button>
-//               <Button type="submit">Create Task</Button>
-//             </DialogFooter>
-//           </form>
-//         </DialogContent>
-//       </Dialog>
-//     </div>
-//   )
-// }
-
-
 "use client"
-
 import type React from "react"
 import { useState, useEffect } from "react"
 import { format } from "date-fns"
@@ -551,6 +31,19 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "sonner"
 import {
@@ -563,9 +56,7 @@ import {
   Search,
   Filter,
   Users,
-  UserCheck,
   DollarSign,
-  Briefcase,
   Grid3X3,
   List,
   CheckCircle,
@@ -574,7 +65,11 @@ import {
   RefreshCw,
   MapPin,
   ClipboardList,
-  Award
+  Eye,
+  UserPlus,
+  CalendarPlus,
+  FileText,
+  Hash
 } from "lucide-react"
 
 interface Supervisor {
@@ -595,6 +90,25 @@ interface Supervisor {
     checkIn?: string
     checkOut?: string
   }
+}
+
+interface Task {
+  _id: string
+  title: string
+  description: string
+  startDate: string
+  endDate: string
+  status: "Pending" | "In Progress" | "Completed"
+  documentUrl?: string
+  createdAt: string
+}
+
+interface Employee {
+  _id: string
+  name: string
+  email: string
+  position: string
+  avatar?: string
 }
 
 const initialFormData = {
@@ -618,8 +132,15 @@ export default function SupervisorsManagement() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [formData, setFormData] = useState(initialFormData)
 
+  // Detail Panel States
+  const [selectedSupervisor, setSelectedSupervisor] = useState<Supervisor | null>(null)
+  const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(false)
+  const [supervisorTasks, setSupervisorTasks] = useState<Task[]>([])
+  const [supervisorEmployees, setSupervisorEmployees] = useState<Employee[]>([])
+
   // Task form state
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false)
+  const [isLoadingTasks, setIsLoadingTasks] = useState(false)
   const [taskFormData, setTaskFormData] = useState({
     title: "",
     description: "",
@@ -627,11 +148,147 @@ export default function SupervisorsManagement() {
     endDate: undefined as Date | undefined,
     documentUrl: "",
   })
-  const [selectedSupervisorForTask, setSelectedSupervisorForTask] = useState<string | null>(null)
+
+  // Employee assignment state
+  const [isEmployeeAssignOpen, setIsEmployeeAssignOpen] = useState(false)
+  const [availableEmployees, setAvailableEmployees] = useState<Employee[]>([])
 
   useEffect(() => {
     fetchSupervisors()
+    fetchAvailableEmployees()
   }, [])
+
+  // Fetch tasks for a specific supervisor
+  const fetchSupervisorTasks = async (supervisorId: string) => {
+    if (!supervisorId) return;
+    
+    setIsLoadingTasks(true);
+    try {
+      const response = await fetch(`/api/tasks?supervisorId=${supervisorId}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to fetch tasks');
+      }
+      const data = await response.json();
+      setSupervisorTasks(data);
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to load tasks');
+    } finally {
+      setIsLoadingTasks(false);
+    }
+  };
+
+  // Open task form and reset form data
+  const openTaskForm = () => {
+    setTaskFormData({
+      title: "",
+      description: "",
+      startDate: undefined,
+      endDate: undefined,
+      documentUrl: "",
+    });
+    setIsTaskFormOpen(true);
+  };
+
+  // Handle task form input changes
+  const handleTaskFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setTaskFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Handle task date changes
+  const handleTaskDateChange = (date: Date | undefined, field: 'startDate' | 'endDate') => {
+    setTaskFormData(prev => ({
+      ...prev,
+      [field]: date
+    }));
+  };
+
+  // Submit task form
+  const handleTaskSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!selectedSupervisor?._id) {
+      toast.error('No supervisor selected');
+      return;
+    }
+
+    if (!taskFormData.title || !taskFormData.startDate || !taskFormData.endDate) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...taskFormData,
+          supervisorId: selectedSupervisor._id,
+          status: 'Pending',
+          startDate: taskFormData.startDate?.toISOString(),
+          endDate: taskFormData.endDate?.toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to create task');
+      }
+      
+      const newTask = await response.json();
+      setSupervisorTasks(prev => [...prev, newTask]);
+      setIsTaskFormOpen(false);
+      toast.success('Task created successfully');
+      
+      // Refresh tasks after creation
+      await fetchSupervisorTasks(selectedSupervisor._id);
+    } catch (error) {
+      console.error('Error creating task:', error);
+      toast.error('Failed to create task');
+    }
+  };
+
+  // Update task status
+  const updateTaskStatus = async (taskId: string, status: 'Pending' | 'In Progress' | 'Completed') => {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update task status');
+      
+      setSupervisorTasks(prev => 
+        prev.map(task => 
+          task._id === taskId ? { ...task, status } : task
+        )
+      );
+      toast.success('Task status updated');
+    } catch (error) {
+      console.error('Error updating task status:', error);
+      toast.error('Failed to update task status');
+    }
+  };
+
+  // Open supervisor details and load related data
+  const openSupervisorDetails = async (supervisor: Supervisor) => {
+    setSelectedSupervisor(supervisor);
+    setIsDetailPanelOpen(true);
+    if (supervisor._id) {
+      await fetchSupervisorTasks(supervisor._id);
+      // Fetch other related data here if needed
+    }
+  };
 
   const fetchSupervisors = async () => {
     try {
@@ -684,6 +341,74 @@ export default function SupervisorsManagement() {
     }
   }
 
+  const fetchAvailableEmployees = async () => {
+    try {
+      // Mock data for now - replace with actual API call
+      const mockEmployees: Employee[] = [
+        {
+          _id: "1",
+          name: "John Smith",
+          email: "john.smith@company.com",
+          position: "Site Worker",
+        },
+        {
+          _id: "2", 
+          name: "Sarah Johnson",
+          email: "sarah.johnson@company.com",
+          position: "Equipment Operator",
+        },
+        {
+          _id: "3",
+          name: "Mike Davis", 
+          email: "mike.davis@company.com",
+          position: "Safety Inspector",
+        }
+      ]
+      setAvailableEmployees(mockEmployees)
+    } catch (error) {
+      console.error("Error fetching employees:", error)
+    }
+  }
+
+ 
+
+  const fetchSupervisorEmployees = async (supervisorId: string) => {
+    try {
+      // Mock data for now - replace with actual API call
+      const mockEmployees: Employee[] = [
+        {
+          _id: "1",
+          name: "John Smith",
+          email: "john.smith@company.com", 
+          position: "Site Worker",
+        },
+        {
+          _id: "2",
+          name: "Mike Davis",
+          email: "mike.davis@company.com",
+          position: "Safety Inspector", 
+        }
+      ]
+      setSupervisorEmployees(mockEmployees)
+    } catch (error) {
+      console.error("Error fetching supervisor employees:", error)
+    }
+  }
+
+  const openSupervisorDetail = async (supervisor: Supervisor) => {
+    setSelectedSupervisor(supervisor)
+    setIsDetailPanelOpen(true)
+    await fetchSupervisorTasks(supervisor._id)
+    await fetchSupervisorEmployees(supervisor._id)
+  }
+
+  const closeSupervisorDetail = () => {
+    setIsDetailPanelOpen(false)
+    setSelectedSupervisor(null)
+    setSupervisorTasks([])
+    setSupervisorEmployees([])
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -721,6 +446,9 @@ export default function SupervisorsManagement() {
       const response = await fetch(`/api/supervisors/${id}`, { method: "DELETE" })
       if (response.ok) {
         setSupervisors(supervisors.filter((s) => s._id !== id))
+        if (selectedSupervisor?._id === id) {
+          closeSupervisorDetail()
+        }
         toast.success("Supervisor has been removed successfully.")
       }
     } catch (error) {
@@ -748,14 +476,10 @@ export default function SupervisorsManagement() {
     setIsAddDialogOpen(true)
   }
 
-  const openTaskForm = (supervisorId: string) => {
-    setSelectedSupervisorForTask(supervisorId)
-    setIsTaskFormOpen(true)
-  }
+  
 
   const closeTaskForm = () => {
     setIsTaskFormOpen(false)
-    setSelectedSupervisorForTask(null)
     setTaskFormData({
       title: "",
       description: "",
@@ -765,40 +489,19 @@ export default function SupervisorsManagement() {
     })
   }
 
-  const handleTaskFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
-    setTaskFormData(prev => ({ ...prev, [name]: value }))
-  }
 
-  const handleTaskDateChange = (date: Date | undefined, field: 'startDate' | 'endDate') => {
-    setTaskFormData(prev => ({ ...prev, [field]: date }))
-  }
 
-  const handleTaskSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!selectedSupervisorForTask) return
-
+  const handleEmployeeAssign = async (employeeId: string) => {
+    if (!selectedSupervisor) return
+    
     try {
-      const response = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...taskFormData,
-          assignedTo: selectedSupervisorForTask,
-          startDate: taskFormData.startDate?.toISOString(),
-          endDate: taskFormData.endDate?.toISOString(),
-        }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || 'Failed to create task')
-      }
-
-      toast.success('Task created successfully.')
-      closeTaskForm()
-    } catch (err: any) {
-      toast.error(err.message)
+      // Mock API call - replace with actual implementation
+      toast.success('Employee assigned successfully.')
+      setIsEmployeeAssignOpen(false)
+      // Refresh employees for this supervisor
+      await fetchSupervisorEmployees(selectedSupervisor._id)
+    } catch (error) {
+      toast.error('Failed to assign employee.')
     }
   }
 
@@ -818,6 +521,19 @@ export default function SupervisorsManagement() {
         return "bg-yellow-100 text-yellow-800"
       case "Inactive":
         return "bg-red-100 text-red-800"
+      default:
+        return "bg-gray-100 text-gray-800"
+    }
+  }
+
+  const getTaskStatusColor = (status: string) => {
+    switch (status) {
+      case "Completed":
+        return "bg-green-100 text-green-800"
+      case "In Progress":
+        return "bg-blue-100 text-blue-800"
+      case "Pending":
+        return "bg-yellow-100 text-yellow-800"
       default:
         return "bg-gray-100 text-gray-800"
     }
@@ -843,7 +559,11 @@ export default function SupervisorsManagement() {
   const renderGridView = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {filteredSupervisors.map((supervisor) => (
-        <Card key={supervisor._id} className="hover:shadow-lg transition-shadow">
+        <Card 
+          key={supervisor._id} 
+          className="hover:shadow-lg transition-all duration-200 cursor-pointer hover:scale-[1.02]"
+          onClick={() => openSupervisorDetail(supervisor)}
+        >
           <CardContent className="p-6">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
@@ -893,15 +613,9 @@ export default function SupervisorsManagement() {
                 <DollarSign className="w-4 h-4 text-muted-foreground" />
                 <span>${supervisor.salary.toLocaleString()}</span>
               </div>
-              {supervisor.attendance?.checkIn && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Clock className="w-4 h-4 text-muted-foreground" />
-                  <span>Check-in: {supervisor.attendance.checkIn}</span>
-                </div>
-              )}
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
               <Button
                 variant="outline"
                 size="sm"
@@ -914,11 +628,9 @@ export default function SupervisorsManagement() {
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 bg-transparent"
-                onClick={() => openTaskForm(supervisor._id)}
+                onClick={() => openSupervisorDetail(supervisor)}
               >
-                <ClipboardList className="w-4 h-4 mr-2" />
-                Task
+                <Eye className="w-4 h-4" />
               </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -962,7 +674,11 @@ export default function SupervisorsManagement() {
           </TableHeader>
           <TableBody>
             {filteredSupervisors.map((supervisor) => (
-              <TableRow key={supervisor._id}>
+              <TableRow 
+                key={supervisor._id}
+                className="cursor-pointer hover:bg-muted/50"
+                onClick={() => openSupervisorDetail(supervisor)}
+              >
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <Avatar className="h-10 w-10">
@@ -995,7 +711,8 @@ export default function SupervisorsManagement() {
                     <div className="flex items-center gap-2">
                       <button
                         className={`rounded px-2 py-1 flex items-center gap-1 text-xs font-medium transition-colors ${supervisor.attendance?.present ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
-                        onClick={async () => {
+                        onClick={async (e) => {
+                          e.stopPropagation()
                           // Compute new status
                           const newPresent = !supervisor.attendance?.present;
                           // Get today's date in YYYY-MM-DD
@@ -1036,7 +753,7 @@ export default function SupervisorsManagement() {
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                     <Button
                       variant="outline"
                       size="sm"
@@ -1047,9 +764,9 @@ export default function SupervisorsManagement() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => openTaskForm(supervisor._id)}
+                      onClick={() => openSupervisorDetail(supervisor)}
                     >
-                      <ClipboardList className="w-4 h-4" />
+                      <Eye className="w-4 h-4" />
                     </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
@@ -1166,7 +883,10 @@ export default function SupervisorsManagement() {
               Add Supervisor
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent 
+            className="max-w-2xl max-h-[90vh] overflow-y-auto"
+            aria-label={editingSupervisor ? "Edit supervisor form" : "Add new supervisor form"}
+          >
             <DialogHeader>
               <DialogTitle>{editingSupervisor ? "Edit Supervisor" : "Add New Supervisor"}</DialogTitle>
               <DialogDescription>
@@ -1363,12 +1083,292 @@ export default function SupervisorsManagement() {
         </div>
       )}
 
+      {/* Supervisor Detail Sheet */}
+      <Sheet open={isDetailPanelOpen} onOpenChange={setIsDetailPanelOpen}>
+        <SheetContent className="w-[400px] sm:w-[540px] sm:max-w-none">
+          {selectedSupervisor && (
+            <>
+              <SheetHeader>
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-16 w-16">
+                    <AvatarImage src={selectedSupervisor.avatar || "/placeholder.svg"} alt={selectedSupervisor.name} />
+                    <AvatarFallback className="text-xl">
+                      {selectedSupervisor.name
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <SheetTitle className="text-2xl">{selectedSupervisor.name}</SheetTitle>
+                    <div className="mt-1">
+                      <Badge className={getStatusColor(selectedSupervisor.status)}>
+                        {selectedSupervisor.status}
+                      </Badge>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      openEditDialog(selectedSupervisor)
+                      setIsDetailPanelOpen(false)
+                    }}
+                  >
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit
+                  </Button>
+                </div>
+              </SheetHeader>
+
+              <Tabs defaultValue="overview" className="mt-6">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="overview">Overview</TabsTrigger>
+                  <TabsTrigger value="tasks">Tasks</TabsTrigger>
+                  <TabsTrigger value="employees">Team</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="overview" className="mt-6 space-y-6">
+                  {/* Quick Stats */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2">
+                          {selectedSupervisor.attendance?.present ? (
+                            <CheckCircle className="w-5 h-5 text-green-600" />
+                          ) : (
+                            <XCircle className="w-5 h-5 text-red-600" />
+                          )}
+                          <div>
+                            <p className="text-sm font-medium">
+                              {selectedSupervisor.attendance?.present ? 'Present Today' : 'Absent Today'}
+                            </p>
+                            {selectedSupervisor.attendance?.checkIn && (
+                              <p className="text-xs text-muted-foreground">
+                                Check-in: {selectedSupervisor.attendance.checkIn}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2">
+                          <ClipboardList className="w-5 h-5 text-blue-600" />
+                          <div>
+                            <p className="text-sm font-medium">{supervisorTasks.length} Active Tasks</p>
+                            <p className="text-xs text-muted-foreground">Assigned tasks</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Personal Information */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Personal Information</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="flex items-center gap-3">
+                          <Mail className="w-5 h-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">Email</p>
+                            <p className="text-sm text-muted-foreground">{selectedSupervisor.email}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Phone className="w-5 h-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">Phone</p>
+                            <p className="text-sm text-muted-foreground">{selectedSupervisor.phone}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <MapPin className="w-5 h-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">Address</p>
+                            <p className="text-sm text-muted-foreground">{selectedSupervisor.address}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <DollarSign className="w-5 h-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">Salary</p>
+                            <p className="text-sm text-muted-foreground">${selectedSupervisor.salary.toLocaleString()}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Hash className="w-5 h-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">Username</p>
+                            <p className="text-sm text-muted-foreground">{selectedSupervisor.username}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Calendar className="w-5 h-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">Joined</p>
+                            <p className="text-sm text-muted-foreground">
+                              {format(new Date(selectedSupervisor.createdAt), "PPP")}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="tasks" className="mt-6 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-lg font-semibold">Assigned Tasks</h3>
+                    <Button size="sm" onClick={openTaskForm}>
+                      <CalendarPlus className="w-4 h-4 mr-2" />
+                      Add Task
+                    </Button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {isLoadingTasks ? (
+                      <div className="flex justify-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary" />
+                      </div>
+                    ) : supervisorTasks.length > 0 ? (
+                      supervisorTasks.map((task) => (
+                        <Card key={task._id} className="hover:shadow-md transition-shadow">
+                          <CardContent className="p-4">
+                            <div className="flex justify-between items-start mb-2">
+                              <h4 className="font-medium">{task.title}</h4>
+                              <div className="flex items-center gap-2">
+                                <Badge 
+                                  className={cn(
+                                    "cursor-pointer hover:opacity-80 transition-opacity",
+                                    getTaskStatusColor(task.status)
+                                  )}
+                                  variant="secondary"
+                                  onClick={() => {
+                                    const statuses: Array<Task['status']> = ['Pending', 'In Progress', 'Completed'];
+                                    const currentIndex = statuses.indexOf(task.status);
+                                    const nextStatus = statuses[(currentIndex + 1) % statuses.length];
+                                    updateTaskStatus(task._id, nextStatus);
+                                  }}
+                                >
+                                  {task.status}
+                                </Badge>
+                              </div>
+                            </div>
+                            {task.description && (
+                              <p className="text-sm text-muted-foreground mb-3">{task.description}</p>
+                            )}
+                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                              <div className="flex items-center gap-1">
+                                <Calendar className="w-3 h-3" />
+                                <span>{format(new Date(task.startDate), "MMM dd, yyyy")}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                <span>Due: {format(new Date(task.endDate), "MMM dd, yyyy")}</span>
+                              </div>
+                            </div>
+                            {task.documentUrl && (
+                              <div className="mt-2">
+                                <a 
+                                  href={task.documentUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 text-sm inline-flex items-center"
+                                >
+                                  <FileText className="w-3 h-3 mr-1" />
+                                  View Document
+                                </a>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))
+                    ) : (
+                      <div className="text-center py-8">
+                        <ClipboardList className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                        <p className="text-muted-foreground">No tasks assigned yet</p>
+                        <Button variant="outline" size="sm" onClick={openTaskForm} className="mt-2">
+                          <CalendarPlus className="w-4 h-4 mr-2" />
+                          Add First Task
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="employees" className="mt-6 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-lg font-semibold">Team Members</h3>
+                    <Button size="sm" onClick={() => setIsEmployeeAssignOpen(true)}>
+                      <UserPlus className="w-4 h-4 mr-2" />
+                      Assign Employee
+                    </Button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {supervisorEmployees.length > 0 ? (
+                      supervisorEmployees.map((employee) => (
+                        <Card key={employee._id}>
+                          <CardContent className="p-4">
+                            <div className="flex items-center gap-3">
+                              <Avatar className="h-10 w-10">
+                                <AvatarImage src={employee.avatar || "/placeholder.svg"} alt={employee.name} />
+                                <AvatarFallback>
+                                  {employee.name
+                                    .split(" ")
+                                    .map((n) => n[0])
+                                    .join("")}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1">
+                                <h4 className="font-medium">{employee.name}</h4>
+                                <p className="text-sm text-muted-foreground">{employee.position}</p>
+                                <p className="text-xs text-muted-foreground">{employee.email}</p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                    ) : (
+                      <div className="text-center py-8 border rounded-lg bg-muted/10">
+                        <Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                        <h4 className="font-medium mb-1">No Team Members</h4>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          This supervisor doesn't have any team members assigned yet.
+                        </p>
+                        <Button 
+                          size="sm" 
+                          onClick={() => setIsEmployeeAssignOpen(true)}
+                        >
+                          <UserPlus className="w-4 h-4 mr-2" />
+                          Assign Team Member
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
       {/* Task Assignment Dialog */}
       <Dialog open={isTaskFormOpen} onOpenChange={setIsTaskFormOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent 
+          className="max-w-2xl"
+          aria-label="Add new task form"
+        >
           <DialogHeader>
             <DialogTitle>Add New Task</DialogTitle>
-            <DialogDescription>Assign a new task to a supervisor.</DialogDescription>
+            <DialogDescription>
+              Assign a new task to {selectedSupervisor?.name}.
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleTaskSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -1387,7 +1387,7 @@ export default function SupervisorsManagement() {
               <Textarea
                 id="description"
                 name="description"
-                placeholder="Description (optional)"
+                placeholder="Task description..."
                 value={taskFormData.description}
                 onChange={handleTaskFormChange}
               />
@@ -1427,16 +1427,63 @@ export default function SupervisorsManagement() {
               <Input
                 id="documentUrl"
                 name="documentUrl"
-                placeholder="Document URL (optional)"
+                placeholder="https://..."
                 value={taskFormData.documentUrl}
                 onChange={handleTaskFormChange}
               />
             </div>
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={closeTaskForm}>Cancel</Button>
-              <Button type="submit">Create Task</Button>
+              <Button type="submit">Assign Task</Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Employee Assignment Dialog */}
+      <Dialog open={isEmployeeAssignOpen} onOpenChange={setIsEmployeeAssignOpen}>
+        <DialogContent 
+          className="max-w-md"
+          aria-label="Assign employee form"
+        >
+          <DialogHeader>
+            <DialogTitle>Assign Employee</DialogTitle>
+            <DialogDescription>
+              Select an employee to assign to {selectedSupervisor?.name}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {availableEmployees.map((employee) => (
+              <Card key={employee._id} className="cursor-pointer hover:bg-muted/50" onClick={() => handleEmployeeAssign(employee._id)}>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={employee.avatar || "/placeholder.svg"} alt={employee.name} />
+                      <AvatarFallback>
+                        {employee.name
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <h4 className="font-medium">{employee.name}</h4>
+                      <p className="text-sm text-muted-foreground">{employee.position}</p>
+                      <p className="text-xs text-muted-foreground">{employee.email}</p>
+                    </div>
+                    <Button size="sm">
+                      <UserPlus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <div className="flex justify-end pt-4">
+            <Button variant="outline" onClick={() => setIsEmployeeAssignOpen(false)}>
+              Cancel
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

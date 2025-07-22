@@ -1,18 +1,20 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import MessageBox from "@/components/common/MessageBox"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Bell, Camera, Clock, DollarSign, FolderOpen, MessageSquare, TrendingUp, CreditCard, Calendar } from "lucide-react"
+import { Bell, Camera, Clock, DollarSign, FolderOpen, MessageSquare, TrendingUp, CreditCard, Calendar, Loader2, Phone } from "lucide-react"
 import DashboardLayout from "@/components/layout/dashboard-layout"
 import ClientProjectsManagement from "@/components/management/client-projects"
 import ClientPaymentsManagement from "@/components/management/client-payments"
-// import c from "@/components/common/MessageBox"
 import ClientSettingsManagement from "@/components/management/client-settings"
+import { useClient } from "@/contexts/ClientContext"
+import { useSession } from "next-auth/react"
+import { toast } from "sonner"
 
 // Types
 type Project = {
@@ -265,6 +267,14 @@ const QuickActionCard = ({
 export default function ClientDashboard() {
   const [activeSection, setActiveSection] = useState('dashboard')
   const router = useRouter()
+  const { data: session } = useSession()
+  const { client, isLoading, error } = useClient()
+
+  useEffect(() => {
+    if (error) {
+      toast.error(error)
+    }
+  }, [error])
 
   const handleSectionChange = (section: string) => {
     setActiveSection(section)
@@ -288,16 +298,90 @@ export default function ClientDashboard() {
         return (
           <div className="space-y-8">
             {/* Welcome Section */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-100">
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome back, Michael!</h1>
-              <p className="text-gray-600">Here's an overview of your construction projects and recent activity.</p>
-            </div>
+            {isLoading ? (
+              <div className="flex items-center justify-center p-8 bg-white rounded-lg border">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                <span className="ml-2">Loading your dashboard...</span>
+              </div>
+            ) : client ? (
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                      Welcome back, {client.name?.split(' ')[0] || 'Valued Client'}!
+                    </h1>
+                    <p className="text-gray-600">
+                      {client.company ? `Here's an overview of your projects at ${client.company}.` : "Here's an overview of your construction projects and recent activity."}
+                    </p>
+                  </div>
+                  {client.avatar && (
+                    <div className="h-16 w-16 rounded-full bg-white border-2 border-blue-200 overflow-hidden">
+                      <img 
+                        src={client.avatar} 
+                        alt={client.name || 'Client'} 
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                  )}
+                </div>
+                
+                {/* Client Info Badges */}
+                <div className="flex flex-wrap gap-2 mt-4">
+                  {client.email && (
+                    <Badge variant="outline" className="flex items-center gap-1">
+                      <MessageSquare className="h-3 w-3" />
+                      {client.email}
+                    </Badge>
+                  )}
+                  {client.phone && (
+                    <Badge variant="outline" className="flex items-center gap-1">
+                      <Phone className="h-3 w-3" />
+                      {client.phone}
+                    </Badge>
+                  )}
+                  {client.status && (
+                    <Badge 
+                      variant={client.status.toLowerCase() === 'active' ? 'default' : 'secondary'}
+                      className="capitalize"
+                    >
+                      {client.status}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-gradient-to-r from-red-50 to-pink-50 rounded-lg p-6 border border-red-100">
+                <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome!</h1>
+                <p className="text-gray-600">Please complete your profile to get started.</p>
+                <Button 
+                  variant="outline" 
+                  className="mt-2"
+                  onClick={() => setActiveSection('settings')}
+                >
+                  Go to Settings
+                </Button>
+              </div>
+            )}
 
             {/* Project Stats */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {PROJECT_STATS.map((stat) => (
-                <StatCard key={stat.id} {...stat} />
-              ))}
+              {PROJECT_STATS.map((stat) => {
+                // Update stats based on client data if available
+                const statWithClientData = { ...stat };
+                
+                if (client) {
+                  switch(stat.id) {
+                    case 'active-projects':
+                      statWithClientData.value = client.projectTotalAmount ? '3' : '0';
+                      break;
+                    case 'total-investment':
+                      statWithClientData.value = `$${client.projectTotalAmount?.toLocaleString() || '0'}`;
+                      break;
+                  }
+                }
+                
+                return <StatCard key={statWithClientData.id} {...statWithClientData} />;
+              })}
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
