@@ -33,12 +33,19 @@ export async function POST(request: Request) {
       );
     }
 
-    // Bulletproof normalization: match 'userRole' to allowed enum values regardless of case
-    let normalizedUserRole = userRole;
-    const allowedUserRoles = ['Employee', 'Supervisor', 'Client', 'Supplier'];
-    const match = allowedUserRoles.find(r => r.toLowerCase() === String(userRole).toLowerCase());
-    if (match) {
-      normalizedUserRole = match;
+    // Normalize userRole to match the expected enum values
+    let normalizedUserRole: 'Employee' | 'Supervisor' | 'Client' | 'Supplier';
+    const userRoleStr = String(userRole).toLowerCase();
+    
+    if (userRoleStr.includes('employee')) normalizedUserRole = 'Employee';
+    else if (userRoleStr.includes('supervisor')) normalizedUserRole = 'Supervisor';
+    else if (userRoleStr.includes('client')) normalizedUserRole = 'Client';
+    else if (userRoleStr.includes('supplier')) normalizedUserRole = 'Supplier';
+    else {
+      return NextResponse.json(
+        { message: 'Invalid userRole. Must be one of: Employee, Supervisor, Client, Supplier' },
+        { status: 400 }
+      );
     }
 
     await connectToDB();

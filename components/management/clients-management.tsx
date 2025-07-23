@@ -157,15 +157,15 @@ const initialFormData = {
   avatar: "",
 }
 
-const initialProjectData = {
+const initialProjectData: Omit<Project, 'id' | '_id' | 'client' | 'createdAt' | 'tasks'> = {
   title: "",
   description: "",
-  status: "Planning" as const,
+  status: "Planning",
   startDate: new Date().toISOString().split('T')[0],
   endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
   budget: 0,
-  manager: "",
-  progress: 0
+  progress: 0,
+  clientId: "" // Adding required field
 }
 
 const initialTaskData = {

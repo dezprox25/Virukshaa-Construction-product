@@ -2,7 +2,7 @@ import { Schema, model, models, Document, Types } from 'mongoose';
 
 export interface IPayroll extends Document {
   user: Types.ObjectId;
-  userRole: 'employee' | 'supervisor' | 'client' | 'supplier';
+  userRole: 'Employee' | 'Supervisor' | 'Client' | 'Supplier';
   amount: number;
   paymentDate: Date;
   status: 'paid' | 'pending' | 'failed';
