@@ -14,6 +14,7 @@ export interface ISupervisor extends Document {
   dueAmount?: number;
   lastPaymentDate?: Date;
   avatar?: string;
+  employees: mongoose.Types.ObjectId[];
 }
 
 const supervisorSchema = new Schema<ISupervisor>({
@@ -32,7 +33,12 @@ const supervisorSchema = new Schema<ISupervisor>({
   totalPaid: { type: Number, default: 0 },
   dueAmount: { type: Number, default: 0 },
   lastPaymentDate: { type: Date },
-  avatar: { type: String }
+  avatar: { type: String },
+  employees: [{ 
+    type: Schema.Types.ObjectId, 
+    ref: 'Employee',
+    default: []
+  }]
 }, { timestamps: true });
 
 // Create text index for search

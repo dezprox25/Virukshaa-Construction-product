@@ -18,6 +18,7 @@ export interface IEmployee extends Document {
   totalPaid?: number;
   dueAmount?: number;
   lastPaymentDate?: Date;
+  supervisor?: mongoose.Types.ObjectId;
 }
 
 const employeeSchema = new Schema<IEmployee>({
@@ -51,9 +52,14 @@ const employeeSchema = new Schema<IEmployee>({
   password: { type: String, required: true, select: false },
   avatar: { type: String, required: false },
   department: { type: String, required: false },
-  totalPaid: { type: Number, default: 0, required: false },
-  dueAmount: { type: Number, default: 0, required: false },
-  lastPaymentDate: { type: Date, required: false }
+  totalPaid: { type: Number, default: 0 },
+  dueAmount: { type: Number, default: 0 },
+  lastPaymentDate: { type: Date },
+  supervisor: { 
+    type: Schema.Types.ObjectId, 
+    ref: 'Supervisor',
+    default: null
+  }
 }, { timestamps: true });
 
 // Create the model or return existing one to prevent recompilation errors

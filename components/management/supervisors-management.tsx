@@ -37,6 +37,7 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
+  SheetTrigger
 } from "@/components/ui/sheet"
 import {
   Tabs,
@@ -152,11 +153,75 @@ export default function SupervisorsManagement() {
   // Employee assignment state
   const [isEmployeeAssignOpen, setIsEmployeeAssignOpen] = useState(false)
   const [availableEmployees, setAvailableEmployees] = useState<Employee[]>([])
+  const [loadingEmployees, setLoadingEmployees] = useState(false)
 
   useEffect(() => {
     fetchSupervisors()
     fetchAvailableEmployees()
   }, [])
+
+  // Fetch all available employees
+  const fetchAvailableEmployees = async () => {
+    setLoadingEmployees(true)
+    try {
+      const response = await fetch('/api/employees')
+      if (!response.ok) {
+        throw new Error('Failed to fetch employees')
+      }
+      const data = await response.json()
+      setAvailableEmployees(data)
+    } catch (error) {
+      console.error('Error fetching employees:', error)
+      toast.error('Failed to load employees')
+    } finally {
+      setLoadingEmployees(false)
+    }
+  }
+
+  // Handle employee assignment
+  const handleEmployeeAssign = async (employeeId: string) => {
+    if (!selectedSupervisor?._id) return
+    
+    try {
+      const response = await fetch(`/api/supervisors/${selectedSupervisor._id}/employees`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ employeeId }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Failed to assign employee')
+      }
+
+      // Refresh supervisor's employee list
+      fetchSupervisorEmployees(selectedSupervisor._id)
+      setIsEmployeeAssignOpen(false)
+      toast.success('Employee assigned successfully')
+    } catch (error) {
+      console.error('Error assigning employee:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to assign employee')
+    }
+  }
+
+  // Fetch employees assigned to a supervisor
+  const fetchSupervisorEmployees = async (supervisorId: string) => {
+    if (!supervisorId) return
+    
+    try {
+      const response = await fetch(`/api/supervisors/${supervisorId}/employees`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch assigned employees')
+      }
+      const data = await response.json()
+      setSupervisorEmployees(data)
+    } catch (error) {
+      console.error('Error fetching supervisor employees:', error)
+      toast.error('Failed to load assigned employees')
+    }
+  }
 
   // Fetch tasks for a specific supervisor
   const fetchSupervisorTasks = async (supervisorId: string) => {
@@ -286,7 +351,7 @@ export default function SupervisorsManagement() {
     setIsDetailPanelOpen(true);
     if (supervisor._id) {
       await fetchSupervisorTasks(supervisor._id);
-      // Fetch other related data here if needed
+      await fetchSupervisorEmployees(supervisor._id);
     }
   };
 
@@ -338,60 +403,6 @@ export default function SupervisorsManagement() {
       toast.error("Failed to load supervisors. Please try again.")
     } finally {
       setLoading(false)
-    }
-  }
-
-  const fetchAvailableEmployees = async () => {
-    try {
-      // Mock data for now - replace with actual API call
-      const mockEmployees: Employee[] = [
-        {
-          _id: "1",
-          name: "John Smith",
-          email: "john.smith@company.com",
-          position: "Site Worker",
-        },
-        {
-          _id: "2", 
-          name: "Sarah Johnson",
-          email: "sarah.johnson@company.com",
-          position: "Equipment Operator",
-        },
-        {
-          _id: "3",
-          name: "Mike Davis", 
-          email: "mike.davis@company.com",
-          position: "Safety Inspector",
-        }
-      ]
-      setAvailableEmployees(mockEmployees)
-    } catch (error) {
-      console.error("Error fetching employees:", error)
-    }
-  }
-
- 
-
-  const fetchSupervisorEmployees = async (supervisorId: string) => {
-    try {
-      // Mock data for now - replace with actual API call
-      const mockEmployees: Employee[] = [
-        {
-          _id: "1",
-          name: "John Smith",
-          email: "john.smith@company.com", 
-          position: "Site Worker",
-        },
-        {
-          _id: "2",
-          name: "Mike Davis",
-          email: "mike.davis@company.com",
-          position: "Safety Inspector", 
-        }
-      ]
-      setSupervisorEmployees(mockEmployees)
-    } catch (error) {
-      console.error("Error fetching supervisor employees:", error)
     }
   }
 
@@ -476,8 +487,6 @@ export default function SupervisorsManagement() {
     setIsAddDialogOpen(true)
   }
 
-  
-
   const closeTaskForm = () => {
     setIsTaskFormOpen(false)
     setTaskFormData({
@@ -487,22 +496,6 @@ export default function SupervisorsManagement() {
       endDate: undefined,
       documentUrl: "",
     })
-  }
-
-
-
-  const handleEmployeeAssign = async (employeeId: string) => {
-    if (!selectedSupervisor) return
-    
-    try {
-      // Mock API call - replace with actual implementation
-      toast.success('Employee assigned successfully.')
-      setIsEmployeeAssignOpen(false)
-      // Refresh employees for this supervisor
-      await fetchSupervisorEmployees(selectedSupervisor._id)
-    } catch (error) {
-      toast.error('Failed to assign employee.')
-    }
   }
 
   const filteredSupervisors = supervisors.filter((supervisor) => {
@@ -1442,50 +1435,82 @@ export default function SupervisorsManagement() {
 
       {/* Employee Assignment Dialog */}
       <Dialog open={isEmployeeAssignOpen} onOpenChange={setIsEmployeeAssignOpen}>
-        <DialogContent 
-          className="max-w-md"
-          aria-label="Assign employee form"
-        >
+        <DialogContent className="sm:max-w-[500px] max-h-[80vh]">
           <DialogHeader>
-            <DialogTitle>Assign Employee</DialogTitle>
+            <DialogTitle>Assign Employee to {selectedSupervisor?.name}</DialogTitle>
             <DialogDescription>
-              Select an employee to assign to {selectedSupervisor?.name}.
+              Select an employee to assign to this supervisor. Click on any employee to assign them.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            {availableEmployees.map((employee) => (
-              <Card key={employee._id} className="cursor-pointer hover:bg-muted/50" onClick={() => handleEmployeeAssign(employee._id)}>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage src={employee.avatar || "/placeholder.svg"} alt={employee.name} />
-                      <AvatarFallback>
-                        {employee.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <h4 className="font-medium">{employee.name}</h4>
-                      <p className="text-sm text-muted-foreground">{employee.position}</p>
-                      <p className="text-xs text-muted-foreground">{employee.email}</p>
+          
+          <div className="max-h-[60vh] overflow-y-auto">
+            {loadingEmployees ? (
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary" />
+              </div>
+            ) : availableEmployees.length > 0 ? (
+              <div className="space-y-2">
+                {availableEmployees.map((employee) => {
+                  const isAlreadyAssigned = supervisorEmployees.some(emp => emp._id === employee._id);
+                  return (
+                    <div
+                      key={employee._id}
+                      className={cn(
+                        "flex items-center justify-between p-3 border rounded-lg transition-colors",
+                        isAlreadyAssigned 
+                          ? "bg-muted border-muted cursor-not-allowed opacity-60"
+                          : "hover:bg-accent cursor-pointer"
+                      )}
+                      onClick={() => !isAlreadyAssigned && handleEmployeeAssign(employee._id)}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={employee.avatar || "/placeholder.svg"} alt={employee.name} />
+                          <AvatarFallback>
+                            {employee.name
+                              .split(" ")
+                              .map((n) => n[0])
+                              .join("")}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">{employee.name}</p>
+                          <p className="text-sm text-muted-foreground">{employee.position}</p>
+                          <p className="text-xs text-muted-foreground">{employee.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isAlreadyAssigned ? (
+                          <Badge variant="secondary" className="bg-green-100 text-green-800">
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            Assigned
+                          </Badge>
+                        ) : (
+                          <Button size="sm" variant="outline">
+                            <UserPlus className="w-4 h-4 mr-1" />
+                            Assign
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                    <Button size="sm">
-                      <UserPlus className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No employees available to assign</p>
+              </div>
+            )}
           </div>
-          <div className="flex justify-end pt-4">
+
+          <div className="flex justify-end pt-4 border-t">
             <Button variant="outline" onClick={() => setIsEmployeeAssignOpen(false)}>
-              Cancel
+              Close
             </Button>
           </div>
         </DialogContent>
       </Dialog>
     </div>
   )
-}
+} 
