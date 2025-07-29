@@ -132,14 +132,81 @@ const initialFormData: FormData = {
 // Attendance options and icon logic
 const attendanceOptions = [
   { value: "Present" as AttendanceStatus, label: "Present", icon: CheckCircle, color: "bg-green-100 text-green-800" },
-  { value: "Late" as AttendanceStatus, label: "Late", icon: Clock, color: "bg-yellow-100 text-yellow-800" },
-  { value: "Half Day" as AttendanceStatus, label: "Half Day", icon: Clock, color: "bg-blue-100 text-blue-800" },
   { value: "Absent" as AttendanceStatus, label: "Absent", icon: XCircle, color: "bg-red-100 text-red-800" },
 ]
 
 const getAttendanceIcon = (status: string) => {
   const option = attendanceOptions.find((opt) => opt.value === status)
   return option ? <option.icon className="w-3 h-3 mr-1" /> : null
+}
+
+// MonthAttendanceCard component
+function MonthAttendanceCard({ supervisorId, month }: { supervisorId: string; month: string }) {
+  const [rate, setRate] = useState<null | { attendanceRate: number; totalWorkingDays: number; presentDays: number }>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState(month);
+
+  useEffect(() => {
+    async function fetchRate() {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/attendance/monthly?supervisorId=${supervisorId}&month=${selectedMonth}`);
+        if (!res.ok) throw new Error('Failed to fetch');
+        const data = await res.json();
+        setRate(data);
+      } catch {
+        setRate(null);
+      } finally {
+        setLoading(false);
+      }
+    }
+    if (supervisorId && selectedMonth) fetchRate();
+  }, [supervisorId, selectedMonth]);
+
+  // Generate last 12 months for dropdown with display names
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - i);
+    return {
+      value: d.toISOString().slice(0, 7),
+      label: d.toLocaleString('default', { month: 'long', year: 'numeric' })
+    };
+  });
+
+  const selectedMonthLabel = months.find(m => m.value === selectedMonth)?.label || selectedMonth;
+
+  return (
+    <Card className="w-full min-w-[220px]">
+      <CardHeader className="pb-2">
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-base">{selectedMonthLabel}</span>
+          <select
+            className="border rounded px-2 py-1 text-sm"
+            value={selectedMonth}
+            onChange={e => setSelectedMonth(e.target.value)}
+            aria-label="Select month"
+          >
+            {months.map(m => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <p className="text-xs text-muted-foreground">Loading...</p>
+        ) : rate ? (
+          <div className="flex flex-col items-center">
+            <p className="text-3xl font-bold text-primary">{rate.attendanceRate}%</p>
+            <p className="text-xs text-muted-foreground mb-1">Attendance Rate</p>
+            <p className="text-xs">{rate.presentDays} / {rate.totalWorkingDays} working days present</p>
+          </div>
+        ) : (
+          <p className="text-xs text-red-500">No data</p>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function SupervisorsManagement() {
@@ -1243,6 +1310,30 @@ export default function SupervisorsManagement() {
                       </CardContent>
                     </Card>
                   </div>
+
+                  {/* Monthly Attendance Rate */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Monthly Attendance Rate</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-col md:flex-row gap-4 items-center">
+                        {[0, 1].map((offset) => {
+                          // Get month YYYY-MM string for offset months ago
+                          const now = new Date();
+                          now.setMonth(now.getMonth() - offset);
+                          const monthStr = now.toISOString().slice(0, 7);
+                          return (
+                            <MonthAttendanceCard
+                              key={monthStr}
+                              supervisorId={selectedSupervisor._id}
+                              month={monthStr}
+                            />
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
 
                   {/* Personal Information */}
                   <Card>

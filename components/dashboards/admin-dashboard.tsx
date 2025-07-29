@@ -997,7 +997,7 @@ export default function AdminDashboard() {
         return <MaterialsManagement />;
       case "reports":
         return <Reportmanagement />;
-      case "payroll":
+      case "payroll": 
         return (
         <PayrollManagement />
         );
