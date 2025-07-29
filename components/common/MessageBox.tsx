@@ -32,55 +32,43 @@ const MessageBox: React.FC<MessageBoxProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch messages for the conversation
+  // Load messages for the conversation from localStorage
   useEffect(() => {
-    const fetchMessages = async () => {
+    setIsLoading(true);
+    const stored = localStorage.getItem(`messages-${conversationId}`);
+    if (stored) {
       try {
-        setIsLoading(true);
-        const response = await fetch(`/api/messages?conversationId=${conversationId}`);
-        if (!response.ok) throw new Error('Failed to fetch messages');
-        const data = await response.json();
-        setMessages(data.messages || []);
-      } catch (error) {
-        console.error('Error fetching messages:', error);
-      } finally {
-        setIsLoading(false);
+        setMessages(JSON.parse(stored));
+      } catch {
+        setMessages([]);
       }
-    };
-
-    if (conversationId) {
-      fetchMessages();
+    } else {
+      setMessages([]);
     }
+    setIsLoading(false);
   }, [conversationId]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
+  const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim() || !conversationId) return;
 
-    const newMessage: Omit<Message, 'id' | 'timestamp'> = {
+    const msgObj: Message = {
+      id: Date.now().toString() + Math.random().toString(),
       text: message,
       sender: userType === 'admin' ? 'superadmin' : 'client',
       conversationId,
+      timestamp: new Date(),
+      read: true,
     };
 
-    try {
-      const response = await fetch('/api/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newMessage),
-      });
-
-      if (!response.ok) throw new Error('Failed to send message');
-      
-      const savedMessage = await response.json();
-      setMessages(prev => [...prev, savedMessage]);
-      setMessage('');
-    } catch (error) {
-      console.error('Error sending message:', error);
-    }
+    setMessages(prev => {
+      const updated = [...prev, msgObj];
+      localStorage.setItem(`messages-${conversationId}` , JSON.stringify(updated));
+      return updated;
+    });
+    setMessage('');
   };
+
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
