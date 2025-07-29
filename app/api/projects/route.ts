@@ -1,54 +1,69 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server";
+import connectToDB from "@/lib/db";
+import Project from "@/models/ProjectModel";
 
-// Mock data for projects
-const projects = [
-  {
-    id: 1,
-    name: "Downtown Office Complex",
-    status: "In Progress",
-    progress: 75,
-    manager: "John Smith",
-    budget: 450000,
-    startDate: "2024-01-15",
-    endDate: "2024-12-15",
-    client: "ABC Corporation",
-  },
-  {
-    id: 2,
-    name: "Residential Tower A",
-    status: "Planning",
-    progress: 25,
-    manager: "Sarah Johnson",
-    budget: 280000,
-    startDate: "2024-03-01",
-    endDate: "2025-02-28",
-    client: "XYZ Developers",
-  },
-  {
-    id: 3,
-    name: "Shopping Mall Renovation",
-    status: "Completed",
-    progress: 100,
-    manager: "Mike Davis",
-    budget: 320000,
-    startDate: "2023-06-01",
-    endDate: "2024-11-30",
-    client: "Mall Management Co.",
-  },
-]
-
-export async function GET() {
-  return NextResponse.json(projects)
+// GET /api/projects
+export async function GET(req: NextRequest) {
+  await connectToDB();
+  try {
+    const projects = await Project.find().sort({ createdAt: -1 });
+    return NextResponse.json(projects);
+  } catch (error) {
+    console.error("Error fetching projects:", error);
+    return NextResponse.json(
+      { message: "Internal Server Error" },
+      { status: 500 }
+    );
+  }
 }
 
-export async function POST(request: Request) {
-  const body = await request.json()
-  const newProject = {
-    id: projects.length + 1,
-    ...body,
-    status: "Planning",
-    progress: 0,
+// POST /api/projects
+export async function POST(req: NextRequest) {
+  await connectToDB();
+  try {
+    const body = await req.json();
+    const {
+      title,
+      description,
+      status = "Planning",
+      startDate,
+      endDate,
+      budget,
+      progress = 0,
+      clientId,
+      client,
+      manager,
+      tasks = [],
+    } = body;
+
+    if (!title || !description || !startDate || !endDate || !budget || !clientId) {
+      return NextResponse.json(
+        { message: "Missing required fields" },
+        { status: 400 }
+      );
+    }
+
+    const newProject = new Project({
+      title,
+      description,
+      status,
+      startDate,
+      endDate,
+      budget,
+      progress,
+      clientId,
+      client,
+      manager,
+      tasks,
+    });
+
+    await newProject.save();
+    return NextResponse.json(newProject, { status: 201 });
+  } catch (error) {
+    console.error("Error creating project:", error);
+    return NextResponse.json(
+      { message: "Internal Server Error" },
+      { status: 500 }
+    );
   }
-  projects.push(newProject)
-  return NextResponse.json(newProject, { status: 201 })
 }

@@ -1,5 +1,4 @@
 "use client"
-
 import type React from "react"
 import { useState, useEffect } from "react"
 import { format } from "date-fns"
@@ -33,35 +32,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { toast } from "sonner"
+import { useToast } from "@/hooks/use-toast"
 import { MessageDialog } from "./message-dialog"
-import {
-  Plus,
-  Edit,
-  Trash2,
-  Phone,
-  Mail,
-  Building2,
-  MapPin,
-  Globe,
-  Search,
-  Filter,
-  User,
-  FileText,
-  Grid3X3,
-  List,
-  CheckCircle,
-  XCircle,
-  RefreshCw,
-  Users,
-  DollarSign,
-  Calendar,
-  Eye,
-  Hash,
-  ClipboardList,
-  FolderOpen,
-  Send,
-} from "lucide-react"
+import { Plus, Edit, Trash2, Phone, Mail, Building2, MapPin, Globe, Search, Filter, User, FileText, Grid3X3, List, CheckCircle, XCircle, RefreshCw, Users, DollarSign, IndianRupee, Calendar, Eye, Hash, FolderOpen, Send } from 'lucide-react'
 
 interface Client {
   _id: string
@@ -83,8 +56,7 @@ interface Client {
 }
 
 interface Project {
-  id?: string
-  _id?: string
+  _id: string
   title: string
   name?: string
   description: string
@@ -101,7 +73,7 @@ interface Project {
 }
 
 interface Task {
-  _id?: string
+  _id: string
   title: string
   description: string
   status: "Not Started" | "In Progress" | "Completed"
@@ -152,7 +124,7 @@ const initialFormData: FormData = {
   avatar: "",
 }
 
-const initialProjectData: Omit<Project, "id" | "_id" | "client" | "createdAt" | "tasks"> = {
+const initialProjectData: Omit<Project, "_id" | "client" | "createdAt" | "tasks"> = {
   title: "",
   description: "",
   status: "Planning",
@@ -166,13 +138,14 @@ const initialProjectData: Omit<Project, "id" | "_id" | "client" | "createdAt" | 
 const initialTaskData = {
   title: "",
   description: "",
-  status: "Not Started" as const,
+  status: "Not Started" as Task["status"],
   assignedTo: "",
   dueDate: new Date().toISOString().split("T")[0],
-  priority: "Medium" as const,
+  priority: "Medium" as Task["priority"],
 }
 
 export default function ClientsManagement() {
+  const { toast } = useToast()
   const [clients, setClients] = useState<Client[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("All")
@@ -203,35 +176,9 @@ export default function ClientsManagement() {
   const [messageDialogOpen, setMessageDialogOpen] = useState(false)
   const [messageClient, setMessageClient] = useState<Client | null>(null)
 
-  // Local storage for projects
-  const [allProjects, setAllProjects] = useState<Project[]>([])
-
   useEffect(() => {
     fetchClients()
-    loadProjectsFromStorage()
   }, [])
-
-  // Load projects from localStorage
-  const loadProjectsFromStorage = () => {
-    try {
-      const storedProjects = localStorage.getItem("clientProjects")
-      if (storedProjects) {
-        setAllProjects(JSON.parse(storedProjects))
-      }
-    } catch (error) {
-      console.error("Error loading projects from storage:", error)
-    }
-  }
-
-  // Save projects to localStorage
-  const saveProjectsToStorage = (projects: Project[]) => {
-    try {
-      localStorage.setItem("clientProjects", JSON.stringify(projects))
-      setAllProjects(projects)
-    } catch (error) {
-      console.error("Error saving projects to storage:", error)
-    }
-  }
 
   const fetchClients = async () => {
     try {
@@ -301,7 +248,11 @@ export default function ClientsManagement() {
       setClients(data)
     } catch (error) {
       console.error("Error fetching clients:", error)
-      toast.error("Failed to load clients. Using demo data.")
+      toast({
+        title: "Error",
+        description: "Failed to load clients. Using demo data.",
+        variant: "destructive",
+      })
       // Mock data fallback
       const mockClients: Client[] = [
         {
@@ -330,9 +281,12 @@ export default function ClientsManagement() {
   }
 
   // Fetch projects for a specific client
-  const fetchClientProjects = (clientId: string) => {
+  const fetchClientProjects = async (clientId: string) => {
     setIsLoadingProjects(true)
     try {
+      const response = await fetch(`/api/projects`)
+      if (!response.ok) throw new Error("Failed to fetch projects")
+      const allProjects: Project[] = await response.json()
       const projects = allProjects.filter((project) => project.clientId === clientId)
       setClientProjects(projects)
     } catch (error) {
@@ -346,7 +300,6 @@ export default function ClientsManagement() {
   // Fetch invoices for a specific client
   const fetchClientInvoices = async (clientId: string) => {
     if (!clientId) return
-
     setIsLoadingInvoices(true)
     try {
       const response = await fetch(`/api/invoices?clientId=${clientId}`)
@@ -399,7 +352,10 @@ export default function ClientsManagement() {
   }
 
   const handleSendMessage = (message: string, clientId: string) => {
-    toast.success("Message sent to client!")
+    toast({
+      title: "Success",
+      description: "Message sent to client!",
+    })
   }
 
   // Open client details and load related data
@@ -420,11 +376,59 @@ export default function ClientsManagement() {
   }
 
   // Project Management Functions
+  const [editingProject, setEditingProject] = useState<Project | null>(null)
+  const [isDeleteProjectDialogOpen, setIsDeleteProjectDialogOpen] = useState(false)
+  const [pendingDeleteProjectId, setPendingDeleteProjectId] = useState<string | null>(null)
+
   const openNewProjectDialog = () => {
     if (!selectedClient) return
+    setEditingProject(null)
     setProjectFormData({ ...initialProjectData, clientId: selectedClient._id })
     setProjectTasks([])
     setIsProjectDialogOpen(true)
+  }
+
+  const openEditProjectDialog = (project: Project) => {
+    setEditingProject(project)
+    setProjectFormData({
+      title: project.title,
+      description: project.description,
+      status: project.status,
+      startDate: project.startDate,
+      endDate: project.endDate,
+      budget: project.budget,
+      progress: project.progress,
+      clientId: project.clientId,
+    })
+    setProjectTasks(project.tasks || [])
+    setIsProjectDialogOpen(true)
+  }
+
+  const confirmDeleteProject = (projectId: string) => {
+    setPendingDeleteProjectId(projectId)
+    setIsDeleteProjectDialogOpen(true)
+  }
+
+  const deleteProject = async (projectId: string) => {
+    setIsDeleteProjectDialogOpen(false)
+    try {
+      const updatedProjects = allProjects.filter((p) => p._id !== projectId)
+      saveProjectsToStorage(updatedProjects)
+      if (selectedClient) fetchClientProjects(selectedClient._id)
+      toast({
+        title: "Success",
+        description: "Project deleted successfully!",
+      })
+    } catch (error) {
+      console.error("Error deleting project:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete project. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setPendingDeleteProjectId(null)
+    }
   }
 
   const closeProjectDialog = () => {
@@ -436,7 +440,6 @@ export default function ClientsManagement() {
   const handleProjectSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedClient) return
-
     setIsSubmittingProject(true)
     try {
       const newProject: Project = {
@@ -457,17 +460,31 @@ export default function ClientsManagement() {
         })),
       }
 
-      const updatedProjects = [...allProjects, newProject]
-      saveProjectsToStorage(updatedProjects)
+      const response = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newProject),
+      })
 
-      // Update client projects display
-      fetchClientProjects(selectedClient._id)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || "Failed to create project")
+      }
 
-      toast.success("Project created successfully!")
+      const createdProject = await response.json()
+      toast({
+        title: "Success",
+        description: "Project created successfully!",
+      })
       closeProjectDialog()
+      fetchClientProjects(selectedClient._id)
     } catch (error) {
       console.error("Error creating project:", error)
-      toast.error("Failed to create project")
+      toast({
+        title: "Error",
+        description: "Failed to create project",
+        variant: "destructive",
+      })
     } finally {
       setIsSubmittingProject(false)
     }
@@ -500,7 +517,6 @@ export default function ClientsManagement() {
 
   const handleTaskSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-
     const taskData: Task = {
       _id: editingTask?._id || Date.now().toString() + Math.random().toString(),
       title: taskFormData.title,
@@ -518,18 +534,23 @@ export default function ClientsManagement() {
     }
 
     closeTaskDialog()
-    toast.success(`Task ${editingTask ? "updated" : "added"} successfully!`)
+    toast({
+      title: "Success",
+      description: `Task ${editingTask ? "updated" : "added"} successfully!`,
+    })
   }
 
   const deleteTask = (taskId: string) => {
     setProjectTasks(projectTasks.filter((task) => task._id !== taskId))
-    toast.success("Task deleted successfully!")
+    toast({
+      title: "Success",
+      description: "Task deleted successfully!",
+    })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-
     try {
       const url = editingClient ? `/api/clients/${editingClient._id}` : "/api/clients"
       const method = editingClient ? "PUT" : "POST"
@@ -549,14 +570,21 @@ export default function ClientsManagement() {
         setIsAddDialogOpen(false)
         setEditingClient(null)
         resetForm()
-        toast.success(`${formData.name} has been ${editingClient ? "updated" : "added"} successfully.`)
+        toast({
+          title: "Success",
+          description: `${formData.name} has been ${editingClient ? "updated" : "added"} successfully.`,
+        })
       } else {
         const errorData = await response.json()
         throw new Error(errorData.message || "Failed to save client")
       }
     } catch (error) {
       console.error("Error saving client:", error)
-      toast.error("Failed to save client. Please try again.")
+      toast({
+        title: "Error",
+        description: "Failed to save client. Please try again.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
@@ -570,14 +598,21 @@ export default function ClientsManagement() {
         if (selectedClient?._id === id) {
           closeClientDetails()
         }
-        toast.success("Client has been removed successfully.")
+        toast({
+          title: "Success",
+          description: "Client has been removed successfully.",
+        })
       } else {
         const errorData = await response.json()
         throw new Error(errorData.message || "Failed to delete client")
       }
     } catch (error) {
       console.error("Error deleting client:", error)
-      toast.error("Failed to delete client. Please try again.")
+      toast({
+        title: "Error",
+        description: "Failed to delete client. Please try again.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -753,8 +788,8 @@ export default function ClientsManagement() {
                 </div>
               )}
               <div className="flex items-center gap-2 text-sm">
-                <DollarSign className="w-4 h-4 text-muted-foreground" />
-                <span>${client.projectTotalAmount?.toLocaleString() || "0"}</span>
+                <IndianRupee className="w-4 h-4 text-muted-foreground" />
+                <span>₹{client.projectTotalAmount?.toLocaleString() || "0"}</span>
               </div>
             </div>
             <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
@@ -873,7 +908,7 @@ export default function ClientsManagement() {
                   <Badge className={getStatusColor(client.status)}>{client.status}</Badge>
                 </TableCell>
                 <TableCell>
-                  <div className="text-sm font-medium">${client.projectTotalAmount?.toLocaleString() || "0"}</div>
+                  <div className="text-sm font-medium">₹{client.projectTotalAmount?.toLocaleString() || "0"}</div>
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
@@ -967,7 +1002,7 @@ export default function ClientsManagement() {
               <DollarSign className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">${totalRevenue.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-blue-600">₹{totalRevenue.toLocaleString()}</div>
               <p className="text-xs text-muted-foreground">Project value</p>
             </CardContent>
           </Card>
@@ -1257,10 +1292,9 @@ export default function ClientsManagement() {
         <Dialog open={isProjectDialogOpen} onOpenChange={setIsProjectDialogOpen}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Create New Project</DialogTitle>
+              <DialogTitle>{editingProject ? "Edit Project" : "Create New Project"}</DialogTitle>
               <DialogDescription>Create a project for {selectedClient?.name} with tasks and details</DialogDescription>
             </DialogHeader>
-
             <form onSubmit={handleProjectSubmit} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -1285,25 +1319,6 @@ export default function ClientsManagement() {
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="status">Status</Label>
-                  <Select
-                    value={projectFormData.status}
-                    onValueChange={(value) =>
-                      setProjectFormData({ ...projectFormData, status: value as Project["status"] })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Planning">Planning</SelectItem>
-                      <SelectItem value="In Progress">In Progress</SelectItem>
-                      <SelectItem value="On Hold">On Hold</SelectItem>
-                      <SelectItem value="Completed">Completed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="startDate">Start Date</Label>
                   <Input
@@ -1334,96 +1349,19 @@ export default function ClientsManagement() {
                     placeholder="Enter budget amount"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="progress">Progress (%)</Label>
-                  <Input
-                    id="progress"
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={projectFormData.progress}
-                    onChange={(e) => setProjectFormData({ ...projectFormData, progress: Number(e.target.value) })}
-                    placeholder="Enter progress percentage"
-                  />
-                </div>
               </div>
-
-              {/* Tasks Section */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">Project Tasks</h3>
-                  <Button type="button" variant="outline" onClick={() => openTaskDialog()}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Task
-                  </Button>
-                </div>
-                {projectTasks.length > 0 ? (
-                  <div className="space-y-3">
-                    {projectTasks.map((task) => (
-                      <Card key={task._id} className="p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <h4 className="font-medium">{task.title}</h4>
-                              <Badge className={getTaskStatusColor(task.status)} variant="secondary">
-                                {task.status}
-                              </Badge>
-                              <Badge className={getPriorityColor(task.priority)} variant="secondary">
-                                {task.priority}
-                              </Badge>
-                            </div>
-                            {task.description && (
-                              <p className="text-sm text-muted-foreground mb-2">{task.description}</p>
-                            )}
-                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                              <div className="flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
-                                <span>Due: {format(new Date(task.dueDate), "MMM dd, yyyy")}</span>
-                              </div>
-                              {task.assignedTo && (
-                                <div className="flex items-center gap-1">
-                                  <User className="w-3 h-3" />
-                                  <span>{task.assignedTo}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button type="button" variant="outline" size="sm" onClick={() => openTaskDialog(task)}>
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button type="button" variant="destructive" size="sm" onClick={() => deleteTask(task._id!)}>
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-lg">
-                    <ClipboardList className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                    <p className="text-muted-foreground">No tasks added yet</p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="mt-2 bg-transparent"
-                      onClick={() => openTaskDialog()}
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add First Task
-                    </Button>
-                  </div>
-                )}
-              </div>
-
               <div className="flex justify-end gap-2 pt-4">
                 <Button type="button" variant="outline" onClick={closeProjectDialog}>
                   Cancel
                 </Button>
                 <Button type="submit" disabled={isSubmittingProject}>
-                  {isSubmittingProject ? "Creating..." : "Create Project"}
+                  {isSubmittingProject
+                    ? editingProject
+                      ? "Saving..."
+                      : "Creating..."
+                    : editingProject
+                      ? "Update Project"
+                      : "Create Project"}
                 </Button>
               </div>
             </form>
@@ -1439,7 +1377,6 @@ export default function ClientsManagement() {
                 {editingTask ? "Update task details" : "Add a new task to the project"}
               </DialogDescription>
             </DialogHeader>
-
             <form onSubmit={handleTaskSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="taskTitle">Task Title *</Label>
@@ -1466,7 +1403,7 @@ export default function ClientsManagement() {
                   <Label htmlFor="taskStatus">Status</Label>
                   <Select
                     value={taskFormData.status}
-                    onValueChange={(value) => setTaskFormData({ ...taskFormData, status: value as Task["status"] })}
+                    onValueChange={(value: string) => setTaskFormData({ ...taskFormData, status: value as Task["status"] })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -1482,7 +1419,7 @@ export default function ClientsManagement() {
                   <Label htmlFor="taskPriority">Priority</Label>
                   <Select
                     value={taskFormData.priority}
-                    onValueChange={(value) => setTaskFormData({ ...taskFormData, priority: value as Task["priority"] })}
+                    onValueChange={(value: string) => setTaskFormData({ ...taskFormData, priority: value as Task["priority"] })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -1647,7 +1584,7 @@ export default function ClientsManagement() {
                             <div>
                               <p className="font-medium">Project Total</p>
                               <p className="text-sm text-muted-foreground">
-                                ${selectedClient.projectTotalAmount?.toLocaleString() || "0"}
+                                ₹{selectedClient.projectTotalAmount?.toLocaleString() || "0"}
                               </p>
                             </div>
                           </div>
@@ -1697,10 +1634,21 @@ export default function ClientsManagement() {
                   <TabsContent value="projects" className="mt-6 space-y-4">
                     <div className="flex justify-between items-center">
                       <h3 className="text-lg font-semibold">Client Projects</h3>
-                      <Button size="sm" onClick={openNewProjectDialog}>
-                        <Plus className="w-4 h-4 mr-2" />
-                        New Project
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          onClick={() => selectedClient && fetchClientProjects(selectedClient._id)}
+                          title="Refresh Projects"
+                          disabled={isLoadingProjects}
+                        >
+                          <RefreshCw className={`w-4 h-4 ${isLoadingProjects ? 'animate-spin' : ''}`} />
+                        </Button>
+                        <Button size="sm" onClick={openNewProjectDialog}>
+                          <Plus className="w-4 h-4 mr-2" />
+                          New Project
+                        </Button>
+                      </div>
                     </div>
                     <div className="space-y-3">
                       {isLoadingProjects ? (
@@ -1712,54 +1660,71 @@ export default function ClientsManagement() {
                           <Card key={project._id} className="hover:shadow-md transition-shadow">
                             <CardContent className="p-4">
                               <div className="flex justify-between items-start mb-2">
-                                <h4 className="font-medium">{project.title}</h4>
-                                <Badge className={getProjectStatusColor(project.status)} variant="secondary">
-                                  {project.status}
-                                </Badge>
+                                <div>
+                                  <h4 className="font-medium text-lg">{project.title}</h4>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="outline"
+                                    onClick={() => openEditProjectDialog(project)}
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </Button>
+                                  <AlertDialog
+                                    open={isDeleteProjectDialogOpen && pendingDeleteProjectId === project._id}
+                                    onOpenChange={(open) => {
+                                      if (!open) setIsDeleteProjectDialogOpen(false)
+                                    }}
+                                  >
+                                    <AlertDialogTrigger asChild>
+                                      <Button
+                                        type="button"
+                                        size="icon"
+                                        variant="destructive"
+                                        onClick={() => confirmDeleteProject(project._id)}
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete Project</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Are you sure you want to delete the project "{project.title}"? This action
+                                          cannot be undone.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel onClick={() => setIsDeleteProjectDialogOpen(false)}>
+                                          Cancel
+                                        </AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => deleteProject(project._id)}>
+                                          Delete
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
                               </div>
                               {project.description && (
-                                <p className="text-sm text-muted-foreground mb-3">{project.description}</p>
+                                <p className="text-sm text-muted-foreground mb-2">{project.description}</p>
                               )}
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                                  <div className="flex items-center gap-1">
-                                    <Calendar className="w-3 h-3" />
-                                    <span>{format(new Date(project.startDate), "MMM dd, yyyy")}</span>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <DollarSign className="w-3 h-3" />
-                                    <span>${project.budget.toLocaleString()}</span>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <ClipboardList className="w-3 h-3" />
-                                    <span>{project.tasks.length} Tasks</span>
-                                  </div>
+                              <div className="flex flex-wrap gap-4 text-xs text-muted-foreground mb-2">
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  <span>Start: {project.startDate}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  <span>End: {project.endDate}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <IndianRupee className="w-3 h-3" />
+                                  <span>Budget: ₹{project.budget.toLocaleString()}</span>
                                 </div>
                               </div>
-                              <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
-                                <div
-                                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                  style={{ width: `${project.progress}%` }}
-                                />
-                              </div>
-                              <p className="text-xs text-muted-foreground">{project.progress}% complete</p>
-
-                              {/* Show tasks summary if available */}
-                              {project.tasks.length > 0 && (
-                                <div className="mt-3 pt-3 border-t">
-                                  <div className="flex items-center gap-4 text-xs">
-                                    <span className="text-green-600">
-                                      {project.tasks.filter((t) => t.status === "Completed").length} Completed
-                                    </span>
-                                    <span className="text-blue-600">
-                                      {project.tasks.filter((t) => t.status === "In Progress").length} In Progress
-                                    </span>
-                                    <span className="text-gray-600">
-                                      {project.tasks.filter((t) => t.status === "Not Started").length} Not Started
-                                    </span>
-                                  </div>
-                                </div>
-                              )}
                             </CardContent>
                           </Card>
                         ))
@@ -1809,7 +1774,7 @@ export default function ClientsManagement() {
                                   <Badge className={getInvoiceStatusColor(invoice.status)} variant="secondary">
                                     {invoice.status}
                                   </Badge>
-                                  <p className="text-lg font-semibold mt-1">${invoice.amount.toLocaleString()}</p>
+                                  <p className="text-lg font-semibold mt-1">₹{invoice.amount.toLocaleString()}</p>
                                 </div>
                               </div>
                               <div className="flex items-center gap-4 text-xs text-muted-foreground">

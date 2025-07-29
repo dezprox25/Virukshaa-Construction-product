@@ -82,7 +82,7 @@ export default function DashboardLayout({
     fetchAdminProfile()
 
     // Set up a real-time check every 5 seconds
-    const intervalId = setInterval(fetchAdminProfile, 5000)
+    const intervalId = setInterval(fetchAdminProfile, 50000)
 
     // Clean up
     return () => {

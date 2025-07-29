@@ -1,5 +1,4 @@
 "use client"
-
 import type React from "react"
 import { useState, useEffect } from "react"
 import { format } from "date-fns"
@@ -64,7 +63,17 @@ import {
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select"
 
 // Define attendance status type
-type AttendanceStatus = "Present" | "Absent" 
+type AttendanceStatus = "Present" | "Absent"
+
+// Define Project interface
+interface IProject {
+  _id: string
+  title: string
+  description?: string
+  status?: string
+  createdAt: string
+  updatedAt: string
+}
 
 interface Supervisor {
   _id: string
@@ -97,6 +106,8 @@ interface Task {
   status: "Pending" | "In Progress" | "Completed"
   documentUrl?: string
   createdAt: string
+  projectId?: string
+  supervisorId?: string
 }
 
 interface Employee {
@@ -118,6 +129,17 @@ interface FormData {
   password: string
 }
 
+interface TaskFormData {
+  title: string
+  description: string
+  startDate: Date | undefined
+  endDate: Date | undefined
+  projectId: string
+  documentType: string
+  documentUrl: string
+  file: File | undefined
+}
+
 const initialFormData: FormData = {
   name: "",
   email: "",
@@ -127,6 +149,17 @@ const initialFormData: FormData = {
   status: "Active",
   username: "",
   password: "",
+}
+
+const initialTaskFormData: TaskFormData = {
+  title: "",
+  description: "",
+  startDate: undefined,
+  endDate: undefined,
+  projectId: "",
+  documentType: "",
+  documentUrl: "",
+  file: undefined,
 }
 
 // Attendance options and icon logic
@@ -142,38 +175,40 @@ const getAttendanceIcon = (status: string) => {
 
 // MonthAttendanceCard component
 function MonthAttendanceCard({ supervisorId, month }: { supervisorId: string; month: string }) {
-  const [rate, setRate] = useState<null | { attendanceRate: number; totalWorkingDays: number; presentDays: number }>(null);
-  const [loading, setLoading] = useState(true);
-  const [selectedMonth, setSelectedMonth] = useState(month);
+  const [rate, setRate] = useState<null | { attendanceRate: number; totalWorkingDays: number; presentDays: number }>(
+    null,
+  )
+  const [loading, setLoading] = useState(true)
+  const [selectedMonth, setSelectedMonth] = useState(month)
 
   useEffect(() => {
     async function fetchRate() {
-      setLoading(true);
+      setLoading(true)
       try {
-        const res = await fetch(`/api/attendance/monthly?supervisorId=${supervisorId}&month=${selectedMonth}`);
-        if (!res.ok) throw new Error('Failed to fetch');
-        const data = await res.json();
-        setRate(data);
+        const res = await fetch(`/api/attendance/monthly?supervisorId=${supervisorId}&month=${selectedMonth}`)
+        if (!res.ok) throw new Error("Failed to fetch")
+        const data = await res.json()
+        setRate(data)
       } catch {
-        setRate(null);
+        setRate(null)
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
     }
-    if (supervisorId && selectedMonth) fetchRate();
-  }, [supervisorId, selectedMonth]);
+    if (supervisorId && selectedMonth) fetchRate()
+  }, [supervisorId, selectedMonth])
 
   // Generate last 12 months for dropdown with display names
   const months = Array.from({ length: 12 }, (_, i) => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - i);
+    const d = new Date()
+    d.setMonth(d.getMonth() - i)
     return {
       value: d.toISOString().slice(0, 7),
-      label: d.toLocaleString('default', { month: 'long', year: 'numeric' })
-    };
-  });
+      label: d.toLocaleString("default", { month: "long", year: "numeric" }),
+    }
+  })
 
-  const selectedMonthLabel = months.find(m => m.value === selectedMonth)?.label || selectedMonth;
+  const selectedMonthLabel = months.find((m) => m.value === selectedMonth)?.label || selectedMonth
 
   return (
     <Card className="w-full min-w-[220px]">
@@ -183,11 +218,13 @@ function MonthAttendanceCard({ supervisorId, month }: { supervisorId: string; mo
           <select
             className="border rounded px-2 py-1 text-sm"
             value={selectedMonth}
-            onChange={e => setSelectedMonth(e.target.value)}
+            onChange={(e) => setSelectedMonth(e.target.value)}
             aria-label="Select month"
           >
-            {months.map(m => (
-              <option key={m.value} value={m.value}>{m.label}</option>
+            {months.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
             ))}
           </select>
         </div>
@@ -199,15 +236,177 @@ function MonthAttendanceCard({ supervisorId, month }: { supervisorId: string; mo
           <div className="flex flex-col items-center">
             <p className="text-3xl font-bold text-primary">{rate.attendanceRate}%</p>
             <p className="text-xs text-muted-foreground mb-1">Attendance Rate</p>
-            <p className="text-xs">{rate.presentDays} / {rate.totalWorkingDays} working days present</p>
+            <p className="text-xs">
+              {rate.presentDays} / {rate.totalWorkingDays} working days present
+            </p>
           </div>
         ) : (
           <p className="text-xs text-red-500">No data</p>
         )}
       </CardContent>
     </Card>
-  );
+  )
 }
+
+// Calendar view for supervisor monthly attendance
+const SupervisorAttendanceCalendar = ({ supervisorId, month }: { supervisorId: string; month: string }) => {
+  const [attendanceMap, setAttendanceMap] = useState<Record<string, 'Present' | 'Absent'>>({})
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchAttendance = async () => {
+      try {
+        setLoading(true)
+        const [year, monthNum] = month.split('-').map(Number)
+        const startDate = new Date(Date.UTC(year, monthNum - 1, 1))
+        const endDate = new Date(Date.UTC(year, monthNum, 0, 23, 59, 59, 999))
+
+        const response = await fetch(
+          `/api/attendance?supervisorId=${supervisorId}` +
+            `&startDate=${startDate.toISOString()}` +
+            `&endDate=${endDate.toISOString()}`
+        )
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch attendance data: ${response.status}`)
+        }
+
+        const attendanceData = await response.json()
+        const map: Record<string, 'Present' | 'Absent'> = {}
+
+        if (Array.isArray(attendanceData)) {
+          attendanceData.forEach((record) => {
+            if (record.date) {
+              const date = new Date(record.date)
+              if (!isNaN(date.getTime())) {
+                const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+                const dateKey = localDate.toISOString().split('T')[0]
+                if (record.status === 'Present' || record.status === 'Absent') {
+                  map[dateKey] = record.status
+                }
+              }
+            }
+          })
+        }
+
+        // Fill in all days of the month
+        const daysInMonth = endDate.getUTCDate()
+        for (let d = 1; d <= daysInMonth; d++) {
+          const date = new Date(Date.UTC(year, monthNum - 1, d))
+          const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+          const dateKey = localDate.toISOString().split('T')[0]
+          const dayOfWeek = date.getUTCDay()
+
+          if (map[dateKey] === undefined) {
+            map[dateKey] = dayOfWeek === 0 ? 'Absent' : 'Absent' // Sundays are Absent
+          }
+        }
+
+        setAttendanceMap(map)
+      } catch (err) {
+        console.error('Error fetching attendance:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (supervisorId && month) {
+      fetchAttendance()
+    }
+  }, [supervisorId, month])
+
+  // Calendar grid logic
+  const [year, monthNum] = month.split('-').map(Number)
+  const firstDay = new Date(Date.UTC(year, monthNum - 1, 1))
+  const lastDay = new Date(Date.UTC(year, monthNum, 0))
+  const daysInMonth = lastDay.getUTCDate()
+  const startDayIdx = firstDay.getUTCDay()
+
+  const weeks: Array<Array<{ date: Date | null; status?: 'Present' | 'Absent' }>> = []
+  let week: Array<{ date: Date | null; status?: 'Present' | 'Absent' }> = []
+
+  // Fill leading days from previous month
+  for (let i = 0; i < startDayIdx; i++) {
+    week.push({ date: null })
+  }
+
+  // Fill current month days
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(Date.UTC(year, monthNum - 1, d))
+    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+    const dateKey = localDate.toISOString().split('T')[0]
+    const dayOfWeek = date.getUTCDay()
+
+    let status: 'Present' | 'Absent' = attendanceMap[dateKey] || 'Absent'
+
+    // Force Sundays to be Absent
+    if (dayOfWeek === 0) {
+      status = 'Absent'
+    }
+
+    week.push({ date, status })
+
+    if (week.length === 7) {
+      weeks.push(week)
+      week = []
+    }
+  }
+
+  // Fill trailing days for next month
+  if (week.length > 0) {
+    while (week.length < 7) {
+      week.push({ date: null })
+    }
+    weeks.push(week)
+  }
+
+  if (loading) {
+    return <div className="text-center py-4">Loading calendar...</div>
+  }
+
+  return (
+    <div className="w-full max-w-md mx-auto">
+      <div className="grid grid-cols-7 gap-1 mb-2 text-xs text-center font-medium">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+          <div key={d}>{d}</div>
+        ))}
+      </div>
+      <div className="flex flex-col gap-1">
+        {weeks.map((week, i) => (
+          <div key={i} className="grid grid-cols-7 gap-1">
+            {week.map((cell, j) => {
+              if (!cell.date) return <div key={j} className="h-8" />
+
+              const status = cell.status
+              let bg = 'bg-red-100 text-red-800' // Default to absent (light red)
+              if (status === 'Present') {
+                bg = 'bg-green-100 text-green-800' // Present (light green)
+              }
+
+              return (
+                <div
+                  key={j}
+                  className={`h-8 flex items-center justify-center rounded ${bg} border text-xs`}
+                  title={`${status} (${cell.date.toISOString().slice(0, 10)})`}
+                >
+                  {cell.date.getDate()}
+                </div>
+              )
+            })}
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2 mt-2 text-xs">
+        <div className="flex items-center">
+          <span className="inline-block w-3 h-3 rounded bg-green-100 border mr-1" /> Present
+        </div>
+        <div className="flex items-center">
+          <span className="inline-block w-3 h-3 rounded bg-red-100 border mr-1" /> Absent
+        </div>
+      </div>
+    </div>
+  )
+};
 
 export default function SupervisorsManagement() {
   const [supervisors, setSupervisors] = useState<Supervisor[]>([])
@@ -228,13 +427,9 @@ export default function SupervisorsManagement() {
   // Task form state
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false)
   const [isLoadingTasks, setIsLoadingTasks] = useState(false)
-  const [taskFormData, setTaskFormData] = useState({
-    title: "",
-    description: "",
-    startDate: undefined as Date | undefined,
-    endDate: undefined as Date | undefined,
-    documentUrl: "",
-  })
+  const [taskFormData, setTaskFormData] = useState<TaskFormData>(initialTaskFormData)
+  const [availableProjects, setAvailableProjects] = useState<IProject[]>([])
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false)
 
   // Employee assignment state
   const [isEmployeeAssignOpen, setIsEmployeeAssignOpen] = useState(false)
@@ -244,7 +439,25 @@ export default function SupervisorsManagement() {
   useEffect(() => {
     fetchSupervisors()
     fetchAvailableEmployees()
+    fetchProjects()
   }, [])
+
+  // Fetch all available projects
+  const fetchProjects = async () => {
+    setIsLoadingProjects(true)
+    try {
+      const response = await fetch("/api/projects")
+      if (!response.ok) throw new Error("Failed to fetch projects")
+      const data: IProject[] = await response.json()
+      console.log("Fetched projects:", data) // Debug log
+      setAvailableProjects(data)
+    } catch (error) {
+      console.error("Error fetching projects:", error)
+      setAvailableProjects([])
+    } finally {
+      setIsLoadingProjects(false)
+    }
+  }
 
   // Fetch all available employees
   const fetchAvailableEmployees = async () => {
@@ -254,7 +467,7 @@ export default function SupervisorsManagement() {
       if (!response.ok) {
         throw new Error("Failed to fetch employees")
       }
-      const data = await response.json()
+      const data: Employee[] = await response.json()
       setAvailableEmployees(data)
     } catch (error) {
       console.error("Error fetching employees:", error)
@@ -267,7 +480,6 @@ export default function SupervisorsManagement() {
   // Handle employee assignment
   const handleEmployeeAssign = async (employeeId: string) => {
     if (!selectedSupervisor?._id) return
-
     try {
       const response = await fetch(`/api/supervisors/${selectedSupervisor._id}/employees`, {
         method: "POST",
@@ -276,12 +488,10 @@ export default function SupervisorsManagement() {
         },
         body: JSON.stringify({ employeeId }),
       })
-
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.message || "Failed to assign employee")
       }
-
       // Refresh supervisor's employee list
       fetchSupervisorEmployees(selectedSupervisor._id)
       setIsEmployeeAssignOpen(false)
@@ -295,13 +505,12 @@ export default function SupervisorsManagement() {
   // Fetch employees assigned to a supervisor
   const fetchSupervisorEmployees = async (supervisorId: string) => {
     if (!supervisorId) return
-
     try {
       const response = await fetch(`/api/supervisors/${supervisorId}/employees`)
       if (!response.ok) {
         throw new Error("Failed to fetch assigned employees")
       }
-      const data = await response.json()
+      const data: Employee[] = await response.json()
       setSupervisorEmployees(data)
     } catch (error) {
       console.error("Error fetching supervisor employees:", error)
@@ -312,7 +521,6 @@ export default function SupervisorsManagement() {
   // Fetch tasks for a specific supervisor
   const fetchSupervisorTasks = async (supervisorId: string) => {
     if (!supervisorId) return
-
     setIsLoadingTasks(true)
     try {
       const response = await fetch(`/api/tasks?supervisorId=${supervisorId}`)
@@ -320,7 +528,7 @@ export default function SupervisorsManagement() {
         const errorData = await response.json()
         throw new Error(errorData.message || "Failed to fetch tasks")
       }
-      const data = await response.json()
+      const data: Task[] = await response.json()
       setSupervisorTasks(data)
     } catch (error) {
       console.error("Error fetching tasks:", error)
@@ -332,13 +540,7 @@ export default function SupervisorsManagement() {
 
   // Open task form and reset form data
   const openTaskForm = () => {
-    setTaskFormData({
-      title: "",
-      description: "",
-      startDate: undefined,
-      endDate: undefined,
-      documentUrl: "",
-    })
+    setTaskFormData(initialTaskFormData)
     setIsTaskFormOpen(true)
   }
 
@@ -349,6 +551,27 @@ export default function SupervisorsManagement() {
       ...prev,
       [name]: value,
     }))
+  }
+
+  // Handle project select
+  const handleProjectChange = (value: string) => {
+    console.log("Selected project ID:", value) // Debug log
+    setTaskFormData((prev) => ({ ...prev, projectId: value }))
+  }
+
+  // Handle document type select
+  const handleDocumentTypeChange = (value: string) => {
+    setTaskFormData((prev) => ({ ...prev, documentType: value, file: undefined, documentUrl: "" }))
+  }
+
+  // Handle file upload
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setTaskFormData((prev) => ({ ...prev, file }))
+    // Placeholder: Upload logic (replace with actual API call)
+    // Example: const url = await uploadFileToServer(file)
+    // setTaskFormData((prev) => ({ ...prev, documentUrl: url }))
   }
 
   // Handle task date changes
@@ -362,12 +585,10 @@ export default function SupervisorsManagement() {
   // Submit task form
   const handleTaskSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
     if (!selectedSupervisor?._id) {
       toast.error("No supervisor selected")
       return
     }
-
     if (!taskFormData.title || !taskFormData.startDate || !taskFormData.endDate) {
       toast.error("Please fill in all required fields")
       return
@@ -387,17 +608,14 @@ export default function SupervisorsManagement() {
           endDate: taskFormData.endDate?.toISOString(),
         }),
       })
-
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.message || "Failed to create task")
       }
-
-      const newTask = await response.json()
+      const newTask: Task = await response.json()
       setSupervisorTasks((prev) => [...prev, newTask])
       setIsTaskFormOpen(false)
       toast.success("Task created successfully")
-
       // Refresh tasks after creation
       await fetchSupervisorTasks(selectedSupervisor._id)
     } catch (error) {
@@ -416,9 +634,7 @@ export default function SupervisorsManagement() {
         },
         body: JSON.stringify({ status }),
       })
-
       if (!response.ok) throw new Error("Failed to update task status")
-
       setSupervisorTasks((prev) => prev.map((task) => (task._id === taskId ? { ...task, status } : task)))
       toast.success("Task status updated")
     } catch (error) {
@@ -443,8 +659,7 @@ export default function SupervisorsManagement() {
       if (!response.ok) {
         throw new Error("Failed to fetch supervisors")
       }
-      const supervisors = await response.json()
-
+      const supervisors: Supervisor[] = await response.json()
       // Get today's date in YYYY-MM-DD
       const today = new Date()
       const yyyy = today.getFullYear()
@@ -467,25 +682,24 @@ export default function SupervisorsManagement() {
       }
 
       // Merge attendance into supervisors
-      const supervisorsWithAttendance = supervisors.map((supervisor: any) => {
+      const supervisorsWithAttendance = supervisors.map((supervisor) => {
         const att = attendanceMap[supervisor._id]
         return {
           ...supervisor,
           attendance: att
             ? {
-                present: att.status === "Present",
-                checkIn: att.checkIn || "",
-                checkOut: att.checkOut || "",
-                status: att.status as AttendanceStatus,
-                _attendanceId: att._id,
-              }
+              present: att.status === "Present",
+              checkIn: att.checkIn || "",
+              checkOut: att.checkOut || "",
+              status: att.status as AttendanceStatus,
+              _attendanceId: att._id,
+            }
             : {
-                present: false,
-                status: "Absent" as AttendanceStatus,
-              },
+              present: false,
+              status: "Absent" as AttendanceStatus,
+            },
         }
       })
-
       setSupervisors(supervisorsWithAttendance)
     } catch (error) {
       console.error("Error fetching supervisors:", error)
@@ -512,11 +726,9 @@ export default function SupervisorsManagement() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-
     try {
       const url = editingSupervisor ? `/api/supervisors/${editingSupervisor._id}` : "/api/supervisors"
       const method = editingSupervisor ? "PUT" : "POST"
-
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
@@ -525,7 +737,6 @@ export default function SupervisorsManagement() {
           status: editingSupervisor ? formData.status : "Active",
         }),
       })
-
       if (response.ok) {
         await fetchSupervisors()
         setIsAddDialogOpen(false)
@@ -584,13 +795,7 @@ export default function SupervisorsManagement() {
 
   const closeTaskForm = () => {
     setIsTaskFormOpen(false)
-    setTaskFormData({
-      title: "",
-      description: "",
-      startDate: undefined,
-      endDate: undefined,
-      documentUrl: "",
-    })
+    setTaskFormData(initialTaskFormData)
   }
 
   const filteredSupervisors = supervisors.filter((supervisor) => {
@@ -647,10 +852,7 @@ export default function SupervisorsManagement() {
           supervisorId,
           status,
           date: dateStr,
-          checkIn:
-            status === "Present" 
-              ? new Date().toLocaleTimeString()
-              : undefined,
+          checkIn: status === "Present" ? new Date().toLocaleTimeString() : undefined,
         }),
       })
 
@@ -664,27 +866,38 @@ export default function SupervisorsManagement() {
         prev.map((supervisor) =>
           supervisor._id === supervisorId
             ? {
-                ...supervisor,
-                attendance: {
-                  ...supervisor.attendance,
-                  status: status,
-                  present: status === "Present",
-                  checkIn:
-                    status === "Present"
-                      ? new Date().toLocaleTimeString()
-                      : supervisor.attendance?.checkIn,
-                },
-              }
+              ...supervisor,
+              attendance: {
+                ...supervisor.attendance,
+                status: status,
+                present: status === "Present",
+                checkIn: status === "Present" ? new Date().toLocaleTimeString() : supervisor.attendance?.checkIn,
+              },
+            }
             : supervisor,
         ),
       )
-
       toast.success(`Attendance updated to ${status}`)
     } catch (error) {
       console.error("Error updating attendance:", error)
       toast.error(error instanceof Error ? error.message : "Failed to update attendance")
     }
   }
+
+  // supervisor project detials
+  const [supervisorProjects, setSupervisorProjects] = useState<IProject[]>([]);
+  useEffect(() => {
+    if (!selectedSupervisor) {
+      setSupervisorProjects([]);
+      return;
+    }
+    // Replace this with your actual fetch logic
+    fetch(`/api/projects?supervisorId=${selectedSupervisor._id}`)
+      .then(res => res.json())
+      .then(data => setSupervisorProjects(data))
+      .catch(() => setSupervisorProjects([]));
+  }, [selectedSupervisor]);
+
 
   if (loading && supervisors.length === 0) {
     return (
@@ -719,19 +932,6 @@ export default function SupervisorsManagement() {
                 </Avatar>
                 <div>
                   <h3 className="font-semibold text-lg">{supervisor.name}</h3>
-                  {/* <div className="flex items-center gap-2 mt-1">
-                    {supervisor.attendance?.present ? (
-                      <Badge className="bg-green-100 text-green-800 text-xs">
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Present
-                      </Badge>
-                    ) : (
-                      <Badge className="bg-red-100 text-red-800 text-xs">
-                        <XCircle className="w-3 h-3 mr-1" />
-                        Absent
-                      </Badge>
-                    )}
-                  </div> */}
                   {/* Attendance Selector */}
                   <div className="mt-2" onClick={(e) => e.stopPropagation()}>
                     <Select
@@ -1298,17 +1498,21 @@ export default function SupervisorsManagement() {
                         </div>
                       </CardContent>
                     </Card>
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-2">
-                          <ClipboardList className="w-5 h-5 text-blue-600" />
-                          <div>
-                            <p className="text-sm font-medium">{supervisorTasks.length} Active Tasks</p>
-                            <p className="text-xs text-muted-foreground">Assigned tasks</p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <div className="flex items-center gap-2">
+                      <ClipboardList className="w-5 h-5 text-blue-600" />
+                      <div>
+                        <p className="text-sm font-medium">{supervisorTasks.length} Active Tasks</p>
+                        <p className="text-xs text-muted-foreground">Assigned tasks</p>
+                        {supervisorProjects.length > 0 && (
+                          <ul className="text-xs text-muted-foreground mt-1">
+                            {supervisorProjects.map(project => (
+                              <li key={project._id}>• {project.title}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+
                   </div>
 
                   {/* Monthly Attendance Rate */}
@@ -1318,19 +1522,18 @@ export default function SupervisorsManagement() {
                     </CardHeader>
                     <CardContent>
                       <div className="flex flex-col md:flex-row gap-4 items-center">
-                        {[0, 1].map((offset) => {
-                          // Get month YYYY-MM string for offset months ago
-                          const now = new Date();
-                          now.setMonth(now.getMonth() - offset);
-                          const monthStr = now.toISOString().slice(0, 7);
-                          return (
-                            <MonthAttendanceCard
-                              key={monthStr}
-                              supervisorId={selectedSupervisor._id}
-                              month={monthStr}
-                            />
-                          );
-                        })}
+                        {/* First card (current month summary) */}
+                        <MonthAttendanceCard
+                          key={`${selectedSupervisor._id}-${new Date().toISOString().slice(0, 7)}`}
+                          supervisorId={selectedSupervisor._id}
+                          month={new Date().toISOString().slice(0, 7)}
+                        />
+                        {/* Second card (previous month calendar) */}
+                        <SupervisorAttendanceCalendar
+                          key={`${selectedSupervisor._id}-${new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().slice(0, 7)}`}
+                          supervisorId={selectedSupervisor._id}
+                          month={new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().slice(0, 7)}
+                        />
                       </div>
                     </CardContent>
                   </Card>
@@ -1610,15 +1813,56 @@ export default function SupervisorsManagement() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="documentUrl">Document URL</Label>
-              <Input
-                id="documentUrl"
-                name="documentUrl"
-                placeholder="https://..."
-                value={taskFormData.documentUrl}
-                onChange={handleTaskFormChange}
-              />
+              <Label htmlFor="projectId">Project *</Label>
+              <Select value={taskFormData.projectId} onValueChange={handleProjectChange} required>
+                <SelectTrigger id="projectId" className="w-full">
+                  <SelectValue placeholder={isLoadingProjects ? "Loading projects..." : "Select a project"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableProjects.map((project) => (
+                    <SelectItem key={project._id} value={project._id}>
+                      {project.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="documentType">Document Type</Label>
+              <Select value={taskFormData.documentType} onValueChange={handleDocumentTypeChange}>
+                <SelectTrigger id="documentType" className="w-full">
+                  <SelectValue placeholder="Select document type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="document">Document</SelectItem>
+                  <SelectItem value="image">Image</SelectItem>
+                  <SelectItem value="pdf">PDF</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {taskFormData.documentType && (
+              <div className="space-y-2">
+                <Label htmlFor="file">
+                  Upload {taskFormData.documentType.charAt(0).toUpperCase() + taskFormData.documentType.slice(1)}
+                </Label>
+                <Input
+                  id="file"
+                  name="file"
+                  type="file"
+                  accept={
+                    taskFormData.documentType === "image"
+                      ? "image/*"
+                      : taskFormData.documentType === "pdf"
+                        ? ".pdf"
+                        : ".doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,.pdf"
+                  }
+                  onChange={handleFileChange}
+                />
+                {taskFormData.file && (
+                  <div className="text-xs text-muted-foreground">Selected: {taskFormData.file.name}</div>
+                )}
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={closeTaskForm}>
                 Cancel
@@ -1638,7 +1882,6 @@ export default function SupervisorsManagement() {
               Select an employee to assign to this supervisor. Click on any employee to assign them.
             </DialogDescription>
           </DialogHeader>
-
           <div className="max-h-[60vh] overflow-y-auto">
             {loadingEmployees ? (
               <div className="flex justify-center py-8">
@@ -1712,3 +1955,4 @@ export default function SupervisorsManagement() {
     </div>
   )
 }
+
