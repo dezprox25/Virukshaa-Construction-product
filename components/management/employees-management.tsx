@@ -58,7 +58,25 @@ import {
   XCircle,
   Clock,
   RefreshCw,
+  Clock4,
+  Clock9,
+  Clock12,
+  Clock3,
+  Clock6,
+  Clock9Icon,
+  Clock12Icon,
+  Clock3Icon,
+  Clock6Icon,
+  ClockIcon,
+  Clock4Icon
 } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 interface Employee {
   _id: string
@@ -82,6 +100,7 @@ interface Employee {
     present: boolean
     checkIn?: string
     checkOut?: string
+    status?: 'Present' | 'Absent' | 'Late' | 'Half Day'
   }
 }
 
@@ -214,6 +233,49 @@ export default function EmployeesManagement() {
     }
   }
 
+  const handleAttendanceChange = async (employeeId: string, newStatus: string) => {
+    try {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+      
+      const response = await fetch('/api/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          employeeId, 
+          date: dateStr, 
+          status: newStatus 
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update attendance');
+      
+      // Update local state
+      setEmployees(prev => 
+        prev.map(emp => 
+          emp._id === employeeId 
+            ? { 
+                ...emp, 
+                attendance: { 
+                  ...emp.attendance, 
+                  present: newStatus === 'Present',
+                  status: newStatus as 'Present' | 'Absent' | 'Late' | 'Half Day'
+                } 
+              } 
+            : emp
+        )
+      );
+      
+      toast.success(`Attendance updated to ${newStatus}`);
+    } catch (error) {
+      console.error('Error updating attendance:', error);
+      toast.error('Failed to update attendance');
+    }
+  };
+
   const handleDelete = async (id: string) => {
     try {
       const response = await fetch(`/api/employees/${id}`, { method: "DELETE" })
@@ -291,6 +353,23 @@ export default function EmployeesManagement() {
   const absentToday = totalEmployees - presentToday
   const attendanceRate = totalEmployees > 0 ? Math.round((presentToday / totalEmployees) * 100) : 0
 
+  const attendanceOptions = [
+    { value: 'Present', label: 'Present', icon: CheckCircle, color: 'bg-green-100 text-green-800' },
+    { value: 'Late', label: 'Late', icon: Clock, color: 'bg-yellow-100 text-yellow-800' },
+    { value: 'Half Day', label: 'Half Day', icon: Clock4, color: 'bg-blue-100 text-blue-800' },
+    { value: 'Absent', label: 'Absent', icon: XCircle, color: 'bg-red-100 text-red-800' },
+  ];
+  
+  const getAttendanceIcon = (status: string) => {
+    const option = attendanceOptions.find(opt => opt.value === status);
+    return option ? <option.icon className="w-3 h-3 mr-1" /> : null;
+  };
+  
+  const getAttendanceColor = (status: string) => {
+    const option = attendanceOptions.find(opt => opt.value === status);
+    return option ? option.color : 'bg-gray-100 text-gray-800';
+  };
+
   if (loading && employees.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -321,17 +400,30 @@ export default function EmployeesManagement() {
                 <div>
                   <h3 className="font-semibold text-lg">{employee.name}</h3>
                   <div className="flex items-center gap-2 mt-1">
-                    {employee.attendance?.present ? (
-                      <Badge className="bg-green-100 text-green-800 text-xs">
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Present
-                      </Badge>
-                    ) : (
-                      <Badge className="bg-red-100 text-red-800 text-xs">
-                        <XCircle className="w-3 h-3 mr-1" />
-                        Absent
-                      </Badge>
-                    )}
+                    <Select
+                      value={employee.attendance?.status || (employee.attendance?.present ? 'Present' : 'Absent')}
+                      onValueChange={(value) => handleAttendanceChange(employee._id, value)}
+                    >
+                      <SelectTrigger className="h-7 w-32">
+                        <div className="flex items-center gap-1">
+                          {getAttendanceIcon(employee.attendance?.status || (employee.attendance?.present ? 'Present' : 'Absent'))}
+                          <SelectValue />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {attendanceOptions.map((option) => {
+                          const Icon = option.icon;
+                          return (
+                            <SelectItem key={option.value} value={option.value}>
+                              <div className="flex items-center gap-2">
+                                <Icon className="w-3 h-3" />
+                                {option.label}
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>
@@ -485,41 +577,30 @@ export default function EmployeesManagement() {
                 <TableCell>
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
-                      <button
-                        className={`rounded px-2 py-1 flex items-center gap-1 text-xs font-medium transition-colors ${employee.attendance?.present ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
-                        onClick={async () => {
-                          // Compute new status
-                          const newPresent = !employee.attendance?.present;
-                          // Get today's date in YYYY-MM-DD
-                          const today = new Date();
-                          const yyyy = today.getFullYear();
-                          const mm = String(today.getMonth() + 1).padStart(2, '0');
-                          const dd = String(today.getDate()).padStart(2, '0');
-                          const dateStr = `${yyyy}-${mm}-${dd}`;
-                          // Send to API
-                          try {
-                            await fetch('/api/attendance', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                employeeId: employee._id,
-                                date: dateStr,
-                                status: newPresent ? 'Present' : 'Absent',
-                              })
-                            });
-                          } catch (e) {
-                            // Optionally show an error toast
-                          }
-                          // Refetch employees and attendance to sync UI with DB
-                          fetchEmployees();
-                        }}
-                        title="Toggle Present/Absent"
-                        type="button"
+                      <Select
+                        value={employee.attendance?.status || (employee.attendance?.present ? 'Present' : 'Absent')}
+                        onValueChange={(value) => handleAttendanceChange(employee._id, value)}
                       >
-                        {employee.attendance?.present ? <CheckCircle className="w-3 h-3 mr-1" /> : <XCircle className="w-3 h-3 mr-1" />}
-                        {employee.attendance?.present ? 'Present' : 'Absent'}
-                      </button>
-                      {/* Optionally: add a popover or input for check-in time editing */}
+                        <SelectTrigger className="h-7 w-32">
+                          <div className="flex items-center gap-1">
+                            {getAttendanceIcon(employee.attendance?.status || (employee.attendance?.present ? 'Present' : 'Absent'))}
+                            <SelectValue />
+                          </div>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {attendanceOptions.map((option) => {
+                            const Icon = option.icon;
+                            return (
+                              <SelectItem key={option.value} value={option.value}>
+                                <div className="flex items-center gap-2">
+                                  <Icon className="w-3 h-3" />
+                                  {option.label}
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
                     </div>
                     {employee.attendance?.checkIn && (
                       <span className="text-xs text-muted-foreground">

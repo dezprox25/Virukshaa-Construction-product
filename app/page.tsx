@@ -12,47 +12,103 @@ import { Building2, Users, ClipboardList } from "lucide-react"
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [role, setRole] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+
+  const [signupData, setSignupData] = useState({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    role: ""
+  })
+  const [isSignupLoading, setIsSignupLoading] = useState(false)
   const router = useRouter()
 
-  const handleLogin = async (role: string) => {
-    setIsLoading(true);
-    
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSignupLoading(true)
+
     try {
-      // For demo roles, use the existing flow
-      if (role !== 'admin') {
+      if (signupData.password !== signupData.confirmPassword) {
+        throw new Error('Passwords do not match')
+      }
+
+      if (!signupData.role) {
+        throw new Error('Please select a role')
+      }
+
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: signupData.name,
+          email: signupData.email,
+          password: signupData.password,
+          role: signupData.role
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Signup failed')
+      }
+
+      localStorage.setItem('userRole', signupData.role)
+      localStorage.setItem('userEmail', signupData.email)
+      localStorage.setItem('userName', signupData.name)
+      router.push('/dashboard')
+    } catch (error) {
+      console.error('Signup error:', error)
+      alert(error instanceof Error ? error.message : 'Signup failed. Please try again.')
+    } finally {
+      setIsSignupLoading(false)
+    }
+  }
+
+  const handleLogin = async (demoRole?: string) => {
+    setIsLoading(true);
+
+    try {
+      const selectedRole = demoRole || role;
+
+      if (!selectedRole) {
+        throw new Error('Please select a role');
+      }
+
+      if (selectedRole !== 'admin') {
         const validRoles = ['superadmin', 'supervisor', 'client'];
-        const userRole = validRoles.includes(role) ? role : 'client';
-        
+        const userRole = validRoles.includes(selectedRole) ? selectedRole : 'client';
+
         localStorage.setItem("userRole", userRole);
         localStorage.setItem("userEmail", email);
         router.push("/dashboard");
         return;
       }
 
-      // For admin login, use the login API
-      const response = await fetch('/api/admin/login', {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, role: selectedRole }),
       });
 
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Login failed');
       }
-      
-      // Login successful
-      localStorage.setItem("userRole", "admin");
+
+      localStorage.setItem("userRole", selectedRole);
       localStorage.setItem("userEmail", data.user.email);
-      localStorage.setItem("adminName", data.user.adminName || 'Admin');
+      localStorage.setItem("userName", data.user.name || 'User');
       router.push("/dashboard");
     } catch (error) {
       console.error('Login error:', error);
-      // Simple error handling
       alert(error instanceof Error ? error.message : 'Login failed. Please try again.');
     } finally {
       setIsLoading(false);
@@ -60,7 +116,6 @@ export default function LoginPage() {
   }
 
   return (
-    
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
@@ -74,7 +129,7 @@ export default function LoginPage() {
           <Tabs defaultValue="login" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="login">Login</TabsTrigger>
-              <TabsTrigger value="demo">Demo Access</TabsTrigger>
+              <TabsTrigger value="demo">Sign UP</TabsTrigger>
             </TabsList>
 
             <TabsContent value="login" className="space-y-4">
@@ -99,44 +154,114 @@ export default function LoginPage() {
                 />
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="role">Role</Label>
+                <select
+                  id="role"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={isLoading}
+                >
+                  <option value="">Select a role</option> 
+                  <option value="superadmin">Super Admin</option>
+                  <option value="supervisor">Supervisor</option>
+                  <option value="client">Client</option>
+                </select>
+              </div>
+
               <Button 
-                onClick={() => handleLogin("admin")} 
-                disabled={isLoading}
-                className={`  w-full ${isLoading ? "bg-gray-400" : ""}`}
+                onClick={() => handleLogin()} 
+                disabled={isLoading || !role}
+                className={`w-full ${isLoading ? "bg-gray-400" : ""}`}
               >
                 {isLoading ? "Signing in..." : "Sign In"}
               </Button>
             </TabsContent>
 
             <TabsContent value="demo" className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  variant="outline"
-                  className="h-24 flex flex-col gap-2 bg-transparent"
-                  onClick={() => handleLogin("superadmin")}
+              <form onSubmit={handleSignup} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Full Name</Label>
+                  <Input
+                    id="name"
+                    type="text"
+                    placeholder="Enter your full name"
+                    value={signupData.name}
+                    onChange={(e) => setSignupData({...signupData, name: e.target.value})}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="signup-email">Email</Label>
+                  <Input
+                    id="signup-email"
+                    type="email"
+                    placeholder="Enter your email"
+                    value={signupData.email}
+                    onChange={(e) => setSignupData({...signupData, email: e.target.value})}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="signup-password">Password</Label>
+                  <Input
+                    id="signup-password"
+                    type="password"
+                    placeholder="Create a password"
+                    value={signupData.password}
+                    onChange={(e) => setSignupData({...signupData, password: e.target.value})}
+                    minLength={6}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Confirm Password</Label>
+                  <Input
+                    id="confirm-password"
+                    type="password"
+                    placeholder="Confirm your password"
+                    value={signupData.confirmPassword}
+                    onChange={(e) => setSignupData({...signupData, confirmPassword: e.target.value})}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="signup-role">Role</Label>
+                  <select
+                    id="signup-role"
+                    value={signupData.role}
+                    onChange={(e) => setSignupData({...signupData, role: e.target.value})}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    required
+                  >
+                    <option value="">Select a role</option>
+                    <option value="client">Client</option>
+                    <option value="supervisor">Supervisor</option>
+                  </select>
+                </div>
+
+                <Button 
+                  type="submit"
+                  disabled={isSignupLoading}
+                  className={`w-full ${isSignupLoading ? 'opacity-70' : ''}`}
                 >
-                  <Users className="w-6 h-6 text-blue-600" />
-                  <span className="font-medium">Super Admin</span>
-                  <span className="text-xs text-muted-foreground">Full system access</span>
+                  {isSignupLoading ? 'Creating Account...' : 'Create Account'}
                 </Button>
-                <Button
-                  variant="outline"
-                  className="h-24 flex flex-col gap-2 bg-transparent"
-                  onClick={() => handleLogin("supervisor")}
+              </form>
+
+              <div className="text-center text-sm mt-4">
+                Already have an account?{' '}
+                <button 
+                  onClick={() => (document.querySelector('button[data-value="login"]') as HTMLButtonElement)?.click()}
+                  className="font-medium text-primary hover:underline cursor-pointer"
                 >
-                  <ClipboardList className="w-6 h-6 text-green-600" />
-                  <span className="font-medium">Supervisor</span>
-                  <span className="text-xs text-muted-foreground">Project management</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-24 flex flex-col gap-2 bg-transparent"
-                  onClick={() => handleLogin("client")}
-                >
-                  <Building2 className="w-6 h-6 text-purple-600" />
-                  <span className="font-medium">Client</span>
-                  <span className="text-xs text-muted-foreground">Project tracking</span>
-                </Button>
+                  Sign in
+                </button>
               </div>
             </TabsContent>
           </Tabs>

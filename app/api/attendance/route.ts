@@ -33,34 +33,41 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET: Fetch attendance for a specific date (optionally by employeeId or supervisorId)
+// GET: Fetch attendance for a specific date or date range (optionally by employeeId or supervisorId)
 export async function GET(req: NextRequest) {
   await connectToDB();
   try {
     const { searchParams } = new URL(req.url);
     const date = searchParams.get("date");
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
     const employeeId = searchParams.get("employeeId");
     const supervisorId = searchParams.get("supervisorId");
 
-    // Use the provided date or default to today's date
-    const targetDate = date ? new Date(date) : new Date();
-    targetDate.setUTCHours(0, 0, 0, 0);
+    let filter: any = {};
 
-    const nextDay = new Date(targetDate);
-    nextDay.setUTCDate(targetDate.getUTCDate() + 1);
+    if (startDate && endDate) {
+      // Range query
+      const start = new Date(startDate);
+      start.setUTCHours(0, 0, 0, 0);
+      const end = new Date(endDate);
+      end.setUTCHours(23, 59, 59, 999); // include whole end day
+      filter.date = { $gte: start, $lte: end };
+    } else {
+      // Single day query (default behavior)
+      const targetDate = date ? new Date(date) : new Date();
+      targetDate.setUTCHours(0, 0, 0, 0);
+      const nextDay = new Date(targetDate);
+      nextDay.setUTCDate(targetDate.getUTCDate() + 1);
+      filter.date = { $gte: targetDate, $lt: nextDay };
+    }
 
-    let filter: any = {
-      date: {
-        $gte: targetDate,
-        $lt: nextDay,
-      },
-    };
     if (employeeId) filter.employeeId = employeeId;
     if (supervisorId) filter.supervisorId = supervisorId;
 
     const attendanceRecords = await Attendance.find(filter)
       .populate("supervisorId", "_id name email")
-      .populate("employeeId", "_id name email"); // Populate supervisor and employee details
+      .populate("employeeId", "_id name email");
 
     return NextResponse.json(attendanceRecords, { status: 200 });
   } catch (error) {
@@ -68,6 +75,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
   }
 }
+
 
 // Mock data for attendance
 const attendance = [

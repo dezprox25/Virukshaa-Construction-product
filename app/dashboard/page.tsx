@@ -32,8 +32,6 @@ export default function Dashboard() {
         return <SupervisorDashboard />
       case "client":
         return <ClientDashboard />
-      case "supplier":
-        return <SupplierDashboard />
       default:
         return <AdminDashboard />
     }
