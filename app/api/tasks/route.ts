@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
 import dbConnect from "@/lib/db";
 import Task from "@/models/Task";
 
@@ -17,6 +18,7 @@ export async function GET(req: NextRequest) {
     }
 
     const tasks = await Task.find({ assignedTo: supervisorId })
+      .populate('projectId', 'title') // Populate project title
       .sort({ createdAt: -1 });
 
     return NextResponse.json(tasks);
@@ -40,7 +42,10 @@ export async function POST(req: NextRequest) {
       startDate, 
       endDate, 
       documentUrl, 
-      supervisorId, // Accepting supervisorId from client
+      documentType,
+      projectId,
+      projectTitle,
+      supervisorId,
       status = 'Pending' 
     } = body;
 
@@ -51,12 +56,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // If projectTitle is not provided but projectId is, we should fetch it
+    let finalProjectTitle = projectTitle;
+    if (projectId && !projectTitle) {
+      const project = await mongoose.model('Project').findById(projectId).select('title');
+      if (project) {
+        finalProjectTitle = project.title;
+      }
+    }
+
     const newTask = new Task({
       title,
       description,
       startDate,
       endDate,
       documentUrl,
+      documentType,
+      projectId,
+      projectTitle: finalProjectTitle,
       assignedTo: supervisorId, // Store as assignedTo in the database
       status
     });

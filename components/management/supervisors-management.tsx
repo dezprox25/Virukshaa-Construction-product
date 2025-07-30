@@ -1,6 +1,7 @@
 "use client"
+
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { format } from "date-fns"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -20,6 +21,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { MessageCircle } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,7 +47,7 @@ import {
   Search,
   Filter,
   Users,
-  DollarSign,
+  IndianRupee,
   Grid3X3,
   List,
   CheckCircle,
@@ -58,6 +60,7 @@ import {
   UserPlus,
   CalendarPlus,
   FileText,
+  Folder,
   Hash,
 } from "lucide-react"
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select"
@@ -168,10 +171,10 @@ const attendanceOptions = [
   { value: "Absent" as AttendanceStatus, label: "Absent", icon: XCircle, color: "bg-red-100 text-red-800" },
 ]
 
-const getAttendanceIcon = (status: string) => {
-  const option = attendanceOptions.find((opt) => opt.value === status)
-  return option ? <option.icon className="w-3 h-3 mr-1" /> : null
-}
+// const getAttendanceIcon = (status: string) => {
+//   const option = attendanceOptions.find((opt) => opt.value === status)
+//   return option ? <option.icon className="w-3 h-3 mr-1" /> : null
+// }
 
 // MonthAttendanceCard component
 function MonthAttendanceCard({ supervisorId, month }: { supervisorId: string; month: string }) {
@@ -248,23 +251,26 @@ function MonthAttendanceCard({ supervisorId, month }: { supervisorId: string; mo
   )
 }
 
-// Calendar view for supervisor monthly attendance
+// Updated Calendar view for supervisor monthly attendance
 const SupervisorAttendanceCalendar = ({ supervisorId, month }: { supervisorId: string; month: string }) => {
-  const [attendanceMap, setAttendanceMap] = useState<Record<string, 'Present' | 'Absent'>>({})
+  const [attendanceMap, setAttendanceMap] = useState<Record<string, "Present" | "Absent">>({})
   const [loading, setLoading] = useState(true)
+  const [selectedMonth, setSelectedMonth] = useState(month)
+  const [presentDays, setPresentDays] = useState(0)
+  const [totalMonthDays, setTotalMonthDays] = useState(0)
 
   useEffect(() => {
     const fetchAttendance = async () => {
       try {
         setLoading(true)
-        const [year, monthNum] = month.split('-').map(Number)
+        const [year, monthNum] = selectedMonth.split("-").map(Number)
         const startDate = new Date(Date.UTC(year, monthNum - 1, 1))
         const endDate = new Date(Date.UTC(year, monthNum, 0, 23, 59, 59, 999))
 
         const response = await fetch(
           `/api/attendance?supervisorId=${supervisorId}` +
-            `&startDate=${startDate.toISOString()}` +
-            `&endDate=${endDate.toISOString()}`
+          `&startDate=${startDate.toISOString()}` +
+          `&endDate=${endDate.toISOString()}`,
         )
 
         if (!response.ok) {
@@ -272,7 +278,7 @@ const SupervisorAttendanceCalendar = ({ supervisorId, month }: { supervisorId: s
         }
 
         const attendanceData = await response.json()
-        const map: Record<string, 'Present' | 'Absent'> = {}
+        const map: Record<string, "Present" | "Absent"> = {}
 
         if (Array.isArray(attendanceData)) {
           attendanceData.forEach((record) => {
@@ -280,8 +286,8 @@ const SupervisorAttendanceCalendar = ({ supervisorId, month }: { supervisorId: s
               const date = new Date(record.date)
               if (!isNaN(date.getTime())) {
                 const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-                const dateKey = localDate.toISOString().split('T')[0]
-                if (record.status === 'Present' || record.status === 'Absent') {
+                const dateKey = localDate.toISOString().split("T")[0]
+                if (record.status === "Present" || record.status === "Absent") {
                   map[dateKey] = record.status
                 }
               }
@@ -291,122 +297,182 @@ const SupervisorAttendanceCalendar = ({ supervisorId, month }: { supervisorId: s
 
         // Fill in all days of the month
         const daysInMonth = endDate.getUTCDate()
+        let presentCount = 0
+        
         for (let d = 1; d <= daysInMonth; d++) {
           const date = new Date(Date.UTC(year, monthNum - 1, d))
           const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-          const dateKey = localDate.toISOString().split('T')[0]
+          const dateKey = localDate.toISOString().split("T")[0]
           const dayOfWeek = date.getUTCDay()
+          
+          // Count present days (excluding future dates)
+          if (map[dateKey] === "Present" && date <= new Date()) {
+            presentCount++
+          }
 
           if (map[dateKey] === undefined) {
-            map[dateKey] = dayOfWeek === 0 ? 'Absent' : 'Absent' // Sundays are Absent
+            // All Sundays are marked as Absent (leave), other days default to Absent
+            map[dateKey] = dayOfWeek === 0 ? "Absent" : "Absent"
+          } else if (dayOfWeek === 0) {
+            // Force all Sundays to be Absent regardless of data
+            map[dateKey] = "Absent"
           }
         }
+        
+        setPresentDays(presentCount)
+        setTotalMonthDays(daysInMonth)
 
         setAttendanceMap(map)
       } catch (err) {
-        console.error('Error fetching attendance:', err)
+        console.error("Error fetching attendance:", err)
       } finally {
         setLoading(false)
       }
     }
 
-    if (supervisorId && month) {
+    if (supervisorId && selectedMonth) {
       fetchAttendance()
     }
-  }, [supervisorId, month])
+  }, [supervisorId, selectedMonth])
+
+  // Generate last 12 months for dropdown with unique keys
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date()
+    d.setMonth(d.getMonth() - i)
+    // Use the full date string as the key to ensure uniqueness
+    const dateKey = d.toISOString().slice(0, 7)
+    return {
+      value: dateKey,
+      label: d.toLocaleString("default", { month: "long", year: "numeric" }),
+      key: `month-${dateKey}` // Add a unique key for React
+    }
+  })
 
   // Calendar grid logic
-  const [year, monthNum] = month.split('-').map(Number)
+  const [year, monthNum] = selectedMonth.split("-").map(Number)
   const firstDay = new Date(Date.UTC(year, monthNum - 1, 1))
   const lastDay = new Date(Date.UTC(year, monthNum, 0))
   const daysInMonth = lastDay.getUTCDate()
   const startDayIdx = firstDay.getUTCDay()
 
-  const weeks: Array<Array<{ date: Date | null; status?: 'Present' | 'Absent' }>> = []
-  let week: Array<{ date: Date | null; status?: 'Present' | 'Absent' }> = []
+  const calendarData = useMemo(() => {
+    const days: Array<{ date: number; isCurrentMonth: boolean; isPresent?: boolean }> = []
 
-  // Fill leading days from previous month
-  for (let i = 0; i < startDayIdx; i++) {
-    week.push({ date: null })
-  }
-
-  // Fill current month days
-  for (let d = 1; d <= daysInMonth; d++) {
-    const date = new Date(Date.UTC(year, monthNum - 1, d))
-    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-    const dateKey = localDate.toISOString().split('T')[0]
-    const dayOfWeek = date.getUTCDay()
-
-    let status: 'Present' | 'Absent' = attendanceMap[dateKey] || 'Absent'
-
-    // Force Sundays to be Absent
-    if (dayOfWeek === 0) {
-      status = 'Absent'
+    // Add empty cells for days before the first day of the month
+    for (let i = 0; i < startDayIdx; i++) {
+      days.push({ date: 0, isCurrentMonth: false })
     }
 
-    week.push({ date, status })
+    // Add days of the current month
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(Date.UTC(year, monthNum - 1, d))
+      const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+      const dateKey = localDate.toISOString().split("T")[0]
+      const dayOfWeek = date.getUTCDay()
 
-    if (week.length === 7) {
-      weeks.push(week)
-      week = []
-    }
-  }
+      let status = attendanceMap[dateKey]
+      // Force Sundays to be Absent
+      if (dayOfWeek === 0) {
+        status = "Absent"
+      }
 
-  // Fill trailing days for next month
-  if (week.length > 0) {
-    while (week.length < 7) {
-      week.push({ date: null })
+      days.push({
+        date: d,
+        isCurrentMonth: true,
+        isPresent: status === "Present" ? true : status === "Absent" ? false : undefined,
+      })
     }
-    weeks.push(week)
-  }
+
+    // Fill remaining cells to complete the grid (42 total cells for 6 weeks)
+    while (days.length < 42) {
+      days.push({ date: 0, isCurrentMonth: false })
+    }
+
+    return days
+  }, [selectedMonth, attendanceMap, year, monthNum, daysInMonth, startDayIdx])
 
   if (loading) {
     return <div className="text-center py-4">Loading calendar...</div>
   }
 
+  const selectedMonthLabel = months.find((m) => m.value === selectedMonth)?.label || selectedMonth
+
   return (
     <div className="w-full max-w-md mx-auto">
-      <div className="grid grid-cols-7 gap-1 mb-2 text-xs text-center font-medium">
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-          <div key={d}>{d}</div>
-        ))}
+      {/* Month Selection */}
+      <div className="mb-4">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="font-medium text-base">{selectedMonthLabel}</span>
+          <select
+            className="border rounded px-2 py-1 text-sm"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            aria-label="Select month"
+          >
+            {months.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
-      <div className="flex flex-col gap-1">
-        {weeks.map((week, i) => (
-          <div key={i} className="grid grid-cols-7 gap-1">
-            {week.map((cell, j) => {
-              if (!cell.date) return <div key={j} className="h-8" />
 
-              const status = cell.status
-              let bg = 'bg-red-100 text-red-800' // Default to absent (light red)
-              if (status === 'Present') {
-                bg = 'bg-green-100 text-green-800' // Present (light green)
-              }
-
-              return (
-                <div
-                  key={j}
-                  className={`h-8 flex items-center justify-center rounded ${bg} border text-xs`}
-                  title={`${status} (${cell.date.toISOString().slice(0, 10)})`}
-                >
-                  {cell.date.getDate()}
-                </div>
-              )
-            })}
+      {/* Days of Week Header */}
+      <div className="grid grid-cols-7 gap-1 mb-2 text-xs text-center font-medium text-muted-foreground">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+          <div key={day} className="p-2">
+            {day}
           </div>
         ))}
       </div>
-      <div className="flex gap-2 mt-2 text-xs">
-        <div className="flex items-center">
-          <span className="inline-block w-3 h-3 rounded bg-green-100 border mr-1" /> Present
+
+      {/* Calendar Grid */}
+      <div className="grid grid-cols-7 gap-1">
+        {calendarData.map((day, index) => (
+          <div
+            key={index}
+            className={`
+              aspect-square p-2 text-sm rounded-md flex items-center justify-center
+              ${!day.isCurrentMonth ? "text-muted-foreground/50" : ""}
+              ${day.isPresent === true
+                ? "bg-green-100 text-green-800"
+                : day.isPresent === false
+                  ? "bg-red-100 text-red-800"
+                  : day.isCurrentMonth
+                    ? "bg-background"
+                    : ""
+              }
+            `}
+          >
+            {day.isCurrentMonth ? day.date : ""}
+          </div>
+        ))}
+      </div>
+
+      {/* Legend */}
+      
+      {/* Attendance Summary */}
+      <div className="mt-4 mb-2 text-center">
+        <p className="text-sm font-medium">
+          {presentDays} {presentDays !== 1 ? '' : ''} / {totalMonthDays} day{totalMonthDays !== 1 ? 's' : ''} this month
+        </p>
+      </div>
+
+      {/* Legend */}
+      <div className="flex justify-center gap-4 mt-2">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-green-100 rounded border"></div>
+          <span className="text-sm text-muted-foreground">Present</span>
         </div>
-        <div className="flex items-center">
-          <span className="inline-block w-3 h-3 rounded bg-red-100 border mr-1" /> Absent
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-red-100 rounded border"></div>
+          <span className="text-sm text-muted-foreground">Absent/Leave</span>
         </div>
       </div>
     </div>
   )
-};
+}
 
 export default function SupervisorsManagement() {
   const [supervisors, setSupervisors] = useState<Supervisor[]>([])
@@ -435,6 +501,10 @@ export default function SupervisorsManagement() {
   const [isEmployeeAssignOpen, setIsEmployeeAssignOpen] = useState(false)
   const [availableEmployees, setAvailableEmployees] = useState<Employee[]>([])
   const [loadingEmployees, setLoadingEmployees] = useState(false)
+
+  // Task editing state
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [isEditTaskFormOpen, setIsEditTaskFormOpen] = useState(false)
 
   useEffect(() => {
     fetchSupervisors()
@@ -480,6 +550,7 @@ export default function SupervisorsManagement() {
   // Handle employee assignment
   const handleEmployeeAssign = async (employeeId: string) => {
     if (!selectedSupervisor?._id) return
+
     try {
       const response = await fetch(`/api/supervisors/${selectedSupervisor._id}/employees`, {
         method: "POST",
@@ -488,10 +559,12 @@ export default function SupervisorsManagement() {
         },
         body: JSON.stringify({ employeeId }),
       })
+
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.message || "Failed to assign employee")
       }
+
       // Refresh supervisor's employee list
       fetchSupervisorEmployees(selectedSupervisor._id)
       setIsEmployeeAssignOpen(false)
@@ -505,6 +578,7 @@ export default function SupervisorsManagement() {
   // Fetch employees assigned to a supervisor
   const fetchSupervisorEmployees = async (supervisorId: string) => {
     if (!supervisorId) return
+
     try {
       const response = await fetch(`/api/supervisors/${supervisorId}/employees`)
       if (!response.ok) {
@@ -521,6 +595,7 @@ export default function SupervisorsManagement() {
   // Fetch tasks for a specific supervisor
   const fetchSupervisorTasks = async (supervisorId: string) => {
     if (!supervisorId) return
+
     setIsLoadingTasks(true)
     try {
       const response = await fetch(`/api/tasks?supervisorId=${supervisorId}`)
@@ -568,6 +643,7 @@ export default function SupervisorsManagement() {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+
     setTaskFormData((prev) => ({ ...prev, file }))
     // Placeholder: Upload logic (replace with actual API call)
     // Example: const url = await uploadFileToServer(file)
@@ -585,10 +661,12 @@ export default function SupervisorsManagement() {
   // Submit task form
   const handleTaskSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
     if (!selectedSupervisor?._id) {
       toast.error("No supervisor selected")
       return
     }
+
     if (!taskFormData.title || !taskFormData.startDate || !taskFormData.endDate) {
       toast.error("Please fill in all required fields")
       return
@@ -608,19 +686,113 @@ export default function SupervisorsManagement() {
           endDate: taskFormData.endDate?.toISOString(),
         }),
       })
+
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.message || "Failed to create task")
       }
+
       const newTask: Task = await response.json()
       setSupervisorTasks((prev) => [...prev, newTask])
       setIsTaskFormOpen(false)
       toast.success("Task created successfully")
+
       // Refresh tasks after creation
       await fetchSupervisorTasks(selectedSupervisor._id)
     } catch (error) {
       console.error("Error creating task:", error)
       toast.error("Failed to create task")
+    }
+  }
+
+  // Open edit task form
+  const openEditTaskForm = (task: Task) => {
+    setEditingTask(task)
+    setTaskFormData({
+      title: task.title,
+      description: task.description,
+      startDate: new Date(task.startDate),
+      endDate: new Date(task.endDate),
+      projectId: task.projectId || "",
+      documentType: task.documentUrl ? "document" : "",
+      documentUrl: task.documentUrl || "",
+      file: undefined,
+    })
+    setIsEditTaskFormOpen(true)
+  }
+
+  // Close edit task form
+  const closeEditTaskForm = () => {
+    setIsEditTaskFormOpen(false)
+    setEditingTask(null)
+    setTaskFormData(initialTaskFormData)
+  }
+
+  // Handle task edit submission
+  const handleTaskEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!editingTask?._id) {
+      toast.error("No task selected for editing")
+      return
+    }
+
+    if (!taskFormData.title || !taskFormData.startDate || !taskFormData.endDate) {
+      toast.error("Please fill in all required fields")
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/tasks/${editingTask._id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...taskFormData,
+          startDate: taskFormData.startDate?.toISOString(),
+          endDate: taskFormData.endDate?.toISOString(),
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || "Failed to update task")
+      }
+
+      const updatedTask: Task = await response.json()
+      setSupervisorTasks((prev) => prev.map((task) => (task._id === editingTask._id ? updatedTask : task)))
+      setIsEditTaskFormOpen(false)
+      setEditingTask(null)
+      toast.success("Task updated successfully")
+
+      // Refresh tasks after update
+      if (selectedSupervisor?._id) {
+        await fetchSupervisorTasks(selectedSupervisor._id)
+      }
+    } catch (error) {
+      console.error("Error updating task:", error)
+      toast.error("Failed to update task")
+    }
+  }
+
+  // Handle task deletion
+  const handleTaskDelete = async (taskId: string) => {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || "Failed to delete task")
+      }
+
+      setSupervisorTasks((prev) => prev.filter((task) => task._id !== taskId))
+      toast.success("Task deleted successfully")
+    } catch (error) {
+      console.error("Error deleting task:", error)
+      toast.error("Failed to delete task")
     }
   }
 
@@ -634,7 +806,9 @@ export default function SupervisorsManagement() {
         },
         body: JSON.stringify({ status }),
       })
+
       if (!response.ok) throw new Error("Failed to update task status")
+
       setSupervisorTasks((prev) => prev.map((task) => (task._id === taskId ? { ...task, status } : task)))
       toast.success("Task status updated")
     } catch (error) {
@@ -644,14 +818,14 @@ export default function SupervisorsManagement() {
   }
 
   // Open supervisor details and load related data
-  const openSupervisorDetails = async (supervisor: Supervisor) => {
-    setSelectedSupervisor(supervisor)
-    setIsDetailPanelOpen(true)
-    if (supervisor._id) {
-      await fetchSupervisorTasks(supervisor._id)
-      await fetchSupervisorEmployees(supervisor._id)
-    }
-  }
+  // const openSupervisorDetails = async (supervisor: Supervisor) => {
+  //   setSelectedSupervisor(supervisor)
+  //   setIsDetailPanelOpen(true)
+  //   if (supervisor._id) {
+  //     await fetchSupervisorTasks(supervisor._id)
+  //     await fetchSupervisorEmployees(supervisor._id)
+  //   }
+  // }
 
   const fetchSupervisors = async () => {
     try {
@@ -660,6 +834,7 @@ export default function SupervisorsManagement() {
         throw new Error("Failed to fetch supervisors")
       }
       const supervisors: Supervisor[] = await response.json()
+
       // Get today's date in YYYY-MM-DD
       const today = new Date()
       const yyyy = today.getFullYear()
@@ -700,6 +875,7 @@ export default function SupervisorsManagement() {
             },
         }
       })
+
       setSupervisors(supervisorsWithAttendance)
     } catch (error) {
       console.error("Error fetching supervisors:", error)
@@ -726,9 +902,11 @@ export default function SupervisorsManagement() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+
     try {
       const url = editingSupervisor ? `/api/supervisors/${editingSupervisor._id}` : "/api/supervisors"
       const method = editingSupervisor ? "PUT" : "POST"
+
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
@@ -737,6 +915,7 @@ export default function SupervisorsManagement() {
           status: editingSupervisor ? formData.status : "Active",
         }),
       })
+
       if (response.ok) {
         await fetchSupervisors()
         setIsAddDialogOpen(false)
@@ -877,6 +1056,7 @@ export default function SupervisorsManagement() {
             : supervisor,
         ),
       )
+
       toast.success(`Attendance updated to ${status}`)
     } catch (error) {
       console.error("Error updating attendance:", error)
@@ -884,20 +1064,20 @@ export default function SupervisorsManagement() {
     }
   }
 
-  // supervisor project detials
-  const [supervisorProjects, setSupervisorProjects] = useState<IProject[]>([]);
+  // supervisor project details
+  const [supervisorProjects, setSupervisorProjects] = useState<IProject[]>([])
+
   useEffect(() => {
     if (!selectedSupervisor) {
-      setSupervisorProjects([]);
-      return;
+      setSupervisorProjects([])
+      return
     }
     // Replace this with your actual fetch logic
     fetch(`/api/projects?supervisorId=${selectedSupervisor._id}`)
-      .then(res => res.json())
-      .then(data => setSupervisorProjects(data))
-      .catch(() => setSupervisorProjects([]));
-  }, [selectedSupervisor]);
-
+      .then((res) => res.json())
+      .then((data) => setSupervisorProjects(data))
+      .catch(() => setSupervisorProjects([]))
+  }, [selectedSupervisor])
 
   if (loading && supervisors.length === 0) {
     return (
@@ -937,10 +1117,11 @@ export default function SupervisorsManagement() {
                     <Select
                       value={supervisor.attendance?.status || "Absent"}
                       onValueChange={(value) => handleAttendanceChange(supervisor._id, value as AttendanceStatus)}
+
                     >
-                      <SelectTrigger className="h-7 w-32">
+                      <SelectTrigger className={`h-7 w-32 ${supervisor.attendance?.status === "Present" ? "bg-green-100" : "bg-red-100"}`}>
                         <div className="flex items-center gap-1">
-                          {getAttendanceIcon(supervisor.attendance?.status || "Absent")}
+                          {/* {getAttendanceIcon(supervisor.attendance?.status || "Absent")} */}
                           <SelectValue />
                         </div>
                       </SelectTrigger>
@@ -977,8 +1158,8 @@ export default function SupervisorsManagement() {
                 <span>{supervisor.address}</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <DollarSign className="w-4 h-4 text-muted-foreground" />
-                <span>${supervisor.salary.toLocaleString()}</span>
+                <IndianRupee className="w-4 h-4 text-muted-foreground" />
+                <span>{supervisor.salary.toLocaleString()}</span>
               </div>
             </div>
             <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
@@ -990,6 +1171,14 @@ export default function SupervisorsManagement() {
               >
                 <Edit className="w-4 h-4 mr-2" />
                 Edit
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="text-green-600 hover:text-green-700 border-green-500 hover:bg-green-50"
+                onClick={() => window.open(`https://wa.me/${supervisor.phone.replace(/[^0-9]/g, '')}`, '_blank')}
+              >
+                <MessageCircle className="w-4 h-4" />
               </Button>
               <Button variant="outline" size="sm" onClick={() => openSupervisorDetail(supervisor)}>
                 <Eye className="w-4 h-4" />
@@ -1067,7 +1256,7 @@ export default function SupervisorsManagement() {
                     <div className="text-muted-foreground">{supervisor.address}</div>
                   </div>
                 </TableCell>
-                <TableCell>${supervisor.salary.toLocaleString()}</TableCell>
+                <TableCell className="flex items-center gap-1"><IndianRupee className="w-4 h-4 text-muted-foreground" />{supervisor.salary.toLocaleString()}</TableCell>
                 <TableCell>
                   <Badge className={getStatusColor(supervisor.status)}>{supervisor.status}</Badge>
                 </TableCell>
@@ -1078,9 +1267,9 @@ export default function SupervisorsManagement() {
                         value={supervisor.attendance?.status || "Absent"}
                         onValueChange={(value) => handleAttendanceChange(supervisor._id, value as AttendanceStatus)}
                       >
-                        <SelectTrigger className="h-7 w-32">
+                        <SelectTrigger className={`h-7 w-32 ${supervisor.attendance?.status === "Present" ? "bg-green-100" : "bg-red-100"}`}>
                           <div className="flex items-center gap-1">
-                            {getAttendanceIcon(supervisor.attendance?.status || "Absent")}
+                            {/* {getAttendanceIcon(supervisor.attendance?.status || "Absent")} */}
                             <SelectValue />
                           </div>
                         </SelectTrigger>
@@ -1108,6 +1297,14 @@ export default function SupervisorsManagement() {
                   <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                     <Button variant="outline" size="sm" onClick={() => openEditDialog(supervisor)}>
                       <Edit className="w-4 h-4" />
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="text-green-600 hover:text-green-700 border-green-500 hover:bg-green-50"
+                      onClick={() => window.open(`https://wa.me/${supervisor.phone.replace(/[^0-9]/g, '')}`, '_blank')}
+                    >
+                      <MessageCircle className="w-4 h-4" />
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => openSupervisorDetail(supervisor)}>
                       <Eye className="w-4 h-4" />
@@ -1430,10 +1627,10 @@ export default function SupervisorsManagement() {
 
       {/* Supervisor Detail Sheet */}
       <Sheet open={isDetailPanelOpen} onOpenChange={setIsDetailPanelOpen}>
-        <SheetContent className="w-[400px] sm:w-[540px] sm:max-w-none">
+        <SheetContent className="w-[400px] sm:w-[540px] sm:max-w-none flex flex-col">
           {selectedSupervisor && (
-            <>
-              <SheetHeader>
+            <div className="flex flex-col h-full">
+              <SheetHeader className="shrink-0">
                 <div className="flex items-center gap-3">
                   <Avatar className="h-16 w-16">
                     <AvatarImage
@@ -1466,15 +1663,13 @@ export default function SupervisorsManagement() {
                   </Button>
                 </div>
               </SheetHeader>
-
-              <Tabs defaultValue="overview" className="mt-6">
-                <TabsList className="grid w-full grid-cols-3">
+              <Tabs defaultValue="overview" className="mt-6 flex flex-col h-[calc(100%-100px)]">
+                <TabsList className="grid w-full grid-cols-2 mb-4">
                   <TabsTrigger value="overview">Overview</TabsTrigger>
                   <TabsTrigger value="tasks">Tasks</TabsTrigger>
-                  <TabsTrigger value="employees">Team</TabsTrigger>
+                  {/* <TabsTrigger value="employees">Team</TabsTrigger> */}
                 </TabsList>
-
-                <TabsContent value="overview" className="mt-6 space-y-6">
+                <TabsContent value="overview" className="flex-1 overflow-y-auto pr-2 space-y-6">
                   {/* Quick Stats */}
                   <div className="grid grid-cols-2 gap-4">
                     <Card>
@@ -1501,18 +1696,33 @@ export default function SupervisorsManagement() {
                     <div className="flex items-center gap-2">
                       <ClipboardList className="w-5 h-5 text-blue-600" />
                       <div>
-                        <p className="text-sm font-medium">{supervisorTasks.length} Active Tasks</p>
-                        <p className="text-xs text-muted-foreground">Assigned tasks</p>
-                        {supervisorProjects.length > 0 && (
-                          <ul className="text-xs text-muted-foreground mt-1">
-                            {supervisorProjects.map(project => (
-                              <li key={project._id}>• {project.title}</li>
-                            ))}
-                          </ul>
-                        )}
+                        <p className="text-xs text-muted-foreground mb-1">Assigned projects</p>
+                        <div className="space-y-1">
+                          {Array.from(
+                            new Set(
+                              supervisorTasks
+                                .filter(task => task.projectId)
+                                .map(task => {
+                                  if (typeof task.projectId === 'object') {
+                                    return (task.projectId as IProject)?.title || null;
+                                  }
+                                  const project = supervisorProjects.find(p => p._id === task.projectId);
+                                  return project?.title || null;
+                                })
+                                .filter(Boolean)
+                            )
+                          ).map((projectTitle, index) => (
+                            <div key={index} className="flex items-center gap-2 text-sm">
+                              <Folder className="w-3 h-3 flex-shrink-0" />
+                              <span className="truncate">{projectTitle}</span>
+                            </div>
+                          ))}
+                          {supervisorTasks.length === 0 && (
+                            <p className="text-xs text-muted-foreground">No projects assigned</p>
+                          )}
+                        </div>
                       </div>
                     </div>
-
                   </div>
 
                   {/* Monthly Attendance Rate */}
@@ -1521,19 +1731,21 @@ export default function SupervisorsManagement() {
                       <CardTitle className="text-lg">Monthly Attendance Rate</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="flex flex-col md:flex-row gap-4 items-center">
+                      <div className="flex flex-col md:flex-row gap-4 justify-center items-center">
                         {/* First card (current month summary) */}
-                        <MonthAttendanceCard
+                        {/* <MonthAttendanceCard
                           key={`${selectedSupervisor._id}-${new Date().toISOString().slice(0, 7)}`}
                           supervisorId={selectedSupervisor._id}
                           month={new Date().toISOString().slice(0, 7)}
-                        />
+                        /> */}
                         {/* Second card (previous month calendar) */}
-                        <SupervisorAttendanceCalendar
-                          key={`${selectedSupervisor._id}-${new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().slice(0, 7)}`}
-                          supervisorId={selectedSupervisor._id}
-                          month={new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().slice(0, 7)}
-                        />
+                        <div className="space-y-2">
+                          <SupervisorAttendanceCalendar
+                            key={`${selectedSupervisor._id}-${new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().slice(0, 7)}`}
+                            supervisorId={selectedSupervisor._id}
+                            month={new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().slice(0, 7)}
+                          />
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -1567,7 +1779,7 @@ export default function SupervisorsManagement() {
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <DollarSign className="w-5 h-5 text-muted-foreground" />
+                          <IndianRupee className="w-5 h-5 text-muted-foreground" />
                           <div>
                             <p className="font-medium">Salary</p>
                             <p className="text-sm text-muted-foreground">
@@ -1595,8 +1807,7 @@ export default function SupervisorsManagement() {
                     </CardContent>
                   </Card>
                 </TabsContent>
-
-                <TabsContent value="tasks" className="mt-6 space-y-4">
+                <TabsContent value="tasks" className="flex-1 overflow-y-auto pr-2 space-y-4">
                   <div className="flex justify-between items-center">
                     <h3 className="text-lg font-semibold">Assigned Tasks</h3>
                     <Button size="sm" onClick={openTaskForm}>
@@ -1631,19 +1842,61 @@ export default function SupervisorsManagement() {
                                 >
                                   {task.status}
                                 </Badge>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openEditTaskForm(task)}
+                                  className="h-7 w-7 p-0"
+                                >
+                                  <Edit className="w-3 h-3" />
+                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="destructive" size="sm" className="h-7 w-7 p-0">
+                                      <Trash2 className="w-3 h-3" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Delete Task</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to delete "{task.title}"? This action cannot be undone.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleTaskDelete(task._id)}>
+                                        Delete
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
                               </div>
                             </div>
                             {task.description && (
                               <p className="text-sm text-muted-foreground mb-3">{task.description}</p>
                             )}
-                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                              <div className="flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
-                                <span>{format(new Date(task.startDate), "MMM dd, yyyy")}</span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                <span>Due: {format(new Date(task.endDate), "MMM dd, yyyy")}</span>
+                            <div className="flex flex-col gap-2 text-xs text-muted-foreground">
+                              {task.projectId && (
+                                <div className="flex items-center gap-2">
+                                  <Folder className="w-3 h-3" />
+                                  <span>
+                                    {typeof task.projectId === 'object'
+                                      ? (task.projectId as IProject)?.title || 'No project assigned'
+                                      : 'No project assigned'
+                                    }
+                                  </span>
+                                </div>
+                              )}
+                              <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  <span>{format(new Date(task.startDate), "MMM dd, yyyy")}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  <span>Due: {format(new Date(task.endDate), "MMM dd, yyyy")}</span>
+                                </div>
                               </div>
                             </div>
                             {task.documentUrl && (
@@ -1674,8 +1927,7 @@ export default function SupervisorsManagement() {
                     )}
                   </div>
                 </TabsContent>
-
-                <TabsContent value="employees" className="mt-6 space-y-4">
+                <TabsContent value="employees" className="flex-1 overflow-y-auto pr-2 space-y-4">
                   <div className="flex justify-between items-center">
                     <h3 className="text-lg font-semibold">Team Members</h3>
                     <Button size="sm" onClick={() => setIsEmployeeAssignOpen(true)}>
@@ -1726,7 +1978,7 @@ export default function SupervisorsManagement() {
                   </div>
                 </TabsContent>
               </Tabs>
-            </>
+            </div>
           )}
         </SheetContent>
       </Sheet>
@@ -1873,6 +2125,151 @@ export default function SupervisorsManagement() {
         </DialogContent>
       </Dialog>
 
+      {/* Edit Task Dialog */}
+      <Dialog open={isEditTaskFormOpen} onOpenChange={setIsEditTaskFormOpen}>
+        <DialogContent className="max-w-2xl" aria-label="Edit task form">
+          <DialogHeader>
+            <DialogTitle>Edit Task</DialogTitle>
+            <DialogDescription>Update task details for {selectedSupervisor?.name}.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleTaskEditSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-title">Task Title *</Label>
+              <Input
+                id="edit-title"
+                name="title"
+                placeholder="Task Title"
+                value={taskFormData.title}
+                onChange={handleTaskFormChange}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Textarea
+                id="edit-description"
+                name="description"
+                placeholder="Task description..."
+                value={taskFormData.description}
+                onChange={handleTaskFormChange}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Start Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !taskFormData.startDate && "text-muted-foreground",
+                      )}
+                    >
+                      <Calendar className="mr-2 h-4 w-4" />
+                      {taskFormData.startDate ? format(taskFormData.startDate, "PPP") : <span>Start Date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <CalendarComponent
+                      mode="single"
+                      selected={taskFormData.startDate}
+                      onSelect={(d) => handleTaskDateChange(d, "startDate")}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="space-y-2">
+                <Label>End Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !taskFormData.endDate && "text-muted-foreground",
+                      )}
+                    >
+                      <Calendar className="mr-2 h-4 w-4" />
+                      {taskFormData.endDate ? format(taskFormData.endDate, "PPP") : <span>End Date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <CalendarComponent
+                      mode="single"
+                      selected={taskFormData.endDate}
+                      onSelect={(d) => handleTaskDateChange(d, "endDate")}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-projectId">Project *</Label>
+              <Select value={taskFormData.projectId} onValueChange={handleProjectChange} required>
+                <SelectTrigger id="edit-projectId" className="w-full">
+                  <SelectValue placeholder={isLoadingProjects ? "Loading projects..." : "Select a project"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableProjects.map((project) => (
+                    <SelectItem key={project._id} value={project._id}>
+                      {project.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-documentType">Document Type</Label>
+              <Select value={taskFormData.documentType} onValueChange={handleDocumentTypeChange}>
+                <SelectTrigger id="edit-documentType" className="w-full">
+                  <SelectValue placeholder="Select document type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="document">Document</SelectItem>
+                  <SelectItem value="image">Image</SelectItem>
+                  <SelectItem value="pdf">PDF</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {taskFormData.documentType && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-file">
+                  Upload {taskFormData.documentType.charAt(0).toUpperCase() + taskFormData.documentType.slice(1)}
+                </Label>
+                <Input
+                  id="edit-file"
+                  name="file"
+                  type="file"
+                  accept={
+                    taskFormData.documentType === "image"
+                      ? "image/*"
+                      : taskFormData.documentType === "pdf"
+                        ? ".pdf"
+                        : ".doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,.pdf"
+                  }
+                  onChange={handleFileChange}
+                />
+                {taskFormData.file && (
+                  <div className="text-xs text-muted-foreground">Selected: {taskFormData.file.name}</div>
+                )}
+                {taskFormData.documentUrl && !taskFormData.file && (
+                  <div className="text-xs text-muted-foreground">Current: Document attached</div>
+                )}
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-4">
+              <Button type="button" variant="outline" onClick={closeEditTaskForm}>
+                Cancel
+              </Button>
+              <Button type="submit">Update Task</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Employee Assignment Dialog */}
       <Dialog open={isEmployeeAssignOpen} onOpenChange={setIsEmployeeAssignOpen}>
         <DialogContent className="sm:max-w-[500px] max-h-[80vh]">
@@ -1955,4 +2352,5 @@ export default function SupervisorsManagement() {
     </div>
   )
 }
+
 

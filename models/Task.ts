@@ -8,6 +8,9 @@ export interface ITask extends Document {
   startDate?: Date;
   endDate?: Date;
   documentUrl?: string;
+  documentType?: string;
+  projectId?: mongoose.Schema.Types.ObjectId;
+  projectTitle?: string;
   assignedTo: mongoose.Schema.Types.ObjectId;
 }
 
@@ -27,6 +30,12 @@ const taskSchema = new Schema<ITask>({
   startDate: { type: Date },
   endDate: { type: Date },
   documentUrl: { type: String },
+  documentType: { type: String },
+  projectId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Project',
+  },
+  projectTitle: { type: String },
   assignedTo: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Supervisor',

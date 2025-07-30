@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
 import dbConnect from "@/lib/db";
 import Task from "@/models/Task";
 
@@ -28,7 +29,45 @@ export async function PUT(
   await dbConnect();
   try {
     const body = await req.json();
-    const updatedTask = await Task.findByIdAndUpdate(params.id, body, { new: true, runValidators: true });
+    const { 
+      title, 
+      description, 
+      startDate, 
+      endDate, 
+      documentUrl, 
+      documentType,
+      projectId,
+      projectTitle,
+      status 
+    } = body;
+
+    // If projectId is being updated, ensure we have the latest project title
+    let finalProjectTitle = projectTitle;
+    if (projectId && !projectTitle) {
+      const project = await mongoose.model('Project').findById(projectId).select('title');
+      if (project) {
+        finalProjectTitle = project.title;
+      }
+    }
+
+    const updateData: Record<string, any> = {
+      title,
+      description,
+      startDate,
+      endDate,
+      documentUrl,
+      documentType,
+      ...(projectId && { projectId }),
+      ...(finalProjectTitle && { projectTitle: finalProjectTitle }),
+      ...(status && { status })
+    };
+
+    const updatedTask = await Task.findByIdAndUpdate(
+      params.id, 
+      updateData, 
+      { new: true, runValidators: true }
+    );
+    
     if (!updatedTask) {
       return NextResponse.json({ message: "Task not found" }, { status: 404 });
     }

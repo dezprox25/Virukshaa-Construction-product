@@ -34,7 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
 import { MessageDialog } from "./message-dialog"
-import { Plus, Edit, Trash2, Phone, Mail, Building2, MapPin, Globe, Search, Filter, User, FileText, Grid3X3, List, CheckCircle, XCircle, RefreshCw, Users, DollarSign, IndianRupee, Calendar, Eye, Hash, FolderOpen, Send } from 'lucide-react'
+import { Plus, Edit, Trash2, Phone, Mail, Building2, MapPin, Globe, Search, Filter, User, FileText, Grid3X3, List, CheckCircle, XCircle, RefreshCw, Users, IndianRupee, Calendar, Eye, Hash, FolderOpen, Send } from 'lucide-react'
 
 interface Client {
   _id: string
@@ -999,7 +999,7 @@ export default function ClientsManagement() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-              <DollarSign className="h-4 w-4 text-blue-600" />
+              <IndianRupee className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600">₹{totalRevenue.toLocaleString()}</div>
@@ -1580,7 +1580,7 @@ export default function ClientsManagement() {
                             </div>
                           </div>
                           <div className="flex items-center gap-3">
-                            <DollarSign className="w-5 h-5 text-muted-foreground" />
+                            <IndianRupee className="w-5 h-5 text-muted-foreground" />
                             <div>
                               <p className="font-medium">Project Total</p>
                               <p className="text-sm text-muted-foreground">
