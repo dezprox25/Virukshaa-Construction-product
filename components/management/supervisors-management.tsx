@@ -1664,10 +1664,10 @@ export default function SupervisorsManagement() {
                 </div>
               </SheetHeader>
               <Tabs defaultValue="overview" className="mt-6 flex flex-col h-[calc(100%-100px)]">
-                <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsList className="grid w-full grid-cols-3 mb-4">
                   <TabsTrigger value="overview">Overview</TabsTrigger>
                   <TabsTrigger value="tasks">Tasks</TabsTrigger>
-                  {/* <TabsTrigger value="employees">Team</TabsTrigger> */}
+                  <TabsTrigger value="employees">Team</TabsTrigger>
                 </TabsList>
                 <TabsContent value="overview" className="flex-1 overflow-y-auto pr-2 space-y-6">
                   {/* Quick Stats */}
