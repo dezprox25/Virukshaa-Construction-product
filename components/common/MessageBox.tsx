@@ -63,7 +63,7 @@ const MessageBox: React.FC<MessageBoxProps> = ({
 
     setMessages(prev => {
       const updated = [...prev, msgObj];
-      localStorage.setItem(`messages-${conversationId}` , JSON.stringify(updated));
+      localStorage.setItem(`messages-${conversationId}`, JSON.stringify(updated));
       return updated;
     });
     setMessage('');
@@ -75,8 +75,29 @@ const MessageBox: React.FC<MessageBoxProps> = ({
   }, [messages]);
 
   const formatTime = (date: Date | string) => {
-    const dateObj = typeof date === 'string' ? new Date(date) : date;
-    return dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    try {
+      const dateObj = typeof date === 'string' ? new Date(date) : date;
+      if (isNaN(dateObj.getTime())) return 'Invalid date';
+      return dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (error) {
+      console.error('Error formatting time:', error);
+      return '--:--';
+    }
+  };
+
+  const formatDate = (date: Date | string) => {
+    try {
+      const dateObj = typeof date === 'string' ? new Date(date) : date;
+      if (isNaN(dateObj.getTime())) return '';
+      return new Intl.DateTimeFormat(undefined, {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(dateObj);
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return '';
+    }
   };
 
   if (isLoading) {
@@ -92,11 +113,11 @@ const MessageBox: React.FC<MessageBoxProps> = ({
   return (
     <div className={`flex flex-col h-screen bg-[#e5ddd5] max-h-[700px] bg-opacity-30 ${className}`}>
       {/* Header */}
-      <div className="bg-[#00a884] p-3 flex items-center justify-between text-white">
+      <div className="bg-[#0c0c0c] p-3 flex items-center justify-between text-white">
         <div className="flex items-center">
           {onBack && (
-            <button 
-              onClick={onBack} 
+            <button
+              onClick={onBack}
               className="p-2 mr-2 rounded-full hover:bg-white/10"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -107,18 +128,18 @@ const MessageBox: React.FC<MessageBoxProps> = ({
           </div>
           <div className="ml-3">
             <h2 className="font-medium">{title}</h2>
-            <p className="text-xs opacity-80">Online</p>
+            {/* <p className="text-xs opacity-80">Online</p> */}
           </div>
         </div>
-        <div className="flex items-center space-x-2">
+        {/* <div className="flex items-center space-x-2">
           <button className="p-2 rounded-full hover:bg-white/10">
             <MoreVertical className="h-5 w-5" />
           </button>
-        </div>
+        </div> */}
       </div>
 
       {/* Chat background with pattern */}
-      <div 
+      <div
         className="flex-1 overflow-y-auto p-4 bg-[#e5ddd5] bg-opacity-30"
       >
         {messages.length === 0 ? (
@@ -130,22 +151,21 @@ const MessageBox: React.FC<MessageBoxProps> = ({
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                className={`flex ${
-                  msg.sender === (userType === 'admin' ? 'superadmin' : 'client')
+                className={`flex ${msg.sender === (userType === 'admin' ? 'superadmin' : 'client')
                     ? 'justify-end'
                     : 'justify-start'
-                }`}
+                  }`}
               >
                 <div
-                  className={`max-w-[80%] p-3 rounded-lg ${
-                    msg.sender === (userType === 'admin' ? 'superadmin' : 'client')
-                      ? 'bg-[#d9fdd3] text-gray-800 rounded-tr-none shadow-sm'
-                      : 'bg-white text-gray-800 rounded-tl-none shadow-sm'
-                  }`}
+                  className={`max-w-[80%] p-3 rounded-lg ${msg.sender === (userType === 'admin' ? 'superadmin' : 'client')
+                      ? 'bg-transparent text-black rounded-tr-none '
+                      : 'bg-white text-black rounded-tl-none '
+                    }`}
                 >
                   <p className="text-sm">{msg.text}</p>
-                  <div className="text-xs text-gray-500 text-right mt-1 flex justify-end items-center space-x-1">
+                  <div className="text-[10px] text-gray-500 text-right mt-1 flex justify-end items-center space-x-1">
                     <span>{formatTime(msg.timestamp)}</span>
+                    <span>{formatDate(msg.timestamp)}</span>
                     {msg.read && (
                       <span className="text-blue-500">
                         ✓✓
@@ -163,18 +183,8 @@ const MessageBox: React.FC<MessageBoxProps> = ({
       {/* Message Input */}
       <div className="bg-[#f0f2f5] p-3 border-t border-gray-300">
         <form onSubmit={handleSendMessage} className="flex items-center">
-          <button
-            type="button"
-            className="p-2 text-gray-500 hover:text-gray-700 rounded-full hover:bg-gray-200"
-          >
-            <Smile className="h-6 w-6" />
-          </button>
-          <button
-            type="button"
-            className="p-2 text-gray-500 hover:text-gray-700 rounded-full hover:bg-gray-200"
-          >
-            <Paperclip className="h-6 w-6" />
-          </button>
+
+
           <div className="flex-1 mx-2">
             <Input
               type="text"
@@ -193,10 +203,10 @@ const MessageBox: React.FC<MessageBoxProps> = ({
             </button>
           ) : (
             <button
-              type="button"
+              type="submit"
               className="p-2 text-white bg-[#00a884] rounded-full hover:bg-[#128c7e]"
             >
-              <Mic className="h-6 w-6" />
+              <Send className="h-6 w-6" />
             </button>
           )}
         </form>
