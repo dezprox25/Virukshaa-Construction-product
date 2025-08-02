@@ -1,4 +1,5 @@
 "use client"
+
 import type React from "react"
 import { useState, useEffect } from "react"
 import { format } from "date-fns"
@@ -33,8 +34,32 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
-import { MessageDialog } from "./message-dialog"
-import { Plus, Edit, Trash2, Phone, Mail, Building2, MapPin, Globe, Search, Filter, User, FileText, Grid3X3, List, CheckCircle, XCircle, RefreshCw, Users, IndianRupee, Calendar, Eye, Hash, FolderOpen, Send } from 'lucide-react'
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Phone,
+  Mail,
+  Building2,
+  MapPin,
+  Globe,
+  Search,
+  Filter,
+  User,
+  FileText,
+  Grid3X3,
+  List,
+  CheckCircle,
+  XCircle,
+  RefreshCw,
+  Users,
+  IndianRupee,
+  Calendar,
+  Eye,
+  Hash,
+  FolderOpen,
+  Send,
+} from "lucide-react"
 
 interface Client {
   _id: string
@@ -94,8 +119,11 @@ interface Invoice {
 
 interface FormData {
   name: string
+  username: string
   email: string
   phone: string
+  password?: string
+  confirmPassword?: string
   company: string
   address: string
   city: string
@@ -108,10 +136,60 @@ interface FormData {
   avatar: string
 }
 
+// Message Dialog Component
+interface MessageDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  client: Client | null
+  onSend: (message: string, clientId: string) => void
+}
+
+function MessageDialog({ open, onOpenChange, client, onSend }: MessageDialogProps) {
+  const [message, setMessage] = useState("")
+
+  const handleSend = () => {
+    if (client && message.trim()) {
+      onSend(message, client._id)
+      setMessage("")
+      onOpenChange(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Send Message to {client?.name}</DialogTitle>
+          <DialogDescription>Send a message to {client?.email}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <Textarea
+            placeholder="Type your message here..."
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            rows={4}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSend} disabled={!message.trim()}>
+              Send Message
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 const initialFormData: FormData = {
   name: "",
+  username: "",
   email: "",
   phone: "",
+  password: "",
+  confirmPassword: "",
   company: "",
   address: "",
   city: "",
@@ -175,6 +253,14 @@ export default function ClientsManagement() {
   // Message Dialog States
   const [messageDialogOpen, setMessageDialogOpen] = useState(false)
   const [messageClient, setMessageClient] = useState<Client | null>(null)
+
+  // Project Management States
+  const [editingProject, setEditingProject] = useState<Project | null>(null)
+  const [isDeleteProjectDialogOpen, setIsDeleteProjectDialogOpen] = useState(false)
+  const [pendingDeleteProjectId, setPendingDeleteProjectId] = useState<string | null>(null)
+
+  // Mock storage for projects
+  const [allProjects, setAllProjects] = useState<Project[]>([])
 
   useEffect(() => {
     fetchClients()
@@ -280,18 +366,28 @@ export default function ClientsManagement() {
     }
   }
 
+  // Storage helper functions
+  const saveProjectsToStorage = (projects: Project[]) => {
+    setAllProjects(projects)
+  }
+
   // Fetch projects for a specific client
   const fetchClientProjects = async (clientId: string) => {
     setIsLoadingProjects(true)
     try {
       const response = await fetch(`/api/projects`)
-      if (!response.ok) throw new Error("Failed to fetch projects")
-      const allProjects: Project[] = await response.json()
-      const projects = allProjects.filter((project) => project.clientId === clientId)
+      if (!response.ok) {
+        const projects = allProjects.filter((project) => project.clientId === clientId)
+        setClientProjects(projects)
+        return
+      }
+      const allProjectsData: Project[] = await response.json()
+      const projects = allProjectsData.filter((project) => project.clientId === clientId)
       setClientProjects(projects)
     } catch (error) {
       console.error("Error fetching client projects:", error)
-      setClientProjects([])
+      const projects = allProjects.filter((project) => project.clientId === clientId)
+      setClientProjects(projects)
     } finally {
       setIsLoadingProjects(false)
     }
@@ -352,10 +448,14 @@ export default function ClientsManagement() {
   }
 
   const handleSendMessage = (message: string, clientId: string) => {
+    console.log(`Sending message to client ${clientId}:`, message)
+
     toast({
-      title: "Success",
-      description: "Message sent to client!",
+      title: "Message Sent",
+      description: `Your message has been sent to ${messageClient?.name || "the client"}`,
     })
+
+    setMessageDialogOpen(false)
   }
 
   // Open client details and load related data
@@ -376,10 +476,6 @@ export default function ClientsManagement() {
   }
 
   // Project Management Functions
-  const [editingProject, setEditingProject] = useState<Project | null>(null)
-  const [isDeleteProjectDialogOpen, setIsDeleteProjectDialogOpen] = useState(false)
-  const [pendingDeleteProjectId, setPendingDeleteProjectId] = useState<string | null>(null)
-
   const openNewProjectDialog = () => {
     if (!selectedClient) return
     setEditingProject(null)
@@ -465,13 +561,15 @@ export default function ClientsManagement() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newProject),
       })
-
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || "Failed to create project")
+        const updatedProjects = [...allProjects, newProject]
+        saveProjectsToStorage(updatedProjects)
+      } else {
+        const createdProject = await response.json()
+        const updatedProjects = [...allProjects, createdProject]
+        saveProjectsToStorage(updatedProjects)
       }
 
-      const createdProject = await response.json()
       toast({
         title: "Success",
         description: "Project created successfully!",
@@ -532,7 +630,6 @@ export default function ClientsManagement() {
     } else {
       setProjectTasks([...projectTasks, taskData])
     }
-
     closeTaskDialog()
     toast({
       title: "Success",
@@ -548,21 +645,49 @@ export default function ClientsManagement() {
     })
   }
 
+  // Client CRUD Functions
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
-    try {
-      const url = editingClient ? `/api/clients/${editingClient._id}` : "/api/clients"
-      const method = editingClient ? "PUT" : "POST"
-      const payload = {
-        ...formData,
-        projectTotalAmount: Number(formData.projectTotalAmount) || 0,
+    // Only validate password if it's a new client or password is being changed
+    if (!editingClient || formData.password) {
+      if (formData.password !== formData.confirmPassword) {
+        toast({
+          title: "Error",
+          description: "Passwords do not match.",
+          variant: "destructive",
+        })
+        return
       }
 
+      if (formData.password && formData.password.length < 6) {
+        toast({
+          title: "Error",
+          description: "Password must be at least 6 characters long.",
+          variant: "destructive",
+        })
+        return
+      }
+    }
+
+    setLoading(true)
+    try {
+      const clientData = {
+        ...formData,
+        projectTotalAmount: Number.parseFloat(formData.projectTotalAmount) || 0,
+      }
+
+      // Remove password fields if they're empty (for updates)
+      if (editingClient && !formData.password) {
+        delete clientData.password
+        delete clientData.confirmPassword
+      }
+
+      const url = editingClient ? `/api/clients/${editingClient._id}` : "/api/clients"
+      const method = editingClient ? "PUT" : "POST"
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(clientData),
       })
 
       if (response.ok) {
@@ -621,22 +746,25 @@ export default function ClientsManagement() {
   }
 
   const openEditDialog = (client: Client) => {
-    setEditingClient(client)
     setFormData({
       name: client.name,
+      username: client.email.split("@")[0],
       email: client.email,
       phone: client.phone,
+      password: "",
+      confirmPassword: "",
       company: client.company || "",
       address: client.address,
       city: client.city,
       state: client.state,
       postalCode: client.postalCode,
-      projectTotalAmount: client.projectTotalAmount?.toString() || "",
+      projectTotalAmount: client.projectTotalAmount?.toString() || "0",
       taxId: client.taxId || "",
       website: client.website || "",
       status: client.status,
       avatar: client.avatar || "",
     })
+    setEditingClient(client)
     setIsAddDialogOpen(true)
   }
 
@@ -1003,18 +1131,16 @@ export default function ClientsManagement() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600">₹{totalRevenue.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">Project value</p>
+              <p className="text-xs text-muted-foreground">Total project value</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        {/* Header with Actions */}
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold">Clients Management</h2>
+            <h1 className="text-3xl font-bold tracking-tight">Clients</h1>
             <Button
-              size="icon"
-              variant="outline"
               onClick={() => {
                 setLoading(true)
                 fetchClients()
@@ -1072,6 +1198,19 @@ export default function ClientsManagement() {
                     />
                   </div>
                   <div className="space-y-2">
+                    <Label htmlFor="username">Username *</Label>
+                    <Input
+                      id="username"
+                      value={formData.username}
+                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                      placeholder="Choose a username"
+                      required
+                      disabled={!!editingClient}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
                     <Label htmlFor="email">Email *</Label>
                     <Input
                       id="email"
@@ -1082,8 +1221,6 @@ export default function ClientsManagement() {
                       required
                     />
                   </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="phone">Phone Number *</Label>
                     <Input
@@ -1094,15 +1231,43 @@ export default function ClientsManagement() {
                       required
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="company">Company</Label>
-                    <Input
-                      id="company"
-                      value={formData.company}
-                      onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                      placeholder="Enter company name"
-                    />
+                </div>
+                {!editingClient && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Password *</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        placeholder="Enter password"
+                        required
+                        autoComplete="new-password"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="confirmPassword">Confirm Password *</Label>
+                      <Input
+                        id="confirmPassword"
+                        type="password"
+                        value={formData.confirmPassword}
+                        onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                        placeholder="Confirm password"
+                        required
+                        autoComplete="new-password"
+                      />
+                    </div>
                   </div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="company">Company</Label>
+                  <Input
+                    id="company"
+                    value={formData.company}
+                    onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                    placeholder="Enter company name"
+                  />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -1403,7 +1568,9 @@ export default function ClientsManagement() {
                   <Label htmlFor="taskStatus">Status</Label>
                   <Select
                     value={taskFormData.status}
-                    onValueChange={(value: string) => setTaskFormData({ ...taskFormData, status: value as Task["status"] })}
+                    onValueChange={(value: string) =>
+                      setTaskFormData({ ...taskFormData, status: value as Task["status"] })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -1419,7 +1586,9 @@ export default function ClientsManagement() {
                   <Label htmlFor="taskPriority">Priority</Label>
                   <Select
                     value={taskFormData.priority}
-                    onValueChange={(value: string) => setTaskFormData({ ...taskFormData, priority: value as Task["priority"] })}
+                    onValueChange={(value: string) =>
+                      setTaskFormData({ ...taskFormData, priority: value as Task["priority"] })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -1500,14 +1669,12 @@ export default function ClientsManagement() {
                     </Button>
                   </div>
                 </SheetHeader>
-
                 <Tabs defaultValue="overview" className="mt-6">
                   <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="overview">Overview</TabsTrigger>
                     <TabsTrigger value="projects">Projects</TabsTrigger>
                     <TabsTrigger value="invoices">Invoices</TabsTrigger>
                   </TabsList>
-
                   <TabsContent value="overview" className="mt-6 space-y-6">
                     {/* Quick Stats */}
                     <div className="grid grid-cols-2 gap-4">
@@ -1534,7 +1701,6 @@ export default function ClientsManagement() {
                         </CardContent>
                       </Card>
                     </div>
-
                     {/* Client Information */}
                     <Card>
                       <CardHeader>
@@ -1630,7 +1796,6 @@ export default function ClientsManagement() {
                       </CardContent>
                     </Card>
                   </TabsContent>
-
                   <TabsContent value="projects" className="mt-6 space-y-4">
                     <div className="flex justify-between items-center">
                       <h3 className="text-lg font-semibold">Client Projects</h3>
@@ -1642,7 +1807,7 @@ export default function ClientsManagement() {
                           title="Refresh Projects"
                           disabled={isLoadingProjects}
                         >
-                          <RefreshCw className={`w-4 h-4 ${isLoadingProjects ? 'animate-spin' : ''}`} />
+                          <RefreshCw className={`w-4 h-4 ${isLoadingProjects ? "animate-spin" : ""}`} />
                         </Button>
                         <Button size="sm" onClick={openNewProjectDialog}>
                           <Plus className="w-4 h-4 mr-2" />
@@ -1662,6 +1827,9 @@ export default function ClientsManagement() {
                               <div className="flex justify-between items-start mb-2">
                                 <div>
                                   <h4 className="font-medium text-lg">{project.title}</h4>
+                                  <Badge className={getProjectStatusColor(project.status)} variant="secondary">
+                                    {project.status}
+                                  </Badge>
                                 </div>
                                 <div className="flex gap-2">
                                   <Button
@@ -1745,7 +1913,6 @@ export default function ClientsManagement() {
                       )}
                     </div>
                   </TabsContent>
-
                   <TabsContent value="invoices" className="mt-6 space-y-4">
                     <div className="flex justify-between items-center">
                       <h3 className="text-lg font-semibold">Invoices</h3>

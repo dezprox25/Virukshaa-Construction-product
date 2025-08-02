@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { Types } from "mongoose";
+import bcrypt from 'bcryptjs';
 import connectToDB from "@/lib/db";
 import Client, { IClient } from "@/models/ClientModel";
 
@@ -31,7 +32,8 @@ export async function GET(
     }
 
     await connectToDB();
-    const client = await Client.findById(id).lean().exec();
+    // Explicitly include the password field
+    const client = await Client.findById(id).select('+password').lean().exec();
 
     if (!client) {
       return NextResponse.json({ message: 'Client not found' }, { status: 404 });
@@ -57,6 +59,46 @@ export async function PUT(
 
     const body = await request.json();
 
+    // Check if client exists
+    await connectToDB();
+    const existingClient = await Client.findById(id);
+    if (!existingClient) {
+      return NextResponse.json({ message: 'Client not found' }, { status: 404 });
+    }
+
+    // Check if username is being updated and if it's already taken
+    if (body.username && body.username !== existingClient.username) {
+      const usernameExists = await Client.findOne({ username: body.username });
+      if (usernameExists) {
+        return NextResponse.json(
+          { message: 'Username already exists' },
+          { status: 400 }
+        );
+      }
+    } else if (!body.username) {
+      // If username is not provided, keep the existing one
+      body.username = existingClient.username;
+    }
+
+    // Handle password update if provided
+    if (body.password) {
+      if (body.password.length < 6) {
+        return NextResponse.json(
+          { message: 'Password must be at least 6 characters long' },
+          { status: 400 }
+        );
+      }
+      const salt = await bcrypt.genSalt(10);
+      body.password = await bcrypt.hash(body.password, salt);
+    } else if (body.password === '') {
+      // If password is explicitly set to empty string, use a default one
+      const salt = await bcrypt.genSalt(10);
+      body.password = await bcrypt.hash('password123', salt);
+    } else {
+      // Remove password from body if not being updated
+      delete body.password;
+    }
+
     // Convert date strings to Date objects
     if (body.lastPaymentDate && typeof body.lastPaymentDate === 'string') {
       body.lastPaymentDate = new Date(body.lastPaymentDate);
@@ -65,9 +107,9 @@ export async function PUT(
     // Create a clean update object with only allowed fields
     const updateData: Partial<IClient> = {};
     const allowedFields: (keyof IClient)[] = [
-      'name', 'email', 'phone', 'company', 'address', 'city', 'state',
+      'name', 'username', 'email', 'phone', 'company', 'address', 'city', 'state',
       'postalCode', 'taxId', 'website', 'status', 'projectTotalAmount',
-      'totalPaid', 'dueAmount', 'lastPaymentDate', 'avatar'
+      'totalPaid', 'dueAmount', 'lastPaymentDate', 'avatar', 'password'
     ];
 
     allowedFields.forEach(field => {
@@ -75,6 +117,11 @@ export async function PUT(
         (updateData as any)[field] = body[field];
       }
     });
+
+    // If projectTotalAmount is updated, update dueAmount accordingly
+    if (body.projectTotalAmount !== undefined) {
+      updateData.dueAmount = Number(body.projectTotalAmount) - (existingClient.totalPaid || 0);
+    }
 
     await connectToDB();
     const updatedClient = await Client.findByIdAndUpdate(

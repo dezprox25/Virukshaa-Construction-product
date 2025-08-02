@@ -1,5 +1,4 @@
 "use client"
-
 import type React from "react"
 import { useState, useEffect } from "react"
 import { format } from "date-fns"
@@ -12,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { Calendar as CalendarIcon, Check, ChevronsUpDown } from "lucide-react"
+import { CalendarIcon, Check, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import {
@@ -45,19 +44,26 @@ import {
   MapPin,
   Search,
   Filter,
-  Briefcase,
   CreditCard,
   Grid3X3,
   List,
   RefreshCw,
-  Users,
   Building2,
   CheckCircle,
   XCircle,
   Package,
   UserCheck,
-  Calendar
+  Calendar,
+  FileText,
+  Clock,
+  TrendingUp,
+  ShoppingCart,
+  DollarSign,
 } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { X } from "lucide-react"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 
 interface Supplier {
   _id: string
@@ -67,14 +73,24 @@ interface Supplier {
   phone: string
   materialTypes: string[]
   supplyStartDate?: string
-  paymentType: 'Cash' | 'Credit'
+  paymentType: "Cash" | "Credit"
   address: string
-  status: 'Active' | 'Inactive'
+  status: "Active" | "Inactive"
   avatar?: string
   username?: string
   password?: string
   createdAt: string
   updatedAt: string
+}
+
+interface Transaction {
+  id: string
+  date: string
+  type: "Order" | "Payment" | "Delivery"
+  amount: number
+  status: "Pending" | "Completed" | "Cancelled"
+  reference: string
+  description?: string
 }
 
 const initialFormData = {
@@ -86,9 +102,9 @@ const initialFormData = {
   phone: "",
   materialTypes: [] as string[],
   supplyStartDate: undefined as Date | undefined,
-  paymentType: 'Credit' as 'Cash' | 'Credit',
+  paymentType: "Credit" as "Cash" | "Credit",
   address: "",
-  status: 'Active' as 'Active' | 'Inactive',
+  status: "Active" as "Active" | "Inactive",
   avatar: "",
 }
 
@@ -111,7 +127,15 @@ export default function SuppliersManagement() {
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null)
   const [loading, setLoading] = useState(true)
   const [formData, setFormData] = useState(initialFormData)
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false)
+  const [isDetailViewOpen, setIsDetailViewOpen] = useState(false)
+  const [isDetailSheetOpen, setIsDetailSheetOpen] = useState(false)
+  const [projects, setProjects] = useState<any[]>([])
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([])
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false)
 
   useEffect(() => {
     fetchSuppliers()
@@ -119,8 +143,8 @@ export default function SuppliersManagement() {
 
   const fetchSuppliers = async () => {
     try {
-      const response = await fetch("/api/suppliers", { cache: 'no-store' })
-      if (!response.ok) throw new Error('Failed to fetch suppliers')
+      const response = await fetch("/api/suppliers", { cache: "no-store" })
+      if (!response.ok) throw new Error("Failed to fetch suppliers")
       const data = await response.json()
       setSuppliers(data)
     } catch (error) {
@@ -132,29 +156,29 @@ export default function SuppliersManagement() {
   }
 
   const handleFormChange = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
+    setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
   const handleMaterialSelect = (material: string) => {
-    setFormData(prev => {
+    setFormData((prev) => {
       const newMaterials = prev.materialTypes.includes(material)
-        ? prev.materialTypes.filter(m => m !== material)
-        : [...prev.materialTypes, material];
-      return { ...prev, materialTypes: newMaterials };
-    });
-  };
+        ? prev.materialTypes.filter((m) => m !== material)
+        : [...prev.materialTypes, material]
+      return { ...prev, materialTypes: newMaterials }
+    })
+  }
 
   const handleMaterialCreate = () => {
-    if (materialInputValue && !materialOptions.some(option => option.value === materialInputValue)) {
-      const newOption = { value: materialInputValue, label: materialInputValue };
-      setMaterialOptions([...materialOptions, newOption]);
-      setFormData(prev => ({
+    if (materialInputValue && !materialOptions.some((option) => option.value === materialInputValue)) {
+      const newOption = { value: materialInputValue, label: materialInputValue }
+      setMaterialOptions([...materialOptions, newOption])
+      setFormData((prev) => ({
         ...prev,
-        materialTypes: [...prev.materialTypes, newOption.value]
-      }));
-      setMaterialInputValue('');
+        materialTypes: [...prev.materialTypes, newOption.value],
+      }))
+      setMaterialInputValue("")
     }
-  };
+  }
 
   const resetForm = () => {
     setFormData(initialFormData)
@@ -176,11 +200,9 @@ export default function SuppliersManagement() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-
     try {
       const url = editingSupplier ? `/api/suppliers/${editingSupplier._id}` : "/api/suppliers"
       const method = editingSupplier ? "PUT" : "POST"
-
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
@@ -189,7 +211,6 @@ export default function SuppliersManagement() {
           supplyStartDate: formData.supplyStartDate?.toISOString(),
         }),
       })
-
       if (response.ok) {
         await fetchSuppliers()
         setIsAddDialogOpen(false)
@@ -218,8 +239,82 @@ export default function SuppliersManagement() {
     }
   }
 
+  const handleSupplierClick = (supplier: Supplier) => {
+    setSelectedSupplier(supplier)
+    setIsDetailSheetOpen(true)
+    fetchSupplierTransactions(supplier._id)
+  }
+
+  const fetchProjects = async () => {
+    setIsLoadingProjects(true);
+    try {
+      const response = await fetch('/api/projects');
+      if (!response.ok) throw new Error('Failed to fetch projects');
+      const data = await response.json();
+      setProjects(data);
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+      toast.error('Failed to load projects');
+    } finally {
+      setIsLoadingProjects(false);
+    }
+  };
+
+  const handleProjectSelect = (projectId: string) => {
+    // Add the project if it's not already selected
+    if (!selectedProjects.includes(projectId)) {
+      setSelectedProjects(prev => [...prev, projectId]);
+    }
+  };
+  
+  const removeProject = (projectId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedProjects(prev => prev.filter(id => id !== projectId));
+  };
+
+  const fetchSupplierTransactions = async (supplierId: string) => {
+    setIsLoadingTransactions(true);
+    try {
+      // Fetch projects when opening the detail view
+      await fetchProjects();
+      
+      // If you want to load the supplier's current projects, you would do it here
+      // For now, we'll just clear any selected projects
+      setSelectedProjects([]);
+      
+      // Mock transactions data
+      const mockTransactions: Transaction[] = [
+        {
+          id: "1",
+          date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+          type: "Payment",
+          amount: 12500,
+          status: "Completed",
+          reference: "PAY-2023-001",
+          description: "Payment for cement delivery",
+        },
+        {
+          id: "2",
+          date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+          type: "Order",
+          amount: 18750,
+          status: "Completed",
+          reference: "ORD-2023-045",
+          description: "Bulk cement order",
+        },
+      ];
+      
+      setTransactions(mockTransactions);
+    } catch (error) {
+      console.error("Error loading supplier data:", error);
+      toast.error("Failed to load supplier data");
+    } finally {
+      setIsLoadingTransactions(false);
+    }
+  }
+
   const filteredSuppliers = suppliers.filter((supplier: Supplier) => {
-    const matchesSearch = 
+    const matchesSearch =
       supplier.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       supplier.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
       supplier.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -239,12 +334,24 @@ export default function SuppliersManagement() {
     }
   }
 
+  const getTransactionStatusColor = (status: string) => {
+    switch (status) {
+      case "Completed":
+        return "bg-green-100 text-green-800"
+      case "Pending":
+        return "bg-yellow-100 text-yellow-800"
+      case "Cancelled":
+        return "bg-red-100 text-red-800"
+      default:
+        return "bg-gray-100 text-gray-800"
+    }
+  }
+
   // Calculate statistics
   const totalSuppliers = suppliers.length
-  const activeSuppliers = suppliers.filter(supplier => supplier.status === 'Active').length
-  const inactiveSuppliers = suppliers.filter(supplier => supplier.status === 'Inactive').length
-  const creditSuppliers = suppliers.filter(supplier => supplier.paymentType === 'Credit').length
-  const activeRate = totalSuppliers > 0 ? Math.round((activeSuppliers / totalSuppliers) * 100) : 0
+  const activeSuppliers = suppliers.filter((supplier) => supplier.status === "Active").length
+  const inactiveSuppliers = suppliers.filter((supplier) => supplier.status === "Inactive").length
+  const creditSuppliers = suppliers.filter((supplier) => supplier.paymentType === "Credit").length
 
   if (loading && suppliers.length === 0) {
     return (
@@ -260,12 +367,19 @@ export default function SuppliersManagement() {
   const renderGridView = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {filteredSuppliers.map((supplier) => (
-        <Card key={supplier._id} className="hover:shadow-lg transition-shadow">
+        <Card
+          key={supplier._id}
+          className="hover:shadow-lg transition-shadow cursor-pointer"
+          onClick={() => handleSupplierClick(supplier)}
+        >
           <CardContent className="p-6">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
                 <Avatar className="h-12 w-12">
-                  <AvatarImage src={supplier.avatar || `https://avatar.vercel.sh/${supplier.email}.png`} alt={supplier.companyName} />
+                  <AvatarImage
+                    src={supplier.avatar || `https://avatar.vercel.sh/${supplier.email}.png`}
+                    alt={supplier.companyName}
+                  />
                   <AvatarFallback>
                     {supplier.companyName
                       .split(" ")
@@ -277,7 +391,7 @@ export default function SuppliersManagement() {
                   <h3 className="font-semibold text-lg">{supplier.companyName}</h3>
                   <div className="flex items-center gap-2 mt-1">
                     <Badge className={getStatusColor(supplier.status)} variant="secondary">
-                      {supplier.status === 'Active' ? (
+                      {supplier.status === "Active" ? (
                         <CheckCircle className="w-3 h-3 mr-1" />
                       ) : (
                         <XCircle className="w-3 h-3 mr-1" />
@@ -287,11 +401,14 @@ export default function SuppliersManagement() {
                   </div>
                 </div>
               </div>
-              <Badge className={supplier.paymentType === 'Credit' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}>
+              <Badge
+                className={
+                  supplier.paymentType === "Credit" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"
+                }
+              >
                 {supplier.paymentType}
               </Badge>
             </div>
-
             <div className="space-y-2 mb-4">
               <div className="flex items-center gap-2 text-sm">
                 <UserCheck className="w-4 h-4 text-muted-foreground" />
@@ -301,10 +418,6 @@ export default function SuppliersManagement() {
                 <Phone className="w-4 h-4 text-muted-foreground" />
                 <span>{supplier.phone}</span>
               </div>
-              {/* <div className="flex items-center gap-2 text-sm">
-                <Mail className="w-4 h-4 text-muted-foreground" />
-                <span>{supplier.email}</span>
-              </div> */}
               <div className="flex items-center gap-2 text-sm">
                 <MapPin className="w-4 h-4 text-muted-foreground" />
                 <span>{supplier.address}</span>
@@ -320,7 +433,6 @@ export default function SuppliersManagement() {
                 </div>
               )}
             </div>
-
             {supplier.materialTypes && supplier.materialTypes.length > 0 && (
               <div className="mb-4">
                 <p className="text-sm font-medium mb-2">Materials:</p>
@@ -338,8 +450,7 @@ export default function SuppliersManagement() {
                 </div>
               </div>
             )}
-
-            <div className="flex gap-2">
+            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
               <Button
                 variant="outline"
                 size="sm"
@@ -349,10 +460,6 @@ export default function SuppliersManagement() {
                 <Edit className="w-4 h-4 mr-2" />
                 Edit
               </Button>
-              {/* <Button variant="outline" size="sm" className="flex-1 bg-transparent">
-                <Mail className="w-4 h-4 mr-2" />
-                Contact
-              </Button> */}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="destructive" size="sm">
@@ -396,11 +503,18 @@ export default function SuppliersManagement() {
           </TableHeader>
           <TableBody>
             {filteredSuppliers.map((supplier) => (
-              <TableRow key={supplier._id}>
+              <TableRow
+                key={supplier._id}
+                className="cursor-pointer hover:bg-muted/50"
+                onClick={() => handleSupplierClick(supplier)}
+              >
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <Avatar className="h-10 w-10">
-                      <AvatarImage src={supplier.avatar || `https://avatar.vercel.sh/${supplier.email}.png`} alt={supplier.companyName} />
+                      <AvatarImage
+                        src={supplier.avatar || `https://avatar.vercel.sh/${supplier.email}.png`}
+                        alt={supplier.companyName}
+                      />
                       <AvatarFallback>
                         {supplier.companyName
                           .split(" ")
@@ -418,7 +532,11 @@ export default function SuppliersManagement() {
                   <div className="font-medium">{supplier.contactPerson}</div>
                 </TableCell>
                 <TableCell>
-                  <Badge className={supplier.paymentType === 'Credit' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}>
+                  <Badge
+                    className={
+                      supplier.paymentType === "Credit" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"
+                    }
+                  >
                     {supplier.paymentType}
                   </Badge>
                 </TableCell>
@@ -427,7 +545,7 @@ export default function SuppliersManagement() {
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1 max-w-xs">
-                    {supplier.materialTypes.slice(0, 2).map(material => (
+                    {supplier.materialTypes.slice(0, 2).map((material) => (
                       <Badge key={material} variant="outline" className="text-xs">
                         {material}
                       </Badge>
@@ -446,17 +564,10 @@ export default function SuppliersManagement() {
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openEditDialog(supplier)}
-                    >
+                  <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                    <Button variant="outline" size="sm" onClick={() => openEditDialog(supplier)}>
                       <Edit className="w-4 h-4" />
                     </Button>
-                    {/* <Button variant="outline" size="sm">
-                      <Mail className="w-4 h-4" />
-                    </Button> */}
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="destructive" size="sm">
@@ -497,12 +608,9 @@ export default function SuppliersManagement() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totalSuppliers}</div>
-            <p className="text-xs text-muted-foreground">
-              Registered suppliers
-            </p>
+            <p className="text-xs text-muted-foreground">Registered suppliers</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Suppliers</CardTitle>
@@ -510,12 +618,9 @@ export default function SuppliersManagement() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{activeSuppliers}</div>
-            <p className="text-xs text-muted-foreground">
-              Currently active
-            </p>
+            <p className="text-xs text-muted-foreground">Currently active</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Inactive Suppliers</CardTitle>
@@ -523,12 +628,9 @@ export default function SuppliersManagement() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">{inactiveSuppliers}</div>
-            <p className="text-xs text-muted-foreground">
-              Currently inactive
-            </p>
+            <p className="text-xs text-muted-foreground">Currently inactive</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Credit Suppliers</CardTitle>
@@ -536,9 +638,7 @@ export default function SuppliersManagement() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">{creditSuppliers}</div>
-            <p className="text-xs text-muted-foreground">
-              Credit payment terms
-            </p>
+            <p className="text-xs text-muted-foreground">Credit payment terms</p>
           </CardContent>
         </Card>
       </div>
@@ -550,15 +650,27 @@ export default function SuppliersManagement() {
           <Button
             size="icon"
             variant="outline"
-            onClick={() => { setLoading(true); fetchSuppliers(); }}
+            onClick={() => {
+              setLoading(true)
+              fetchSuppliers()
+            }}
             className="ml-2"
             disabled={loading}
             title="Refresh suppliers"
           >
             {loading ? (
-              <svg className="animate-spin h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <svg
+                className="animate-spin h-5 w-5 text-blue-600"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l5-5-5-5v4a10 10 0 00-10 10h4z"></path>
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8v4l5-5-5-5v4a10 10 0 00-10 10h4z"
+                ></path>
               </svg>
             ) : (
               <RefreshCw className="w-5 h-5" />
@@ -573,6 +685,7 @@ export default function SuppliersManagement() {
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            {/* Keep existing dialog content */}
             <DialogHeader>
               <DialogTitle>{editingSupplier ? "Edit Supplier" : "Add New Supplier"}</DialogTitle>
               <DialogDescription>
@@ -580,13 +693,14 @@ export default function SuppliersManagement() {
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Keep all existing form content */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="companyName">Company Name *</Label>
                   <Input
                     id="companyName"
                     value={formData.companyName}
-                    onChange={(e) => handleFormChange('companyName', e.target.value)}
+                    onChange={(e) => handleFormChange("companyName", e.target.value)}
                     placeholder="Enter company name"
                     required
                   />
@@ -596,7 +710,7 @@ export default function SuppliersManagement() {
                   <Input
                     id="contactPerson"
                     value={formData.contactPerson}
-                    onChange={(e) => handleFormChange('contactPerson', e.target.value)}
+                    onChange={(e) => handleFormChange("contactPerson", e.target.value)}
                     placeholder="Enter contact person name"
                     required
                   />
@@ -609,7 +723,7 @@ export default function SuppliersManagement() {
                     id="email"
                     type="email"
                     value={formData.email}
-                    onChange={(e) => handleFormChange('email', e.target.value)}
+                    onChange={(e) => handleFormChange("email", e.target.value)}
                     placeholder="Enter email address"
                     required
                   />
@@ -619,7 +733,7 @@ export default function SuppliersManagement() {
                   <Input
                     id="phone"
                     value={formData.phone}
-                    onChange={(e) => handleFormChange('phone', e.target.value)}
+                    onChange={(e) => handleFormChange("phone", e.target.value)}
                     placeholder="Enter phone number"
                     required
                   />
@@ -629,7 +743,7 @@ export default function SuppliersManagement() {
                   <Input
                     id="username"
                     value={formData.username}
-                    onChange={(e) => handleFormChange('username', e.target.value)}
+                    onChange={(e) => handleFormChange("username", e.target.value)}
                     placeholder="Enter username"
                     required
                   />
@@ -640,35 +754,36 @@ export default function SuppliersManagement() {
                     id="password"
                     type="password"
                     value={formData.password}
-                    onChange={(e) => handleFormChange('password', e.target.value)}
+                    onChange={(e) => handleFormChange("password", e.target.value)}
                     placeholder="Enter password"
                     required={!editingSupplier}
                   />
-                  {editingSupplier && <p className="text-xs text-muted-foreground">Leave blank to keep current password</p>}
+                  {editingSupplier && (
+                    <p className="text-xs text-muted-foreground">Leave blank to keep current password</p>
+                  )}
                 </div>
-                
-         
               </div>
-
               <div className="space-y-2">
                 <Label>Material Types *</Label>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" role="combobox" className="w-full justify-between">
-                      {formData.materialTypes.length > 0 ? `${formData.materialTypes.length} materials selected` : "Select materials..."}
+                    <Button variant="outline" role="combobox" className="w-full justify-between bg-transparent">
+                      {formData.materialTypes.length > 0
+                        ? `${formData.materialTypes.length} materials selected`
+                        : "Select materials..."}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                  <PopoverContent className="w-(--radix-popover-trigger-width) p-0">
                     <Command>
-                      <CommandInput 
+                      <CommandInput
                         placeholder="Search or create..."
                         value={materialInputValue}
                         onValueChange={setMaterialInputValue}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleMaterialCreate();
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            handleMaterialCreate()
                           }
                         }}
                       />
@@ -680,11 +795,13 @@ export default function SuppliersManagement() {
                         </CommandEmpty>
                         <CommandGroup>
                           {materialOptions.map((material) => (
-                            <CommandItem
-                              key={material.value}
-                              onSelect={() => handleMaterialSelect(material.value)}
-                            >
-                              <Check className={cn("mr-2 h-4 w-4", formData.materialTypes.includes(material.value) ? "opacity-100" : "opacity-0")} />
+                            <CommandItem key={material.value} onSelect={() => handleMaterialSelect(material.value)}>
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  formData.materialTypes.includes(material.value) ? "opacity-100" : "opacity-0",
+                                )}
+                              />
                               {material.label}
                             </CommandItem>
                           ))}
@@ -694,14 +811,13 @@ export default function SuppliersManagement() {
                   </PopoverContent>
                 </Popover>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="paymentType">Payment Type *</Label>
                   <select
                     id="paymentType"
                     value={formData.paymentType}
-                    onChange={(e) => handleFormChange('paymentType', e.target.value)}
+                    onChange={(e) => handleFormChange("paymentType", e.target.value)}
                     className="w-full p-2 border rounded-md"
                     required
                   >
@@ -713,25 +829,35 @@ export default function SuppliersManagement() {
                   <Label>Supply Start Date (Optional)</Label>
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !formData.supplyStartDate && "text-muted-foreground")}>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !formData.supplyStartDate && "text-muted-foreground",
+                        )}
+                      >
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {formData.supplyStartDate ? format(formData.supplyStartDate, "PPP") : <span>Pick a date</span>}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0">
-                      <CalendarComponent mode="single" selected={formData.supplyStartDate} onSelect={(date) => handleFormChange('supplyStartDate', date)} initialFocus />
+                      <CalendarComponent
+                        mode="single"
+                        selected={formData.supplyStartDate}
+                        onSelect={(date) => handleFormChange("supplyStartDate", date)}
+                        initialFocus
+                      />
                     </PopoverContent>
                   </Popover>
                 </div>
               </div>
-
               {editingSupplier && (
                 <div className="space-y-2">
                   <Label htmlFor="status">Status *</Label>
                   <select
                     id="status"
                     value={formData.status}
-                    onChange={(e) => handleFormChange('status', e.target.value)}
+                    onChange={(e) => handleFormChange("status", e.target.value)}
                     className="w-full p-2 border rounded-md"
                     required
                   >
@@ -740,13 +866,12 @@ export default function SuppliersManagement() {
                   </select>
                 </div>
               )}
-
               <div className="space-y-2">
                 <Label htmlFor="address">Address *</Label>
                 <Textarea
                   id="address"
                   value={formData.address}
-                  onChange={(e) => handleFormChange('address', e.target.value)}
+                  onChange={(e) => handleFormChange("address", e.target.value)}
                   placeholder="Enter company address"
                   rows={3}
                   required
@@ -774,7 +899,7 @@ export default function SuppliersManagement() {
       </div>
 
       {/* Filters and View Toggle */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between mb-6">
         <div className="flex flex-col sm:flex-row gap-4 flex-1">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
@@ -801,21 +926,20 @@ export default function SuppliersManagement() {
             {filteredSuppliers.length} Total
           </Badge>
         </div>
-
         {/* View Toggle */}
         <div className="flex items-center gap-2 bg-muted p-1 rounded-lg">
           <Button
-            variant={viewMode === 'grid' ? 'default' : 'ghost'}
+            variant={viewMode === "grid" ? "default" : "ghost"}
             size="sm"
-            onClick={() => setViewMode('grid')}
+            onClick={() => setViewMode("grid")}
             className="h-8 px-3"
           >
             <Grid3X3 className="w-4 h-4" />
           </Button>
           <Button
-            variant={viewMode === 'list' ? 'default' : 'ghost'}
+            variant={viewMode === "list" ? "default" : "ghost"}
             size="sm"
-            onClick={() => setViewMode('list')}
+            onClick={() => setViewMode("list")}
             className="h-8 px-3"
           >
             <List className="w-4 h-4" />
@@ -824,7 +948,7 @@ export default function SuppliersManagement() {
       </div>
 
       {/* Suppliers Display */}
-      {viewMode === 'grid' ? renderGridView() : renderListView()}
+      {viewMode === "grid" ? renderGridView() : renderListView()}
 
       {filteredSuppliers.length === 0 && (
         <div className="text-center py-12">
@@ -843,6 +967,303 @@ export default function SuppliersManagement() {
           )}
         </div>
       )}
+
+      {/* Supplier Detail Sheet */}
+      <Sheet open={isDetailSheetOpen} onOpenChange={setIsDetailSheetOpen}>
+        <SheetContent className="w-[400px] sm:w-[540px] sm:max-w-none flex flex-col">
+          {selectedSupplier && (
+            <div className="flex flex-col h-full">
+              <SheetHeader className="shrink-0">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-16 w-16">
+                    <AvatarImage
+                      src={selectedSupplier.avatar || `https://avatar.vercel.sh/${selectedSupplier.email}.png`}
+                      alt={selectedSupplier.companyName}
+                    />
+                    <AvatarFallback className="text-xl">
+                      {selectedSupplier.companyName
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <SheetTitle className="text-2xl">{selectedSupplier.companyName}</SheetTitle>
+                    <p className="text-muted-foreground">{selectedSupplier.contactPerson}</p>
+                    <div className="mt-1">
+                      <Badge className={getStatusColor(selectedSupplier.status)} variant="secondary">
+                        {selectedSupplier.status === "Active" ? (
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                        ) : (
+                          <XCircle className="w-3 h-3 mr-1" />
+                        )}
+                        {selectedSupplier.status}
+                      </Badge>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      openEditDialog(selectedSupplier)
+                      setIsDetailSheetOpen(false)
+                    }}
+                  >
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit
+                  </Button>
+                </div>
+              </SheetHeader>
+
+              <Tabs defaultValue="overview" className="mt-6 flex flex-col h-[calc(100%-100px)]">
+                <TabsList className="grid w-full grid-cols-3 mb-4">
+                  <TabsTrigger value="overview">Overview</TabsTrigger>
+                  <TabsTrigger value="transactions">Transactions</TabsTrigger>
+                  <TabsTrigger value="materials">Materials</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="overview" className="flex-1 overflow-y-auto pr-2 space-y-6">
+                  {/* Quick Stats */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="w-5 h-5 text-blue-600" />
+                          <div>
+                            <p className="text-sm font-medium">Payment Type</p>
+                            <p className="text-xs text-muted-foreground">{selectedSupplier.paymentType}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-5 h-5 text-green-600" />
+                          <div>
+                            <p className="text-sm font-medium">Supply Started</p>
+                            <p className="text-xs text-muted-foreground">
+                              {selectedSupplier.supplyStartDate
+                                ? format(new Date(selectedSupplier.supplyStartDate), "MMM yyyy")
+                                : "N/A"}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Company Information */}
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-lg">Company Information</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="flex items-center gap-3">
+                          <Mail className="w-5 h-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">Email</p>
+                            <p className="text-sm text-muted-foreground">{selectedSupplier.email}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Phone className="w-5 h-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">Phone</p>
+                            <p className="text-sm text-muted-foreground">{selectedSupplier.phone}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <MapPin className="w-5 h-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">Address</p>
+                            <p className="text-sm text-muted-foreground">{selectedSupplier.address}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <UserCheck className="w-5 h-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">Contact Person</p>
+                            <p className="text-sm text-muted-foreground">{selectedSupplier.contactPerson}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Calendar className="w-5 h-5 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm font-medium">Registered</p>
+                            <p className="text-sm text-muted-foreground">
+                              {format(new Date(selectedSupplier.createdAt), "PPP")}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="transactions" className="flex-1 overflow-y-auto pr-2 space-y-4">
+                  <div>
+                    <h4 className="text-lg font-semibold mb-4">Project Assignment</h4>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <div className="space-y-2">
+                          <Label htmlFor="project-select" className="block text-sm font-medium mb-2">
+                            Select Projects
+                          </Label>
+                          
+                          {/* Selected Projects Badges */}
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            {selectedProjects.map(projectId => {
+                              const project = projects.find(p => p._id === projectId);
+                              if (!project) return null;
+                              
+                              return (
+                                <div 
+                                  key={project._id} 
+                                  className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded-md bg-muted text-muted-foreground"
+                                >
+                                  {project.title}
+                                  <button 
+                                    type="button"
+                                    onClick={(e) => removeProject(project._id, e)}
+                                    className="ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          
+                          <Select 
+                            onValueChange={handleProjectSelect}
+                            value=""
+                            disabled={isLoadingProjects}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder={isLoadingProjects ? "Loading projects..." : "Add a project"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {projects
+                                .filter(project => !selectedProjects.includes(project._id))
+                                .map((project) => (
+                                  <SelectItem key={project._id} value={project._id}>
+                                    {project.title}
+                                  </SelectItem>
+                                ))}
+                              
+                              {!isLoadingProjects && projects.length === selectedProjects.length && (
+                                <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                                  No more projects available
+                                </div>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      {selectedProjects.length > 0 && (
+                        <div className="space-y-4 mt-4">
+                          <h5 className="font-medium">Selected Projects Details:</h5>
+                          <div className="space-y-3">
+                            {selectedProjects.map(projectId => {
+                              const project = projects.find(p => p._id === projectId);
+                              if (!project) return null;
+                              
+                              return (
+                                <div key={project._id} className="p-3 bg-muted/20 rounded-lg border">
+                                  <div className="flex justify-between items-start">
+                                    <div>
+                                      <p className="font-medium">{project.title}</p>
+                                      {project.description && (
+                                        <p className="text-sm text-muted-foreground mt-1">
+                                          {project.description}
+                                        </p>
+                                      )}
+                                      <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+                                        <Calendar className="w-4 h-4 flex-shrink-0" />
+                                        <span>
+                                          {format(new Date(project.startDate || new Date()), 'MMM d, yyyy')}
+                                          {' - '}
+                                          {project.endDate 
+                                            ? format(new Date(project.endDate), 'MMM d, yyyy')
+                                            : 'Present'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="materials" className="flex-1 overflow-y-auto pr-2 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-lg font-semibold">Supplied Materials</h4>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="bg-transparent"
+                      onClick={() => {
+                        openEditDialog(selectedSupplier)
+                        setIsDetailSheetOpen(false)
+                      }}
+                    >
+                      <Edit className="w-4 h-4 mr-2" />
+                      Edit Materials
+                    </Button>
+                  </div>
+
+                  {selectedSupplier.materialTypes.length > 0 ? (
+                    <div className="space-y-3">
+                      {selectedSupplier.materialTypes.map((material, index) => (
+                        <Card key={index}>
+                          <CardContent className="p-4">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 rounded-full bg-blue-100">
+                                <Package className="w-4 h-4 text-blue-600" />
+                              </div>
+                              <div>
+                                <h4 className="font-medium">{material}</h4>
+                                <p className="text-sm text-muted-foreground">Available for supply</p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 border rounded-lg bg-muted/10">
+                      <Package className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+                      <h4 className="font-medium mb-1">No Materials Listed</h4>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        This supplier doesn't have any materials specified yet.
+                      </p>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          openEditDialog(selectedSupplier)
+                          setIsDetailSheetOpen(false)
+                        }}
+                      >
+                        <Edit className="w-4 h-4 mr-2" />
+                        Add Materials
+                      </Button>
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

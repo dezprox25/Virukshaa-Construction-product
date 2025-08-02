@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { Types } from "mongoose";
+import bcrypt from 'bcryptjs';
 import connectToDB from "@/lib/db";
 import Client, { IClient } from "@/models/ClientModel";
 
@@ -40,6 +41,7 @@ export async function GET() {
     const result = clients.map((client: any) => ({
       _id: client._id.toString(),
       name: client.name,
+      username: client.username, // Include username in the response
       email: client.email,
       phone: client.phone || '',
       company: client.company || '',
@@ -76,8 +78,10 @@ export async function POST(request: Request) {
 
     const {
       name,
+      username,
       email,
       phone,
+      password,
       company,
       address,
       city,
@@ -90,22 +94,64 @@ export async function POST(request: Request) {
       avatar
     } = data;
 
+    // Validate required fields
+    if (!username) {
+      return NextResponse.json(
+        { message: 'Username is required' },
+        { status: 400 }
+      );
+    }
+
+    // If password is not provided, use a default one
+    let hashedPassword = '';
+    if (password) {
+      if (password.length < 6) {
+        return NextResponse.json(
+          { message: 'Password must be at least 6 characters long' },
+          { status: 400 }
+        );
+      }
+      const salt = await bcrypt.genSalt(10);
+      hashedPassword = await bcrypt.hash(password, salt);
+    } else {
+      // Set a default password if not provided
+      const salt = await bcrypt.genSalt(10);
+      hashedPassword = await bcrypt.hash('password123', salt);
+    }
+
     await connectToDB();
+
+    // Check if username or email already exists
+    const existingUser = await Client.findOne({
+      $or: [{ username }, { email }]
+    });
+
+    if (existingUser) {
+      return NextResponse.json(
+        { message: 'Username or email already exists' },
+        { status: 400 }
+      );
+    }
 
     const client = new Client({
       name,
+      username,
       email,
       phone,
-      company,
+      password: hashedPassword,
+      company: company || '',
       address,
       city,
       state,
       postalCode,
-      taxId,
-      website,
-      projectTotalAmount,
-      status,
-      avatar
+      taxId: taxId || '',
+      website: website || '',
+      projectTotalAmount: Number(projectTotalAmount) || 0,
+      status: status || 'Active',
+      avatar: avatar || '',
+      totalPaid: 0,
+      dueAmount: Number(projectTotalAmount) || 0,
+      lastPaymentDate: null
     });
 
     await client.save();
