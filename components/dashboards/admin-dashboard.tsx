@@ -1,136 +1,151 @@
 "use client"
-
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { PayrollDetails } from "@/components/payroll/payroll-details"
 import ClientsManagement from "@/components/management/clients-management"
 import DashboardLayout from "@/components/layout/dashboard-layout"
-import { Users, FolderOpen, Truck, UserCheck, DollarSign, FileText, AlertCircle, Info, Eye, Mail, ExternalLink } from "lucide-react"
+import {
+  Users,
+  Truck,
+  UserCheck,
+  DollarSign,
+  FileText,
+  AlertCircle,
+  Info,
+  Eye,
+  Mail,
+  ExternalLink,
+  TrendingUp,
+  TrendingDown,
+  Activity,
+  Clock,
+  CheckCircle,
+  XCircle,
+} from "lucide-react"
 import { ChartContainer, ChartTooltipContent, ChartLegendContent } from "@/components/ui/chart"
 import * as RechartsPrimitive from "recharts"
 import MaterialsManagement from "@/components/management/materials-management"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import SupervisorsManagement from "@/components/management/supervisors-management"
 import SuppliersManagement from "@/components/management/suppliers-management"
 import EmployeesManagement from "@/components/management/employees-management"
 import AllWorkersOverview from "@/components/management/all-workers-overview"
 import UserManagement from "@/components/management/user-management"
-import Reportmanagement from '@/components/management/report-management'
+import Reportmanagement from "@/components/management/report-management"
 import PayrollManagement from "@/components/management/payroll-management"
 import AdminSetting from "@/components/management/admin-setting"
 import { Skeleton } from "@/components/ui/skeleton"
 import UserDetailsModal from "@/components/ui/user-details-model"
 import MessagingPanel from "@/components/messaging/MessagingPanel"
-
+import { toast } from "sonner"
 
 interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
+  success: boolean
+  data?: T
+  error?: string
 }
 
 interface Client {
-  _id: string;
-  name: string;
-  contactPerson?: string;
+  _id: string
+  name: string
+  contactPerson?: string
 }
 
 interface Payroll {
-  _id: string;
-  user: string | { _id: string; name: string; email?: string };
-  userRole: 'Employee' | 'Supervisor' | 'Client' | 'Supplier';
-  amount: number;
-  paymentDate: string | Date;
-  status: 'paid' | 'pending' | 'failed';
-  notes?: string;
-  createdAt?: string | Date;
-  updatedAt?: string | Date;
+  _id: string
+  user: string | { _id: string; name: string; email?: string }
+  userRole: "Employee" | "Supervisor" | "Client" | "Supplier"
+  amount: number
+  paymentDate: string | Date
+  status: "paid" | "pending" | "failed"
+  notes?: string
+  createdAt?: string | Date
+  updatedAt?: string | Date
 }
 
 interface DashboardData {
-  totalClients: number;
-  totalSupervisors: number;
-  totalEmployees: number;
-  totalMaterials: number;
-  totalPayroll: number;
-  totalReports: number;
-  payrollData: Payroll[];
+  totalClients: number
+  totalSupervisors: number
+  totalEmployees: number
+  totalMaterials: number
+  totalPayroll: number
+  totalReports: number
+  payrollData: Payroll[]
   recentProjects: Array<{
-    id?: string;
-    name: string;
-    status: string;
-    manager: string;
-    progress: number;
-  }>;
+    id?: string
+    name: string
+    status: string
+    manager: string
+    progress: number
+  }>
   clientStatusData?: {
-    labels: string[];
+    labels: string[]
     datasets: Array<{
-      label: string;
-      data: number[];
-      backgroundColor: string;
-      borderColor: string;
-      borderWidth: number;
-    }>;
-  };
+      label: string
+      data: number[]
+      backgroundColor: string
+      borderColor: string
+      borderWidth: number
+    }>
+  }
   clientsData: Array<{
-    id: string;
-    name: string;
-    company: string;
-    email: string;
-    phone: string;
-    status: string;
+    id: string
+    name: string
+    company: string
+    email: string
+    phone: string
+    status: string
     projects: Array<{
-      id: string;
-      name: string;
-      status: string;
-    }>;
-  }>;
+      id: string
+      name: string
+      status: string
+    }>
+  }>
   employeesData: Array<{
-    id: string;
-    name: string;
-    position: string;
-    department: string;
-    email: string;
-    phone: string;
-    status: string;
-    joinDate: string;
-  }>;
+    id: string
+    name: string
+    position: string
+    department: string
+    email: string
+    phone: string
+    status: string
+    joinDate: string
+  }>
   supervisorsData: Array<{
-    id: string;
-    name: string;
-    position: string;
-    department: string;
-    email: string;
-    phone: string;
-    status: string;
-    joinDate: string;
-    experience: string;
-    projects: Array<any>;
-  }>;
+    id: string
+    name: string
+    position: string
+    department: string
+    email: string
+    phone: string
+    status: string
+    joinDate: string
+    experience: string
+    projects: Array<any>
+  }>
   materialsData: Array<{
-    id: string;
-    name: string;
-    category: string;
-    quantity: number;
-    unit: string;
-    price: number;
-    supplier: string;
-    status: string;
-    lastUpdated: string;
-  }>;
+    id: string
+    name: string
+    category: string
+    quantity: number
+    unit: string
+    price: number
+    supplier: string
+    status: string
+    lastUpdated: string
+  }>
 }
 
 interface ApiData {
-  clients: ApiResponse<Client[]>;
-  supervisors: ApiResponse<any[]>;
-  employees: ApiResponse<any[]>;
-  materials: ApiResponse<any[]>;
-  reports: ApiResponse<any[]>;
-  payroll: ApiResponse<Payroll[]>;
-  message:ApiResponse<any[]>;
+  clients: ApiResponse<Client[]>
+  supervisors: ApiResponse<any[]>
+  employees: ApiResponse<any[]>
+  materials: ApiResponse<any[]>
+  reports: ApiResponse<any[]>
+  payroll: ApiResponse<Payroll[]>
+  message: ApiResponse<any[]>
 }
 
 export default function AdminDashboard() {
@@ -147,166 +162,189 @@ export default function AdminDashboard() {
     employeesData: [],
     supervisorsData: [],
     materialsData: [],
-    payrollData: []
-  });
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedStat, setSelectedStat] = useState<string | null>(null);
+    payrollData: [],
+  })
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedStat, setSelectedStat] = useState<string | null>(null)
 
   // Modal state
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<any>(null);
-  const [selectedUserType, setSelectedUserType] = useState<'supervisor' | 'employee' | 'client' | 'material' | 'payroll'>('supervisor');
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<any>(null)
+  const [selectedUserType, setSelectedUserType] = useState<
+    "supervisor" | "employee" | "client" | "material" | "payroll"
+  >("supervisor")
 
+  // Enhanced fetch function with better payroll user resolution
   const fetchDashboardData = async () => {
     try {
-      setIsLoading(true);
-      setError(null);
-      
-      // Base URL for API requests
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || '';
-      
-      // Fetch all data in parallel
-      const endpoints = [
-        { name: 'clients', url: `${baseUrl}/api/clients` },
-        { name: 'supervisors', url: `${baseUrl}/api/supervisors` },
-        { name: 'employees', url: `${baseUrl}/api/employees` },
-        { name: 'materials', url: `${baseUrl}/api/materials` },
-        { name: 'payroll', url: `${baseUrl}/api/payroll` }
-      ];
+      setIsLoading(true)
+      setError(null)
 
-      console.log('Fetching data from endpoints:', endpoints.map(e => e.url));
-      
-      // Enhanced fetch with better error handling and logging
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || ""
+
+      const endpoints = [
+        { name: "clients", url: `${baseUrl}/api/clients` },
+        { name: "supervisors", url: `${baseUrl}/api/supervisors` },
+        { name: "employees", url: `${baseUrl}/api/employees` },
+        { name: "materials", url: `${baseUrl}/api/materials` },
+        { name: "payroll", url: `${baseUrl}/api/payroll` },
+      ]
+
+      console.log(
+        "Fetching data from endpoints:",
+        endpoints.map((e) => e.url),
+      )
+
       const fetchPromises = endpoints.map(async ({ name, url }) => {
         try {
-          console.log(`[${name}] Starting fetch from:`, url);
-          const response = await fetch(url);
+          console.log(`[${name}] Starting fetch from:`, url)
+          const response = await fetch(url)
           if (!response.ok) {
-            const errorText = await response.text();
+            const errorText = await response.text()
             console.error(`[${name}] Error response:`, {
               status: response.status,
               statusText: response.statusText,
-              error: errorText
-            });
-            return { 
-              name, 
-              data: { 
-                success: false, 
-                data: [], 
-                error: `HTTP ${response.status}: ${response.statusText}` 
-              }, 
-              error: `HTTP ${response.status}` 
-            };
+              error: errorText,
+            })
+            return {
+              name,
+              data: {
+                success: false,
+                data: [],
+                error: `HTTP ${response.status}: ${response.statusText}`,
+              },
+              error: `HTTP ${response.status}`,
+            }
           }
-          const responseData = await response.json();
-          console.log(`[${name}] Success response:`, responseData);
-          return { 
-            name, 
-            data: responseData, 
-            error: null 
-          };
+          const responseData = await response.json()
+          console.log(`[${name}] Success response:`, responseData)
+          return {
+            name,
+            data: responseData,
+            error: null,
+          }
         } catch (err: unknown) {
-          const error = err as Error;
+          const error = err as Error
           console.error(`[${name}] Fetch error:`, {
             message: error.message,
-            stack: error.stack
-          });
-          return { 
-            name, 
-            data: { 
-              success: false, 
-              data: [], 
-              error: error.message 
-            }, 
-            error: error.message 
-          };
+            stack: error.stack,
+          })
+          return {
+            name,
+            data: {
+              success: false,
+              data: [],
+              error: error.message,
+            },
+            error: error.message,
+          }
         }
-      });
+      })
 
-      const results = await Promise.all(fetchPromises);
-      
-      // Log raw API results for debugging
-      console.log('=== RAW API RESULTS ===');
+      const results = await Promise.all(fetchPromises)
+
+      console.log("=== RAW API RESULTS ===")
       results.forEach((result, index) => {
         console.log(`Result ${index + 1} (${result.name}):`, {
           success: result.data?.success,
-          dataLength: Array.isArray(result.data?.data) ? result.data.data.length : 'Not an array',
+          dataLength: Array.isArray(result.data?.data) ? result.data.data.length : "Not an array",
           error: result.error,
-          sampleData: Array.isArray(result.data?.data) && result.data.data.length > 0 
-            ? result.data.data[0] 
-            : 'No data'
-        });
-      });
-      
-      // Convert array of results to object for easier access with proper data handling
+          sampleData: Array.isArray(result.data?.data) && result.data.data.length > 0 ? result.data.data[0] : "No data",
+        })
+      })
+
       const data = results.reduce<Partial<ApiData>>((acc, { name, data: responseData }) => {
-        // Log the raw response data for debugging
-        console.log(`[${name}] Raw response:`, responseData);
-        
-        // Handle different response formats
-        let processedData = [];
-        
-        // Case 1: Response is already an array
+        console.log(`[${name}] Raw response:`, responseData)
+
+        let processedData = []
+
         if (Array.isArray(responseData)) {
-          processedData = responseData;
-        } 
-        // Case 2: Response has a data property that's an array
-        else if (responseData && typeof responseData === 'object' && 'data' in responseData) {
-          processedData = Array.isArray(responseData.data) ? responseData.data : [];
+          processedData = responseData
+        } else if (responseData && typeof responseData === "object" && "data" in responseData) {
+          processedData = Array.isArray(responseData.data) ? responseData.data : []
+        } else if (responseData && typeof responseData === "object") {
+          processedData = [responseData]
         }
-        // Case 3: Response is a single object
-        else if (responseData && typeof responseData === 'object') {
-          processedData = [responseData];
-        }
-        
+
         console.log(`[${name}] Processed data:`, {
           count: processedData.length,
-          sampleItem: processedData[0] || 'No items'
-        });
-        
+          sampleItem: processedData[0] || "No items",
+        })
+
         return {
           ...acc,
           [name]: {
             success: true,
-            data: processedData
-          }
-        };
-      }, {} as ApiData);
-
-      // Log the processed data structure
-      console.log('=== PROCESSED DATA ===', JSON.stringify({
-        clients: {
-          count: data.clients?.data?.length || 0,
-          sample: data.clients?.data?.[0] || 'No clients'
-        },
-        supervisors: {
-          count: data.supervisors?.data?.length || 0,
-          sample: data.supervisors?.data?.[0] || 'No supervisors'
-        },
-        employees: {
-          success: data.employees?.success,
-          count: Array.isArray(data.employees?.data) ? data.employees.data.length : 'Not an array'
-        },
-        materials: {
-          success: data.materials?.success,
-          count: Array.isArray(data.materials?.data) ? data.materials.data.length : 'Not an array'
-        },
-        payroll: {
-          success: data.payroll?.success,
-          count: Array.isArray(data.payroll?.data) ? data.payroll.data.length : 'Not an array'
+            data: processedData,
+          },
         }
-      }, null, 2));
+      }, {} as ApiData)
 
-      // Process payroll data
-      const payrollData = Array.isArray(data.payroll?.data) 
-        ? data.payroll.data.map((item: any) => ({
-            ...item,
-            _id: item._id?.toString(),
-            paymentDate: item.paymentDate || new Date(),
-            amount: typeof item.amount === 'string' ? parseFloat(item.amount) : item.amount || 0
-          }))
-        : [];
+      // Create user lookup maps for payroll resolution
+      const allUsers = new Map()
+
+      // Add all users to lookup map
+      if (Array.isArray(data.employees?.data)) {
+        data.employees.data.forEach((emp) => {
+          allUsers.set(emp._id || emp.id, { ...emp, role: "Employee" })
+        })
+      }
+
+      if (Array.isArray(data.supervisors?.data)) {
+        data.supervisors.data.forEach((sup) => {
+          allUsers.set(sup._id || sup.id, { ...sup, role: "Supervisor" })
+        })
+      }
+
+      if (Array.isArray(data.clients?.data)) {
+        data.clients.data.forEach((client) => {
+          allUsers.set(client._id, { ...client, role: "Client" })
+        })
+      }
+
+      console.log("User lookup map created:", allUsers.size, "users")
+
+      // Enhanced payroll data processing with user resolution
+      const payrollData = Array.isArray(data.payroll?.data)
+        ? data.payroll.data.map((item: any) => {
+            console.log("Processing payroll item:", item)
+
+            let resolvedUser = item.user
+
+            // If user is just an ID string, resolve it from our lookup
+            if (typeof item.user === "string") {
+              const foundUser = allUsers.get(item.user)
+              if (foundUser) {
+                resolvedUser = {
+                  _id: foundUser._id || foundUser.id,
+                  name: foundUser.name || foundUser.firstName + " " + foundUser.lastName || "Unknown User",
+                  email: foundUser.email,
+                }
+                console.log("Resolved user from ID:", item.user, "to:", resolvedUser)
+              } else {
+                // Create a placeholder user object
+                resolvedUser = {
+                  _id: item.user,
+                  name: `User ${item.user.slice(-4)}`,
+                  email: "unknown@example.com",
+                }
+                console.log("Created placeholder user for ID:", item.user)
+              }
+            }
+
+            return {
+              ...item,
+              _id: item._id?.toString(),
+              user: resolvedUser,
+              paymentDate: item.paymentDate || new Date(),
+              amount: typeof item.amount === "string" ? Number.parseFloat(item.amount) : item.amount || 0,
+              userRole: item.userRole || "Employee",
+            }
+          })
+        : []
+
+      console.log("Enhanced payroll data:", payrollData)
 
       // Process data for the dashboard
       const dashboardUpdate: DashboardData = {
@@ -315,184 +353,249 @@ export default function AdminDashboard() {
         totalEmployees: Array.isArray(data.employees?.data) ? data.employees.data.length : 0,
         totalMaterials: Array.isArray(data.materials?.data) ? data.materials.data.length : 0,
         totalPayroll: payrollData
-          .filter((item: any) => item.status === 'paid')
+          .filter((item: any) => item.status === "paid")
           .reduce((sum: number, item: any) => sum + (isNaN(item.amount) ? 0 : item.amount), 0),
         totalReports: 0,
         payrollData,
-        recentProjects: Array.isArray(data.clients?.data) 
+        recentProjects: Array.isArray(data.clients?.data)
           ? data.clients.data.slice(0, 5).map((client: any) => ({
-              name: client.name || 'Unnamed Client',
-              status: 'Active',
-              manager: client.contactPerson || 'No Contact',
-              progress: 100
+              name: client.name || "Unnamed Client",
+              status: "Active",
+              manager: client.contactPerson || "No Contact",
+              progress: 100,
             }))
           : [],
         clientStatusData: {
-          labels: Array.isArray(data.clients?.data) && data.clients.data.length > 0
-            ? data.clients.data.slice(0, 5).map((c: any) => c.name || 'Unnamed Client')
-            : ['No clients'],
+          labels:
+            Array.isArray(data.clients?.data) && data.clients.data.length > 0
+              ? data.clients.data.slice(0, 5).map((c: any) => c.name || "Unnamed Client")
+              : ["No clients"],
           datasets: [
             {
-              label: 'Client Activity',
-              data: Array.isArray(data.clients?.data) && data.clients.data.length > 0
-                ? data.clients.data.slice(0, 5).map(() => Math.floor(Math.random() * 100))
-                : [0],
-              backgroundColor: 'rgba(59, 130, 246, 0.8)',
-              borderColor: 'rgba(59, 130, 246, 1)',
+              label: "Client Activity",
+              data:
+                Array.isArray(data.clients?.data) && data.clients.data.length > 0
+                  ? data.clients.data.slice(0, 5).map(() => Math.floor(Math.random() * 100))
+                  : [0],
+              backgroundColor: "rgba(59, 130, 246, 0.8)",
+              borderColor: "rgba(59, 130, 246, 1)",
               borderWidth: 1,
             },
           ],
         },
-        clientsData: Array.isArray(data.clients?.data) 
+        clientsData: Array.isArray(data.clients?.data)
           ? data.clients.data.map((client: any) => ({
               id: client._id || client.id || Math.random().toString(),
-              name: client.name || 'Unnamed Client',
-              company: client.company || client.name || 'Unknown Company',
-              email: client.email || 'No email',
-              phone: client.phone || 'No phone',
-              status: client.status || 'Active',
-              projects: client.projects || []
+              name: client.name || "Unnamed Client",
+              company: client.company || client.name || "Unknown Company",
+              email: client.email || "No email",
+              phone: client.phone || "No phone",
+              status: client.status || "Active",
+              projects: client.projects || [],
             }))
           : [],
-        employeesData: Array.isArray(data.employees?.data) 
+        employeesData: Array.isArray(data.employees?.data)
           ? data.employees.data.map((employee: any) => ({
               id: employee._id || employee.id || Math.random().toString(),
-              name: employee.name || 'Unnamed Employee',
-              position: employee.position || 'Unknown Position',
-              department: employee.department || 'Unknown Department',
-              email: employee.email || 'No email',
-              phone: employee.phone || 'No phone',
-              status: employee.status || 'Active',
-              joinDate: employee.joinDate || new Date().toISOString()
+              name: employee.name || "Unnamed Employee",
+              position: employee.position || "Unknown Position",
+              department: employee.department || "Unknown Department",
+              email: employee.email || "No email",
+              phone: employee.phone || "No phone",
+              status: employee.status || "Active",
+              joinDate: employee.joinDate || new Date().toISOString(),
             }))
           : [],
-        supervisorsData: Array.isArray(data.supervisors?.data) 
+        supervisorsData: Array.isArray(data.supervisors?.data)
           ? data.supervisors.data.map((supervisor: any) => ({
               id: supervisor._id || supervisor.id || Math.random().toString(),
-              name: supervisor.name || 'Unnamed Supervisor',
-              position: supervisor.position || 'Supervisor',
-              department: supervisor.department || 'Unknown Department',
-              email: supervisor.email || 'No email',
-              phone: supervisor.phone || 'No phone',
-              status: supervisor.status || 'Active',
+              name: supervisor.name || "Unnamed Supervisor",
+              position: supervisor.position || "Supervisor",
+              department: supervisor.department || "Unknown Department",
+              email: supervisor.email || "No email",
+              phone: supervisor.phone || "No phone",
+              status: supervisor.status || "Active",
               joinDate: supervisor.joinDate || new Date().toISOString(),
-              experience: supervisor.experience || 'Not specified',
-              projects: supervisor.projects || []
+              experience: supervisor.experience || "Not specified",
+              projects: supervisor.projects || [],
             }))
           : [],
-        materialsData: Array.isArray(data.materials?.data) 
+        materialsData: Array.isArray(data.materials?.data)
           ? data.materials.data.map((material: any) => ({
               id: material._id || material.id || Math.random().toString(),
-              name: material.name || 'Unnamed Material',
-              category: material.category || 'Unknown Category',
+              name: material.name || "Unnamed Material",
+              category: material.category || "Unknown Category",
               quantity: material.quantity || 0,
-              unit: material.unit || 'pcs',
+              unit: material.unit || "pcs",
               price: material.price || 0,
-              supplier: material.supplier || 'Unknown Supplier',
-              status: material.status || 'Available',
-              lastUpdated: material.lastUpdated || new Date().toISOString()
+              supplier: material.supplier || "Unknown Supplier",
+              status: material.status || "Available",
+              lastUpdated: material.lastUpdated || new Date().toISOString(),
             }))
-          : []
-      };
+          : [],
+      }
 
-      console.log('=== FINAL DASHBOARD DATA ===', JSON.stringify(dashboardUpdate, null, 2));
-      setDashboardData(dashboardUpdate);
+      console.log("=== FINAL DASHBOARD DATA ===", JSON.stringify(dashboardUpdate, null, 2))
+      setDashboardData(dashboardUpdate)
+      toast.success("Dashboard data loaded successfully!")
     } catch (err: any) {
-      console.error('Error in fetchDashboardData:', err);
-      const errorMessage = err.message || 'Failed to load dashboard data. Please try again later.';
-      console.error('Error details:', {
+      console.error("Error in fetchDashboardData:", err)
+      const errorMessage = err.message || "Failed to load dashboard data. Please try again later."
+      console.error("Error details:", {
         message: err.message,
         stack: err.stack,
-        name: err.name
-      });
-      setError(errorMessage);
+        name: err.name,
+      })
+      setError(errorMessage)
+      toast.error("Failed to load dashboard data")
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    fetchDashboardData()
+  }, [])
 
-  const handleViewDetails = (user: any, type: 'supervisor' | 'employee' | 'client' | 'material' | 'payroll') => {
-    setSelectedUser(user);
-    setSelectedUserType(type);
-    setIsModalOpen(true);
-  };
+  const handleViewDetails = (user: any, type: "supervisor" | "employee" | "client" | "material" | "payroll") => {
+    setSelectedUser(user)
+    setSelectedUserType(type)
+    setIsModalOpen(true)
+  }
 
   const handleViewMore = (type: string) => {
-    switch(type) {
-      case 'supervisors':
-        setActiveSection('supervisors');
-        break;
-      case 'employees':
-        setActiveSection('employees');
-        break;
-      case 'clients':
-        setActiveSection('clients');
-        break;
-      case 'materials':
-        setActiveSection('materials');
-        break;
-      case 'message':
-        setActiveSection('message');
-        break;
+    switch (type) {
+      case "supervisors":
+        setActiveSection("supervisors")
+        break
+      case "employees":
+        setActiveSection("employees")
+        break
+      case "clients":
+        setActiveSection("clients")
+        break
+      case "materials":
+        setActiveSection("materials")
+        break
+      case "payroll":
+        setActiveSection("payroll")
+        break
+      case "message":
+        setActiveSection("message")
+        break
       default:
-        setActiveSection('dashboard');
+        setActiveSection("dashboard")
     }
-  };
+  }
+
+  // Quick Actions
+  const quickActions = [
+    {
+      title: "Add Employee",
+      description: "Register a new employee",
+      icon: Users,
+      color: "bg-blue-500",
+      action: () => setActiveSection("employees"),
+    },
+    {
+      title: "Process Payroll",
+      description: "Manage salary payments",
+      icon: DollarSign,
+      color: "bg-green-500",
+      action: () => setActiveSection("payroll"),
+    },
+    {
+      title: "Add Client",
+      description: "Register new client",
+      icon: UserCheck,
+      color: "bg-purple-500",
+      action: () => setActiveSection("clients"),
+    },
+    {
+      title: "Manage Materials",
+      description: "Update inventory",
+      icon: Truck,
+      color: "bg-orange-500",
+      action: () => setActiveSection("materials"),
+    },
+    {
+      title: "View Reports",
+      description: "Generate reports",
+      icon: FileText,
+      color: "bg-red-500",
+      action: () => setActiveSection("reports"),
+    },
+    {
+      title: "Send Message",
+      description: "Communicate with team",
+      icon: Mail,
+      color: "bg-indigo-500",
+      action: () => setActiveSection("message"),
+    },
+  ]
 
   const stats = [
     {
-      id: 'clients',
+      id: "clients",
       title: "Total Clients",
       value: dashboardData?.totalClients.toString() || "0",
-      change: "",
+      change: "+12%",
+      trend: "up",
       icon: Users,
       color: "text-blue-600",
+      bgColor: "bg-blue-50",
     },
     {
-      id: 'supervisors',
+      id: "supervisors",
       title: "Supervisors",
       value: dashboardData?.totalSupervisors.toString() || "0",
-      change: "",
+      change: "+5%",
+      trend: "up",
       icon: UserCheck,
       color: "text-green-600",
+      bgColor: "bg-green-50",
     },
     {
-      id: 'employees',
+      id: "employees",
       title: "Employees",
       value: dashboardData?.totalEmployees.toString() || "0",
-      change: "",
+      change: "+8%",
+      trend: "up",
       icon: Users,
       color: "text-purple-600",
+      bgColor: "bg-purple-50",
     },
     {
-      id: 'materials',
+      id: "materials",
       title: "Materials",
       value: dashboardData?.totalMaterials.toString() || "0",
-      change: "",
+      change: "-2%",
+      trend: "down",
       icon: Truck,
       color: "text-orange-600",
+      bgColor: "bg-orange-50",
     },
     {
-      id: 'payroll',
+      id: "payroll",
       title: "Total Payroll",
-      value: dashboardData ? `$${dashboardData.totalPayroll.toLocaleString()}` : "$0",
-      change: "",
+      value: dashboardData ? `₹${dashboardData.totalPayroll.toLocaleString()}` : "₹0",
+      change: "+15%",
+      trend: "up",
       icon: DollarSign,
       color: "text-green-600",
+      bgColor: "bg-green-50",
     },
     {
-      id: 'reports',
+      id: "reports",
       title: "Reports",
       value: dashboardData?.totalReports.toString() || "0",
-      change: "",
+      change: "+3%",
+      trend: "up",
       icon: FileText,
       color: "text-red-600",
-    }
-  ];
+      bgColor: "bg-red-50",
+    },
+  ]
 
   const renderLoadingState = () => (
     <div className="space-y-6">
@@ -510,10 +613,10 @@ export default function AdminDashboard() {
         ))}
       </div>
     </div>
-  );
+  )
 
   const renderDetailsTable = () => {
-    if (selectedStat === 'payroll' && dashboardData?.payrollData && dashboardData.payrollData.length > 0) {
+    if (selectedStat === "payroll" && dashboardData?.payrollData && dashboardData.payrollData.length > 0) {
       return (
         <div className="h-full overflow-y-auto">
           <Table>
@@ -525,77 +628,89 @@ export default function AdminDashboard() {
                 <TableHead>Payment Date</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Notes</TableHead>
-                {/* <TableHead>Actions</TableHead> */}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {dashboardData.payrollData.slice(0, 5).map((payment) => (
-                <TableRow key={payment._id}>
-                  <TableCell className="font-medium">
-                    <div className="flex items-center gap-2">
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback>
-                          {typeof payment.user === 'object' && payment.user?.name 
-                            ? payment.user.name.split(' ').map(n => n[0]).join('') 
-                            : typeof payment.user === 'string' 
-                              ? payment.user.split(' ').map(n => n[0]).join('')
-                              : 'P'}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="font-medium truncate max-w-[150px]">
-                        {typeof payment.user === 'object' 
-                          ? payment.user?.name 
-                          : payment.user || 'Unknown User'}
+              {dashboardData.payrollData.slice(0, 5).map((payment) => {
+                // Enhanced user name resolution
+                let userName = "Unknown User"
+                let userInitials = "U"
+
+                if (typeof payment.user === "object" && payment.user?.name) {
+                  userName = payment.user.name
+                  userInitials = payment.user.name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .toUpperCase()
+                } else if (typeof payment.user === "string") {
+                  userName = `User ${payment.user.slice(-4)}`
+                  userInitials = "U"
+                }
+
+                return (
+                  <TableRow key={payment._id}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-600 text-white">
+                            {userInitials}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="font-medium">{userName}</div>
+                          {typeof payment.user === "object" && payment.user?.email && (
+                            <div className="text-xs text-muted-foreground">{payment.user.email}</div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="capitalize">
-                      {payment.userRole?.toLowerCase() || '-'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    ${typeof payment.amount === 'number' 
-                      ? payment.amount.toFixed(2) 
-                      : '0.00'}
-                  </TableCell>
-                  <TableCell>
-                    {payment.paymentDate 
-                      ? new Date(payment.paymentDate).toLocaleDateString() 
-                      : '-'}
-                  </TableCell>
-                  <TableCell>
-                    <Badge 
-                      variant={
-                        payment.status === 'paid' ? 'default' : 
-                        payment.status === 'pending' ? 'secondary' : 'destructive'
-                      }
-                    >
-                      {payment.status?.charAt(0).toUpperCase() + payment.status?.slice(1) || 'Unknown'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="max-w-[200px] truncate">
-                    {payment.notes || '-'}
-                  </TableCell>
-                  {/* <TableCell>
-                    <div className="flex gap-1">
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleViewDetails(payment, 'payroll')}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="capitalize">
+                        {payment.userRole?.toLowerCase() || "employee"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="font-semibold">
+                      ₹{typeof payment.amount === "number" ? payment.amount.toLocaleString() : "0"}
+                    </TableCell>
+                    <TableCell>
+                      {payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString("en-IN") : "-"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          payment.status === "paid"
+                            ? "default"
+                            : payment.status === "pending"
+                              ? "secondary"
+                              : "destructive"
+                        }
+                        className={
+                          payment.status === "paid"
+                            ? "bg-green-100 text-green-800"
+                            : payment.status === "pending"
+                              ? "bg-yellow-100 text-yellow-800"
+                              : "bg-red-100 text-red-800"
+                        }
                       >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </TableCell> */}
-                </TableRow>
-              ))}
+                        {payment.status === "paid" && <CheckCircle className="w-3 h-3 mr-1" />}
+                        {payment.status === "pending" && <Clock className="w-3 h-3 mr-1" />}
+                        {payment.status === "failed" && <XCircle className="w-3 h-3 mr-1" />}
+                        {payment.status?.charAt(0).toUpperCase() + payment.status?.slice(1) || "Unknown"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="max-w-[200px] truncate">{payment.notes || "-"}</TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
         </div>
-      );
+      )
     }
-    if (selectedStat === 'supervisors' && dashboardData?.supervisorsData && dashboardData.supervisorsData.length > 0) {
+
+    // Other table rendering logic remains the same...
+    if (selectedStat === "supervisors" && dashboardData?.supervisorsData && dashboardData.supervisorsData.length > 0) {
       return (
         <div className="h-full overflow-y-auto">
           <Table>
@@ -617,30 +732,29 @@ export default function AdminDashboard() {
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
                       <Avatar className="h-8 w-8">
-                        <AvatarFallback>
-                          {supervisor.name?.split(' ').map(n => n[0]).join('')}
+                        <AvatarFallback className="bg-gradient-to-r from-green-500 to-blue-600 text-white">
+                          {supervisor.name
+                            ?.split(" ")
+                            .map((n) => n[0])
+                            .join("")}
                         </AvatarFallback>
                       </Avatar>
                       {supervisor.name}
                     </div>
                   </TableCell>
-                  <TableCell>{supervisor.position || '-'}</TableCell>
-                  <TableCell>{supervisor.department || '-'}</TableCell>
-                  <TableCell>{supervisor.experience || '-'}</TableCell>
+                  <TableCell>{supervisor.position || "-"}</TableCell>
+                  <TableCell>{supervisor.department || "-"}</TableCell>
+                  <TableCell>{supervisor.experience || "-"}</TableCell>
                   <TableCell>
-                    <Badge variant={supervisor.status === 'Active' ? 'default' : 'secondary'}>
+                    <Badge variant={supervisor.status === "Active" ? "default" : "secondary"}>
                       {supervisor.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>{supervisor.phone || supervisor.email || '-'}</TableCell>
+                  <TableCell>{supervisor.phone || supervisor.email || "-"}</TableCell>
                   <TableCell>{supervisor.projects?.length || 0}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleViewDetails(supervisor, 'supervisor')}
-                      >
+                      <Button variant="outline" size="sm" onClick={() => handleViewDetails(supervisor, "supervisor")}>
                         <Eye className="w-4 h-4" />
                       </Button>
                     </div>
@@ -650,10 +764,11 @@ export default function AdminDashboard() {
             </TableBody>
           </Table>
         </div>
-      );
+      )
     }
 
-    if (selectedStat === 'materials' && dashboardData?.materialsData && dashboardData.materialsData.length > 0) {
+    // Continue with other table types...
+    if (selectedStat === "materials" && dashboardData?.materialsData && dashboardData.materialsData.length > 0) {
       return (
         <div className="h-full overflow-y-auto">
           <Table>
@@ -674,25 +789,28 @@ export default function AdminDashboard() {
               {dashboardData.materialsData.map((material) => (
                 <TableRow key={material.id}>
                   <TableCell className="font-medium">{material.name}</TableCell>
-                  <TableCell>{material.category || '-'}</TableCell>
+                  <TableCell>{material.category || "-"}</TableCell>
                   <TableCell>{material.quantity}</TableCell>
                   <TableCell>{material.unit}</TableCell>
-                  <TableCell>${material.price.toFixed(2)}</TableCell>
-                  <TableCell>{material.supplier || '-'}</TableCell>
+                  <TableCell>₹{material.price.toFixed(2)}</TableCell>
+                  <TableCell>{material.supplier || "-"}</TableCell>
                   <TableCell>
-                    <Badge variant={material.status === 'Available' ? 'default' : 
-                                  material.status === 'Low Stock' ? 'destructive' : 'secondary'}>
+                    <Badge
+                      variant={
+                        material.status === "Available"
+                          ? "default"
+                          : material.status === "Low Stock"
+                            ? "destructive"
+                            : "secondary"
+                      }
+                    >
                       {material.status}
                     </Badge>
                   </TableCell>
                   <TableCell>{new Date(material.lastUpdated).toLocaleDateString()}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleViewDetails(material, 'material')}
-                      >
+                      <Button variant="outline" size="sm" onClick={() => handleViewDetails(material, "material")}>
                         <Eye className="w-4 h-4" />
                       </Button>
                     </div>
@@ -702,10 +820,10 @@ export default function AdminDashboard() {
             </TableBody>
           </Table>
         </div>
-      );
+      )
     }
 
-    if (selectedStat === 'employees' && dashboardData?.employeesData && dashboardData.employeesData.length > 0) {
+    if (selectedStat === "employees" && dashboardData?.employeesData && dashboardData.employeesData.length > 0) {
       return (
         <div className="h-full overflow-y-auto">
           <Table>
@@ -726,29 +844,26 @@ export default function AdminDashboard() {
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
                       <Avatar className="h-8 w-8">
-                        <AvatarFallback>
-                          {employee.name?.split(' ').map(n => n[0]).join('')}
+                        <AvatarFallback className="bg-gradient-to-r from-purple-500 to-pink-600 text-white">
+                          {employee.name
+                            ?.split(" ")
+                            .map((n) => n[0])
+                            .join("")}
                         </AvatarFallback>
                       </Avatar>
                       {employee.name}
                     </div>
                   </TableCell>
-                  <TableCell>{employee.position || '-'}</TableCell>
-                  <TableCell>{employee.department || '-'}</TableCell>
+                  <TableCell>{employee.position || "-"}</TableCell>
+                  <TableCell>{employee.department || "-"}</TableCell>
                   <TableCell>
-                    <Badge variant={employee.status === 'Active' ? 'default' : 'secondary'}>
-                      {employee.status}
-                    </Badge>
+                    <Badge variant={employee.status === "Active" ? "default" : "secondary"}>{employee.status}</Badge>
                   </TableCell>
-                  <TableCell>{employee.phone || '-'}</TableCell>
+                  <TableCell>{employee.phone || "-"}</TableCell>
                   <TableCell>{new Date(employee.joinDate).toLocaleDateString()}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleViewDetails(employee, 'employee')}
-                      >
+                      <Button variant="outline" size="sm" onClick={() => handleViewDetails(employee, "employee")}>
                         <Eye className="w-4 h-4" />
                       </Button>
                     </div>
@@ -758,10 +873,10 @@ export default function AdminDashboard() {
             </TableBody>
           </Table>
         </div>
-      );
+      )
     }
 
-    if (selectedStat === 'clients' && dashboardData?.clientsData && dashboardData.clientsData.length > 0) {
+    if (selectedStat === "clients" && dashboardData?.clientsData && dashboardData.clientsData.length > 0) {
       return (
         <div className="h-full overflow-y-auto">
           <Table>
@@ -782,20 +897,14 @@ export default function AdminDashboard() {
                   <TableCell className="font-medium">{client.company}</TableCell>
                   <TableCell>{client.name}</TableCell>
                   <TableCell>{client.email}</TableCell>
-                  <TableCell>{client.phone || '-'}</TableCell>
+                  <TableCell>{client.phone || "-"}</TableCell>
                   <TableCell>
-                    <Badge variant={client.status === 'Active' ? 'default' : 'secondary'}>
-                      {client.status}
-                    </Badge>
+                    <Badge variant={client.status === "Active" ? "default" : "secondary"}>{client.status}</Badge>
                   </TableCell>
                   <TableCell>{client.projects?.length || 0}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleViewDetails(client, 'client')}
-                      >
+                      <Button variant="outline" size="sm" onClick={() => handleViewDetails(client, "client")}>
                         <Eye className="w-4 h-4" />
                       </Button>
                     </div>
@@ -805,7 +914,7 @@ export default function AdminDashboard() {
             </TableBody>
           </Table>
         </div>
-      );
+      )
     }
 
     if (selectedStat) {
@@ -821,278 +930,380 @@ export default function AdminDashboard() {
             </p>
           </div>
         </div>
-      );
+      )
     }
 
-    // Prepare data for the chart
+    // Enhanced Dashboard Overview with attractive charts
     const chartData = [
       {
-        name: 'Supervisors',
+        name: "Supervisors",
         value: dashboardData?.totalSupervisors || 0,
-        color: 'hsl(142.1, 76.2%, 36.3%)', // Green
+        color: "#10B981", // Green
+        percentage: 0,
       },
       {
-        name: 'Employees',
+        name: "Employees",
         value: dashboardData?.totalEmployees || 0,
-        color: 'hsl(221.2, 83.2%, 53.3%)', // Blue
+        color: "#3B82F6", // Blue
+        percentage: 0,
       },
       {
-        name: 'Clients',
+        name: "Clients",
         value: dashboardData?.totalClients || 0,
-        color: 'hsl(262.1, 83.3%, 57.8%)', // Purple
+        color: "#8B5CF6", // Purple
+        percentage: 0,
       },
       {
-        name: 'Reports',
-        value: dashboardData?.totalReports || 0,
-        color: 'hsl(0, 84.2%, 60.2%)', // Red
+        name: "Materials",
+        value: dashboardData?.totalMaterials || 0,
+        color: "#F59E0B", // Orange
+        percentage: 0,
       },
-    ];
+    ]
 
-    const totalItems = chartData.reduce((sum, item) => sum + item.value, 0);
+    const totalItems = chartData.reduce((sum, item) => sum + item.value, 0)
+
+    // Calculate percentages
+    chartData.forEach((item) => {
+      item.percentage = totalItems > 0 ? (item.value / totalItems) * 100 : 0
+    })
+
+    // Monthly trend data (mock data for demonstration)
+    const monthlyData = [
+      { month: "Jan", employees: 45, supervisors: 8, clients: 12, materials: 150 },
+      { month: "Feb", employees: 52, supervisors: 9, clients: 15, materials: 165 },
+      { month: "Mar", employees: 48, supervisors: 10, clients: 18, materials: 180 },
+      { month: "Apr", employees: 61, supervisors: 11, clients: 22, materials: 195 },
+      { month: "May", employees: 55, supervisors: 12, clients: 25, materials: 210 },
+      {
+        month: "Jun",
+        employees: dashboardData?.totalEmployees || 58,
+        supervisors: dashboardData?.totalSupervisors || 13,
+        clients: dashboardData?.totalClients || 28,
+        materials: dashboardData?.totalMaterials || 225,
+      },
+    ]
 
     return (
-      <div className="w-full h-full p-6  ">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Chart */}
-          <div className="md:col-span-2 bg-card rounded-lg border p-6">
-            <h3 className="text-lg font-medium mb-4">Distribution Overview</h3>
-            <div className="h-[250px]">
-              <ChartContainer
-                config={{
-                  supervisors: {
-                    label: 'Supervisors',
-                    color: 'hsl(142.1, 76.2%, 36.3%)',
-                  },
-                  employees: {
-                    label: 'Employees',
-                    color: 'hsl(221.2, 83.2%, 53.3%)',
-                  },
-                  suppliers: {
-                    label: 'Suppliers',
-                    color: 'hsl(38, 92%, 50%)',
-                  },
-                  clients: {
-                    label: 'Clients',
-                    color: 'hsl(262.1, 83.3%, 57.8%)',
-                  },
-                  reports: {
-                    label: 'Reports',
-                    color: 'hsl(0, 84.2%, 60.2%)',
-                  },
-                }}
-              >
-                <RechartsPrimitive.PieChart>
-                  <RechartsPrimitive.Pie
-                    data={chartData}
-                    cx="50%"
-                    cy="30%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {chartData.map((entry, index) => (
-                      <RechartsPrimitive.Cell
-                        key={`cell-${index}`}
-                        fill={entry.color}
-                        stroke="#fff"
-                        strokeWidth={2}
-                      />
-                    ))}
-                  </RechartsPrimitive.Pie>
-                  <RechartsPrimitive.Tooltip
-                    content={
-                      <ChartTooltipContent
-                        formatter={(value, name) => {
-                          const label = chartData.find(item => item.name === name)?.name || name;
-                          const labelStr = String(label);
-                          const isPeople = ['Supervisors', 'Employees', 'Suppliers', 'Clients'].includes(labelStr);
-                          return [
-                            `${value} ${isPeople ? (value === 1 ? labelStr.slice(0, -1) : labelStr) : labelStr}`,
-                            '',
-                          ];
-                        }}
-                      />
-                    }
-                  />
-                </RechartsPrimitive.PieChart>
-              </ChartContainer>
-            </div>
-          </div>
-          
-          {/* Stats */}
-          <div className="space-y-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Total Items</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-3xl font-bold">{totalItems.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">Across all categories</p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">By Category</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {chartData.map((item) => {
-                  const percentage = (item.value / Math.max(1, totalItems) * 100).toFixed(1);
-                  return (
-                    <div key={item.name} className="space-y-1">
-                      <div className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          <div 
-                            className="h-3 w-3 rounded-full flex-shrink-0" 
-                            style={{ backgroundColor: item.color }}
-                          />
-                          <span>{item.name}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{item.value.toLocaleString()}</span>
-                          <span className="text-muted-foreground text-xs w-10 text-right">{percentage}%</span>
-                        </div>
-                      </div>
-                      <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                        <div 
-                          className="h-full rounded-full" 
-                          style={{
-                            width: `${percentage}%`,
-                            backgroundColor: item.color,
-                            opacity: 0.6
-                          }}
+      <div className="w-full h-full p-6 space-y-6">
+        {/* Enhanced Charts Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Pie Chart */}
+          <Card className="bg-gradient-to-br from-blue-50 to-indigo-100 border-0 shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-blue-600" />
+                Resource Distribution
+              </CardTitle>
+              <CardDescription>Current allocation across categories</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px]">
+                <ChartContainer
+                  config={{
+                    supervisors: { label: "Supervisors", color: "#10B981" },
+                    employees: { label: "Employees", color: "#3B82F6" },
+                    clients: { label: "Clients", color: "#8B5CF6" },
+                    materials: { label: "Materials", color: "#F59E0B" },
+                  }}
+                >
+                  <RechartsPrimitive.PieChart>
+                    <RechartsPrimitive.Pie
+                      data={chartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {chartData.map((entry, index) => (
+                        <RechartsPrimitive.Cell
+                          key={`cell-${index}`}
+                          fill={entry.color}
+                          stroke="#fff"
+                          strokeWidth={2}
                         />
-                      </div>
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-          </div>
+                      ))}
+                    </RechartsPrimitive.Pie>
+                    <RechartsPrimitive.Tooltip
+                      content={({ active, payload }) => {
+                        if (!active || !payload || !payload.length) return null;
+                        
+                        // Create a custom tooltip component with proper typing
+                        const CustomTooltip = () => (
+                          <div className="bg-white p-3 border border-gray-200 rounded shadow-lg">
+                            <p className="font-semibold">{payload[0].name}</p>
+                            <p>{`Count: ${payload[0].value}`}</p>
+                            <p>{`Percentage: ${(((payload[0].value as number) / totalItems) * 100).toFixed(1)}%`}</p>
+                          </div>
+                        );
+                        
+                        return <CustomTooltip />;
+                      }}
+                    />
+                    <RechartsPrimitive.Legend 
+                      content={({ payload }) => (
+                        <div className="flex flex-wrap justify-center gap-2 mt-4">
+                          {payload?.map((entry, index) => (
+                            <div 
+                              key={`legend-${index}`} 
+                              className="flex items-center gap-2 text-sm"
+                            >
+                              <div 
+                                className="w-3 h-3 rounded-full" 
+                                style={{ backgroundColor: entry.color }}
+                              />
+                              <span>{entry.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    />
+                  </RechartsPrimitive.PieChart>
+                </ChartContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Line Chart - Monthly Trends */}
+          <Card className="bg-gradient-to-br from-green-50 to-emerald-100 border-0 shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-green-600" />
+                Monthly Growth Trends
+              </CardTitle>
+              <CardDescription>6-month performance overview</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px]">
+                <ChartContainer
+                  config={{
+                    employees: { label: "Employees", color: "#3B82F6" },
+                    supervisors: { label: "Supervisors", color: "#10B981" },
+                    clients: { label: "Clients", color: "#8B5CF6" },
+                    materials: { label: "Materials", color: "#F59E0B" },
+                  }}
+                >
+                  <RechartsPrimitive.LineChart data={monthlyData}>
+                    <RechartsPrimitive.CartesianGrid strokeDasharray="3 3" stroke="#e0e7ff" />
+                    <RechartsPrimitive.XAxis dataKey="month" stroke="#6b7280" />
+                    <RechartsPrimitive.YAxis stroke="#6b7280" />
+                    <RechartsPrimitive.Tooltip content={<ChartTooltipContent />} />
+                    <RechartsPrimitive.Legend content={(props) => <ChartLegendContent {...props} />} />
+                    <RechartsPrimitive.Line
+                      type="monotone"
+                      dataKey="employees"
+                      stroke="#3B82F6"
+                      strokeWidth={3}
+                      dot={{ fill: "#3B82F6", strokeWidth: 2, r: 4 }}
+                    />
+                    <RechartsPrimitive.Line
+                      type="monotone"
+                      dataKey="supervisors"
+                      stroke="#10B981"
+                      strokeWidth={3}
+                      dot={{ fill: "#10B981", strokeWidth: 2, r: 4 }}
+                    />
+                    <RechartsPrimitive.Line
+                      type="monotone"
+                      dataKey="clients"
+                      stroke="#8B5CF6"
+                      strokeWidth={3}
+                      dot={{ fill: "#8B5CF6", strokeWidth: 2, r: 4 }}
+                    />
+                  </RechartsPrimitive.LineChart>
+                </ChartContainer>
+              </div>
+            </CardContent>
+          </Card>
         </div>
+
+        {/* Stats Summary */}
+        <Card className="bg-gradient-to-r from-purple-50 to-pink-100 border-0 shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Info className="h-5 w-5 text-purple-600" />
+              Summary Statistics
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {chartData.map((item) => (
+                <div key={item.name} className="text-center p-4 bg-white rounded-lg shadow-sm">
+                  <div className="text-2xl font-bold" style={{ color: item.color }}>
+                    {item.value.toLocaleString()}
+                  </div>
+                  <div className="text-sm text-gray-600">{item.name}</div>
+                  <div className="text-xs text-gray-500 mt-1">{item.percentage.toFixed(1)}% of total</div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
-    );
-  };
+    )
+  }
 
   const renderContent = () => {
     if (isLoading) {
-      return renderLoadingState();
+      return renderLoadingState()
     }
 
     switch (activeSection) {
       case "users":
-        return <UserManagement />;
+        return <UserManagement />
       case "supervisors":
-        return <SupervisorsManagement />;
+        return <SupervisorsManagement />
       case "suppliers":
-        return <SuppliersManagement />;
+        return <SuppliersManagement />
       case "clients":
-        return <ClientsManagement />;
+        return <ClientsManagement />
       case "employees":
-        return <EmployeesManagement />;
+        return <EmployeesManagement />
       case "workers":
-        return <AllWorkersOverview />;
+        return <AllWorkersOverview />
       case "materials":
-        return <MaterialsManagement />;
+        return <MaterialsManagement />
       case "reports":
-        return <Reportmanagement />;
-      case "payroll": 
-        return (
-        <PayrollManagement />
-        );
+        return <Reportmanagement />
+      case "payroll":
+        return <PayrollManagement />
       case "message":
         return (
           <div className="h-[calc(100vh-200px)] bg-white rounded-lg shadow-sm">
             <MessagingPanel />
           </div>
-        );
+        )
       case "settings":
-        return <AdminSetting />;
+        return <AdminSetting />
       default:
         return (
-          <div className="space-y-6  ">
+          <div className="space-y-6">
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md flex items-center">
                 <AlertCircle className="h-5 w-5 mr-2" />
                 {error}
+                <Button onClick={fetchDashboardData} variant="outline" size="sm" className="ml-auto bg-transparent">
+                  Retry
+                </Button>
               </div>
             )}
-            
-            {/* Stats Grid */}
+
+            {/* Enhanced Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
               {stats.map((stat) => (
-                <Card 
-                  key={stat.id} 
-                  className={`h-[120px] hover:shadow-xl border-none transition-shadow cursor-pointer ${
-                    selectedStat === stat.id ? 'shadow-lg' : ''
-                  }`}
+                <Card
+                  key={stat.id}
+                  className={`h-[140px] hover:shadow-xl border-0 transition-all duration-300 cursor-pointer transform hover:scale-105 ${
+                    selectedStat === stat.id ? "shadow-lg ring-2 ring-blue-500" : ""
+                  } ${stat.bgColor}`}
                   onClick={() => setSelectedStat(selectedStat === stat.id ? null : stat.id)}
                 >
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm  text-[#00B140] font-semibold">{stat.title}</CardTitle>
-                    <div className={`p-2 rounded-full ${stat.color.replace('text', 'bg')} bg-opacity-10`}>
-                      <stat.icon className={`h-4 w-4 ${stat.color}`} />
+                    <CardTitle className="text-sm font-semibold text-gray-700">{stat.title}</CardTitle>
+                    <div className={`p-3 rounded-full ${stat.color.replace("text", "bg")} bg-opacity-20`}>
+                      <stat.icon className={`h-5 w-5 ${stat.color}`} />
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">{stat.value}</div>
-                    {stat.change && (
-                      <p className="text-xs text-muted-foreground">
-                        <span className="text-green-600">{stat.change}</span> from last month
-                      </p>
-                    )}
+                    <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
+                    <div className="flex items-center mt-2">
+                      {stat.trend === "up" ? (
+                        <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
+                      ) : (
+                        <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
+                      )}
+                      <span
+                        className={`text-xs font-medium ${stat.trend === "up" ? "text-green-600" : "text-red-600"}`}
+                      >
+                        {stat.change}
+                      </span>
+                      <span className="text-xs text-gray-500 ml-1">from last month</span>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
             </div>
 
-            {/* Details Panel */}
-            <Card>
+            {/* Quick Actions Section */}
+            <Card className="bg-gradient-to-r from-indigo-50 to-blue-100 border-0 shadow-lg">
               <CardHeader>
-                <CardTitle>
-                  {selectedStat 
-                    ? `${selectedStat.charAt(0).toUpperCase() + selectedStat.slice(1)} Details`
-                    : "Dashboard Overview"}
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-indigo-600" />
+                  Quick Actions
+                </CardTitle>
+                <CardDescription>Frequently used actions for faster workflow</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  {quickActions.map((action, index) => (
+                    <Button
+                      key={index}
+                      variant="outline"
+                      className="h-20 flex flex-col items-center justify-center gap-2 bg-white hover:bg-gray-50 border-2 hover:border-gray-300 transition-all duration-200"
+                      onClick={action.action}
+                    >
+                      <div className={`p-2 rounded-full ${action.color} text-white`}>
+                        <action.icon className="h-4 w-4" />
+                      </div>
+                      <span className="text-xs font-medium text-center">{action.title}</span>
+                    </Button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Details Panel */}
+            <Card className="shadow-lg border-0">
+              <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100">
+                <CardTitle className="flex items-center gap-2">
+                  {selectedStat ? (
+                    <>
+                      <Eye className="h-5 w-5 text-blue-600" />
+                      {selectedStat.charAt(0).toUpperCase() + selectedStat.slice(1)} Details
+                    </>
+                  ) : (
+                    <>
+                      <Activity className="h-5 w-5 text-gray-600" />
+                      Dashboard Overview
+                    </>
+                  )}
                 </CardTitle>
                 <CardDescription>
-                  {selectedStat ? `Viewing details for ${selectedStat}` : 'Select a card to view details'}
+                  {selectedStat
+                    ? `Viewing details for ${selectedStat}`
+                    : "Select a card above to view details or explore the overview charts"}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="min-h-[400px]">
+              <CardContent className="min-h-[400px] p-0">
                 <div className="space-y-4">
                   {renderDetailsTable()}
-                  <div className="flex justify-center">
-                    <Button 
-                      variant="outline" 
-                      size="lg"
-                      onClick={() => handleViewMore(selectedStat || 'dashboard')}
-                    >
-                      <ExternalLink className="w-5 h-5 mr-2" />
-                      View More in {selectedStat ? selectedStat.charAt(0).toUpperCase() + selectedStat.slice(1) : 'Dashboard'}
-                    </Button>
-                  </div>
+                  {selectedStat && (
+                    <div className="flex justify-center p-6">
+                      <Button
+                        variant="default"
+                        size="lg"
+                        className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                        onClick={() => handleViewMore(selectedStat || "dashboard")}
+                      >
+                        <ExternalLink className="w-5 h-5 mr-2" />
+                        View More in {selectedStat.charAt(0).toUpperCase() + selectedStat.slice(1)}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
           </div>
-        );
+        )
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       <DashboardLayout userRole="admin" activeSection={activeSection} onSectionChange={setActiveSection}>
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            {error && (
-              <Button onClick={fetchDashboardData} variant="outline">
-                Retry
-              </Button>
-            )}
-          </div>
-          {renderContent()}
-        </div>
+        <div className="p-6">{renderContent()}</div>
       </DashboardLayout>
 
       {/* User Details Modal */}
@@ -1103,5 +1314,5 @@ export default function AdminDashboard() {
         type={selectedUserType}
       />
     </div>
-  );
+  )
 }

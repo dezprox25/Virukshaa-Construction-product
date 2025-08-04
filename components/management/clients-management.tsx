@@ -270,65 +270,8 @@ export default function ClientsManagement() {
     try {
       const response = await fetch("/api/clients", { cache: "no-store" })
       if (!response.ok) {
-        // Mock data fallback
-        const mockClients: Client[] = [
-          {
-            _id: "1",
-            name: "John Smith",
-            email: "john.smith@techcorp.com",
-            phone: "+1 (555) 123-4567",
-            company: "TechCorp Solutions",
-            address: "123 Business Ave, Suite 100",
-            city: "San Francisco",
-            state: "CA",
-            postalCode: "94105",
-            projectTotalAmount: 150000,
-            taxId: "12-3456789",
-            website: "https://techcorp.com",
-            status: "Active",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            avatar: "/placeholder.svg?height=150&width=150",
-          },
-          {
-            _id: "2",
-            name: "Sarah Johnson",
-            email: "sarah@innovatedesign.com",
-            phone: "+1 (555) 987-6543",
-            company: "Innovate Design Studio",
-            address: "456 Creative Blvd",
-            city: "New York",
-            state: "NY",
-            postalCode: "10001",
-            projectTotalAmount: 85000,
-            taxId: "98-7654321",
-            website: "https://innovatedesign.com",
-            status: "Active",
-            createdAt: new Date(Date.now() - 86400000).toISOString(),
-            updatedAt: new Date().toISOString(),
-            avatar: "/placeholder.svg?height=150&width=150",
-          },
-          {
-            _id: "3",
-            name: "Michael Chen",
-            email: "m.chen@globalventures.com",
-            phone: "+1 (555) 456-7890",
-            company: "Global Ventures Inc",
-            address: "789 Enterprise Way",
-            city: "Austin",
-            state: "TX",
-            postalCode: "73301",
-            projectTotalAmount: 220000,
-            taxId: "45-6789012",
-            website: "https://globalventures.com",
-            status: "Inactive",
-            createdAt: new Date(Date.now() - 172800000).toISOString(),
-            updatedAt: new Date().toISOString(),
-            avatar: "/placeholder.svg?height=150&width=150",
-          },
-        ]
-        setClients(mockClients)
-        return
+      
+        return alert("Failed to fetch clients")
       }
       const data = await response.json()
       setClients(data)
@@ -339,28 +282,6 @@ export default function ClientsManagement() {
         description: "Failed to load clients. Using demo data.",
         variant: "destructive",
       })
-      // Mock data fallback
-      const mockClients: Client[] = [
-        {
-          _id: "1",
-          name: "John Smith",
-          email: "john.smith@techcorp.com",
-          phone: "+1 (555) 123-4567",
-          company: "TechCorp Solutions",
-          address: "123 Business Ave, Suite 100",
-          city: "San Francisco",
-          state: "CA",
-          postalCode: "94105",
-          projectTotalAmount: 150000,
-          taxId: "12-3456789",
-          website: "https://techcorp.com",
-          status: "Active",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          avatar: "/placeholder.svg?height=150&width=150",
-        },
-      ]
-      setClients(mockClients)
     } finally {
       setLoading(false)
     }
