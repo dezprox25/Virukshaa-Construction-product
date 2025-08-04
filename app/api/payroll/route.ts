@@ -2,21 +2,92 @@ import { NextResponse } from 'next/server';
 import connectToDB from '@/lib/db';
 import Payroll, { IPayroll } from '@/models/PayrollModel';
 import mongoose from 'mongoose';
+
+// Helper function to get error details
+function getErrorDetails(error: unknown): { name: string; message: string; stack?: string } {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    };
+  }
+  return {
+    name: 'UnknownError',
+    message: String(error)
+  };
+}
 // Set response timeout (10 seconds)
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
+
+// Helper function to ensure database connection
+async function ensureDatabaseConnection() {
+  // Check if we already have a connection
+  if (mongoose.connection.readyState === 1) {
+    console.log('  - Using existing database connection');
+    return true;
+  }
+
+  console.log('  - No active connection, establishing new one...');
+  let retries = 3;
+  let lastError;
+  
+  while (retries > 0) {
+    try {
+      console.log(`  - Attempting to connect (${4 - retries}/3)...`);
+      await connectToDB();
+      console.log('  - Database connection successful');
+      return true;
+    } catch (dbError) {
+      lastError = dbError;
+      retries--;
+      console.warn(`  - Connection attempt failed: ${dbError}`);
+      if (retries === 0) {
+        console.error('  - All connection attempts failed');
+        throw dbError;
+      }
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+  
+  return false;
+}
 
 // GET all payroll records
 export async function GET() {
   console.log('🔍 Starting GET /api/payroll');
   
   try {
-    console.log('1. Attempting to connect to database...');
-    await connectToDB();
-    console.log('2. Database connection successful');
+    // 1. Ensure database connection
+    console.log('1. Connecting to database...');
+    await ensureDatabaseConnection();
     
-    console.log('3. Fetching payroll records...');
-    const payrollRecords = await Payroll.find({})
+    // 2. Verify connection state
+    console.log('2. Verifying database connection...');
+    if (mongoose.connection.readyState !== 1) {
+      throw new Error(`Database connection failed. State: ${mongoose.connection.readyState}`);
+    }
+    
+    // 3. Log database state
+    console.log('3. Database state:', {
+      readyState: mongoose.connection.readyState,
+      dbName: mongoose.connection.db?.databaseName || 'unknown',
+      collections: mongoose.connection.db ? 
+        await mongoose.connection.db.listCollections().toArray()
+          .then(cols => cols.map((c: any) => c.name))
+          .catch(err => `Failed to list collections: ${err.message}`) : 
+        'No database connection'
+    });
+    
+    // 4. Check if Payroll model is registered
+    if (!mongoose.models.Payroll) {
+      throw new Error('Payroll model is not registered');
+    }
+    
+    console.log('4. Fetching payroll records...');
+    const query = Payroll.find({})
       .populate({
         path: 'user',
         select: 'name email',
@@ -25,6 +96,13 @@ export async function GET() {
       .sort({ paymentDate: -1 })
       .lean()
       .maxTimeMS(10000); // 10 second timeout
+    
+    console.log('  - Query:', query.getFilter());
+    
+    const payrollRecords = await query.exec().catch(err => {
+      console.error('  - Query execution failed:', err);
+      throw new Error(`Failed to execute query: ${err.message}`);
+    });
       
     console.log(`4. Successfully fetched ${payrollRecords.length} payroll records`);
     
@@ -41,27 +119,85 @@ export async function GET() {
     return NextResponse.json(processedRecords);
     
   } catch (err: unknown) {
-    console.error('❌ Error in GET /api/payroll:', {
-      error: err,
-      timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV,
-      dbConnection: mongoose.connection?.readyState === 1 ? 'connected' : 'disconnected'
-    });
+    const errorDetails = getErrorDetails(err);
+    const timestamp = new Date().toISOString();
+    const isProduction = process.env.NODE_ENV === 'production';
     
-    const errorResponse = {
+    // Prepare error context
+    const errorContext = {
+      timestamp,
+      environment: process.env.NODE_ENV,
+      dbConnection: mongoose.connection?.readyState === 1 ? 'connected' : 'disconnected',
+      nodeVersion: process.version,
+      error: {
+        name: errorDetails.name,
+        message: errorDetails.message,
+        ...(!isProduction && { stack: errorDetails.stack })
+      }
+    };
+
+    // Log detailed error information
+    console.error('❌ Error in GET /api/payroll:', JSON.stringify(errorContext, null, 2));
+    
+    if (errorDetails.stack) {
+      console.error('Error stack:', errorDetails.stack);
+    }
+    
+    // Prepare error response
+    const errorResponse: any = {
       success: false,
       message: 'Failed to fetch payroll records',
-      timestamp: new Date().toISOString(),
-      ...(process.env.NODE_ENV !== 'production' && {
-        error: err instanceof Error ? {
-          name: err.name,
-          message: err.message,
-          ...(err.stack && { stack: err.stack })
-        } : 'Unknown error type'
-      })
+      timestamp,
+      error: {
+        type: errorDetails.name,
+        message: errorDetails.message
+      }
     };
     
-    return NextResponse.json(errorResponse, { status: 500 });
+    // Add debug information in non-production
+    if (!isProduction) {
+      errorResponse.debug = {
+        nodeEnv: process.env.NODE_ENV,
+        dbConnection: errorContext.dbConnection,
+        collections: mongoose.connection.db ? 
+          await mongoose.connection.db.listCollections().toArray()
+            .then(cols => cols.map((c: any) => c.name))
+            .catch(() => 'Failed to list collections') : 
+          'No database connection',
+        mongooseState: {
+          readyState: mongoose.connection.readyState,
+          models: Object.keys(mongoose.connection.models),
+          modelSchemas: mongoose.connection.modelSchemas 
+            ? Object.keys(mongoose.connection.modelSchemas)
+            : [] // Return empty array if modelSchemas is not available
+        }
+      };
+      
+      // Add full error details in development
+      if (process.env.NODE_ENV === 'development') {
+        errorResponse.error.fullError = errorDetails;
+      }
+    }
+    
+    // Set appropriate status code based on error type
+    let statusCode = 500;
+    if (errorDetails.name === 'ValidationError') statusCode = 400;
+    if (errorDetails.name === 'UnauthorizedError') statusCode = 401;
+    if (errorDetails.name === 'ForbiddenError') statusCode = 403;
+    if (errorDetails.name === 'NotFoundError') statusCode = 404;
+    
+    // Return the error response
+    return new NextResponse(JSON.stringify(errorResponse, null, 2), {
+      status: statusCode,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+        'X-Error-Type': errorDetails.name,
+        'X-Request-ID': crypto.randomUUID()
+      }
+    });
   }
 }
 
