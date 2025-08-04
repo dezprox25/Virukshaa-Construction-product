@@ -1,45 +1,67 @@
 import { NextResponse } from 'next/server';
 import connectToDB from '@/lib/db';
-import Payroll from '@/models/PayrollModel';
+import Payroll, { IPayroll } from '@/models/PayrollModel';
+import mongoose from 'mongoose';
+// Set response timeout (10 seconds)
+export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
 // GET all payroll records
 export async function GET() {
+  console.log('🔍 Starting GET /api/payroll');
+  
   try {
-    console.log('Connecting to database...');
+    console.log('1. Attempting to connect to database...');
     await connectToDB();
-    console.log('Database connected, fetching payroll records...');
+    console.log('2. Database connection successful');
     
+    console.log('3. Fetching payroll records...');
     const payrollRecords = await Payroll.find({})
-      .populate('user', 'name email') // Populate user data with name and email
+      .populate({
+        path: 'user',
+        select: 'name email',
+        options: { lean: true }
+      })
       .sort({ paymentDate: -1 })
-      .lean();
+      .lean()
+      .maxTimeMS(10000); // 10 second timeout
       
-    console.log(`Fetched ${payrollRecords.length} payroll records`);
-    return NextResponse.json(payrollRecords);
-  } catch (err: unknown) {
-    // Type guard to check if the error is an instance of Error
-    if (err instanceof Error) {
-      console.error('Error in GET /api/payroll:', {
-        message: err.message,
-        stack: err.stack,
-        name: err.name,
-      });
-      
-      return NextResponse.json(
-        { 
-          message: 'Failed to fetch payroll records',
-          ...(process.env.NODE_ENV === 'development' && { error: err.message })
-        },
-        { status: 500 }
-      );
-    }
+    console.log(`4. Successfully fetched ${payrollRecords.length} payroll records`);
     
-    // Handle non-Error thrown values
-    console.error('Unknown error in GET /api/payroll:', err);
-    return NextResponse.json(
-      { message: 'An unknown error occurred while fetching payroll records' },
-      { status: 500 }
-    );
+    // Ensure all _id fields are strings for the client
+    const processedRecords = payrollRecords.map((record: any) => ({
+      ...record,
+      _id: record._id?.toString(),
+      user: record.user ? {
+        ...record.user,
+        _id: record.user._id?.toString()
+      } : null
+    }));
+    
+    return NextResponse.json(processedRecords);
+    
+  } catch (err: unknown) {
+    console.error('❌ Error in GET /api/payroll:', {
+      error: err,
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV,
+      dbConnection: mongoose.connection?.readyState === 1 ? 'connected' : 'disconnected'
+    });
+    
+    const errorResponse = {
+      success: false,
+      message: 'Failed to fetch payroll records',
+      timestamp: new Date().toISOString(),
+      ...(process.env.NODE_ENV !== 'production' && {
+        error: err instanceof Error ? {
+          name: err.name,
+          message: err.message,
+          ...(err.stack && { stack: err.stack })
+        } : 'Unknown error type'
+      })
+    };
+    
+    return NextResponse.json(errorResponse, { status: 500 });
   }
 }
 

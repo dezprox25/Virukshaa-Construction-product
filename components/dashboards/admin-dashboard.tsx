@@ -1090,7 +1090,11 @@ export default function AdminDashboard() {
                     <RechartsPrimitive.XAxis dataKey="month" stroke="#6b7280" />
                     <RechartsPrimitive.YAxis stroke="#6b7280" />
                     <RechartsPrimitive.Tooltip content={<ChartTooltipContent />} />
-                    <RechartsPrimitive.Legend content={(props) => <ChartLegendContent {...props} />} />
+                    <RechartsPrimitive.Legend 
+                      content={({ payload }) => (
+                        <ChartLegendContent {...(payload as any)} />
+                      )} 
+                    />
                     <RechartsPrimitive.Line
                       type="monotone"
                       dataKey="employees"
