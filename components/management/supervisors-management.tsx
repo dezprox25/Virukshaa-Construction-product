@@ -215,7 +215,7 @@ function CombinedAttendanceView({
         const attendanceData = await response.json()
         const map: Record<string, AttendanceStatus> = {}
 
-        // Only populate with actual attendance records - don't fill defaults
+        // Process attendance records and store their status and leave information
         if (Array.isArray(attendanceData)) {
           attendanceData.forEach((record) => {
             if (record.date) {
@@ -223,9 +223,8 @@ function CombinedAttendanceView({
               if (!isNaN(date.getTime())) {
                 const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
                 const dateKey = localDate.toISOString().split("T")[0]
-                if (record.status === "Present" || record.status === "Absent") {
-                  map[dateKey] = record.status
-                }
+                // Store the full record in the map to access all fields later
+                map[dateKey] = record.status || 'Absent' // Default to 'Absent' if status is missing
               }
             }
           })
@@ -242,15 +241,28 @@ function CombinedAttendanceView({
         // First, process all attendance records to get leave statuses
         if (Array.isArray(attendanceData)) {
           attendanceData.forEach((record) => {
-            if (record.status === "Absent") {
+            console.log("📊 Processing attendance record:", {
+              date: record.date,
+              status: record.status,
+              isLeaveApproved: record.isLeaveApproved,
+              isLeavePaid: record.isLeavePaid,
+              leaveReason: record.leaveReason
+            });
+            
+            if (record.status === "Present") {
+              presentCount++
+            } else if (record.status === "Absent") {
               if (record.isLeaveApproved === true) {
-                if (record.isLeavePaid) {
+                if (record.isLeavePaid === true) {
                   paidLeaveCount++
+                  console.log("✅ Counted as Paid Leave")
                 } else {
                   unpaidLeaveCount++
+                  console.log("❌ Counted as Unpaid Leave")
                 }
-              } else if (record.isLeaveApproved === undefined) {
+              } else if (record.isLeaveApproved === false || record.isLeaveApproved === undefined) {
                 pendingLeaveCount++
+                console.log("⏳ Counted as Pending Leave")
               }
             }
           })
@@ -331,13 +343,11 @@ function CombinedAttendanceView({
   // Create a map of date to leave info for quick lookup
   const leaveInfoMap = useMemo(() => {
     const map: Record<string, { status: "paid" | "unpaid" | "pending"; reason?: string }> = {}
-
     if (Array.isArray(attendanceData)) {
       attendanceData.forEach((record: AttendanceRecord) => {
         if (record.status === "Absent" && record.date) {
           const date = new Date(record.date)
           const dateKey = date.toISOString().split("T")[0]
-
           if (record.isLeaveApproved === true) {
             map[dateKey] = {
               status: record.isLeavePaid ? "paid" : "unpaid",
@@ -352,7 +362,6 @@ function CombinedAttendanceView({
         }
       })
     }
-
     return map
   }, [attendanceData])
 
@@ -424,7 +433,8 @@ function CombinedAttendanceView({
   }, [selectedMonth, attendanceMap, year, monthNum, daysInMonth, startDayIdx])
 
   const selectedMonthLabel = months.find((m) => m.value === selectedMonth)?.label || selectedMonth
-  const totalSalary = presentDays * dailySalary
+  // Calculate total salary including paid leave days
+  const totalSalary = (presentDays + paidLeaveDays) * dailySalary
 
   if (loading) {
     return (
@@ -590,7 +600,6 @@ function CombinedAttendanceView({
                           cellClass += " bg-gray-100 text-gray-800 font-medium border-gray-200"
                           tooltipContent = "Leave Pending Approval"
                         }
-
                         // Add leave reason to tooltip if available
                         if (day.leaveInfo.reason) {
                           tooltipContent += `\nReason: ${day.leaveInfo.reason}`
@@ -685,6 +694,13 @@ export default function SupervisorsManagement() {
   // Task editing state
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [isEditTaskFormOpen, setIsEditTaskFormOpen] = useState(false)
+
+  // Leave approval state
+  const [showLeaveApproval, setShowLeaveApproval] = useState(false)
+  const [selectedSupervisorId, setSelectedSupervisorId] = useState("")
+  const [leaveDates, setLeaveDates] = useState<Date[]>([])
+  const [leaveReason, setLeaveReason] = useState("")
+  const [isSubmittingLeave, setIsSubmittingLeave] = useState(false)
 
   useEffect(() => {
     fetchSupervisors()
@@ -1070,7 +1086,6 @@ export default function SupervisorsManagement() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-
     try {
       const url = editingSupervisor ? `/api/supervisors/${editingSupervisor._id}` : "/api/supervisors"
       const method = editingSupervisor ? "PUT" : "POST"
@@ -1186,14 +1201,7 @@ export default function SupervisorsManagement() {
   const noStatusToday = totalSupervisors - presentToday - absentToday
   const attendanceRate = totalSupervisors > 0 ? Math.round((presentToday / totalSupervisors) * 100) : 0
 
-  // State for leave approval modal
-  const [showLeaveApproval, setShowLeaveApproval] = useState(false)
-  const [selectedSupervisorId, setSelectedSupervisorId] = useState<string>("")
-  const [leaveReason, setLeaveReason] = useState("")
-  const [leaveDates, setLeaveDates] = useState<Date[]>([])
-  const [isSubmittingLeave, setIsSubmittingLeave] = useState(false)
-
-  // Update attendance in the database and local state
+  // IMPROVED: Update attendance function with better error handling and logging
   const updateAttendance = async (
     supervisorId: string,
     status: AttendanceStatus,
@@ -1201,6 +1209,14 @@ export default function SupervisorsManagement() {
     leaveReason: string | null = null,
     isPaid = true,
   ): Promise<boolean> => {
+    console.log("🔄 Starting attendance update:", {
+      supervisorId,
+      status,
+      dateStr,
+      leaveReason,
+      isPaid,
+    })
+
     try {
       // Prepare the request body
       const requestBody: any = {
@@ -1213,23 +1229,40 @@ export default function SupervisorsManagement() {
       if (status === "Absent") {
         requestBody.leaveReason = leaveReason || "Not specified"
         requestBody.isPaid = isPaid
+        requestBody.isLeaveApproved = true // Auto-approve for now
         requestBody.checkOut = new Date().toISOString()
       } else {
         requestBody.checkIn = new Date().toISOString()
       }
 
+      console.log("📤 Sending request body:", requestBody)
+
       const response = await fetch("/api/attendance", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(requestBody),
       })
 
+      console.log("📥 Response status:", response.status)
+
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || "Failed to update attendance")
+        const errorText = await response.text()
+        console.error("❌ API Error Response:", errorText)
+
+        let errorData
+        try {
+          errorData = JSON.parse(errorText)
+        } catch {
+          errorData = { message: errorText || `HTTP ${response.status}` }
+        }
+
+        throw new Error(errorData.message || `Failed to update attendance (${response.status})`)
       }
 
       const attendanceData = await response.json()
+      console.log("✅ Attendance updated successfully:", attendanceData)
 
       // Update local state
       setSupervisors((prevSupervisors) =>
@@ -1253,105 +1286,99 @@ export default function SupervisorsManagement() {
 
       return true
     } catch (error) {
-      console.error("Error updating attendance:", error)
-      toast.error(error instanceof Error ? error.message : "Failed to update attendance")
+      console.error("❌ Error updating attendance:", error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to update attendance"
+      toast.error(errorMessage)
       return false
     }
   }
 
-  // Handle attendance change
-  const handleAttendanceChange = async (supervisorId: string, status: AttendanceStatus) => {
-    try {
-      const today = new Date()
-      const dateStr = today.toISOString().split("T")[0] // YYYY-MM-DD format
-      const supervisor = supervisors.find((s) => s._id === supervisorId)
-      
-      if (!supervisor) {
-        throw new Error("Supervisor not found")
-      }
+  // Handle leave approval with better error handling and logging
+  const handleApproveLeave = async (reason: string, isPaid: boolean, dates: Date[]): Promise<boolean> => {
+    console.log("🔄 Starting leave approval process:", {
+      selectedSupervisorId,
+      leaveDates: dates.map((d) => d.toISOString().split("T")[0]),
+      reason,
+      isPaid,
+    })
 
-      // If marking as absent, handle leave approval flow
-      if (status === "Absent") {
-        setSelectedSupervisorId(supervisorId)
-        
-        // For single or two-day leaves, auto-approve as paid leave
-        if (leaveDates.length <= 2) {
-          const success = await updateAttendance(supervisorId, "Absent", dateStr, 'Approved leave', true)
-          if (success) {
-            toast.success("Leave marked as paid")
-          }
-          return
-        }
-        
-        // For leaves longer than 2 days, show approval modal
-        setShowLeaveApproval(true)
-        return
-      }
-
-      // For present status, update directly
-      const success = await updateAttendance(supervisorId, status, dateStr)
-      if (success) {
-        toast.success(`Marked as ${status} successfully`)
-        await fetchSupervisors() // Refresh data
-      }
-    } catch (error) {
-      console.error("Error updating attendance:", error)
-      toast.error(error instanceof Error ? error.message : "Failed to update attendance")
-    } finally {
-      setLeaveDates([])
+    if (!selectedSupervisorId) {
+      const errorMsg = "No supervisor selected for leave"
+      console.error("❌", errorMsg)
+      toast.error(errorMsg)
+      return false
     }
-  }
 
-  // Handle leave approval
-  const handleApproveLeave = async (reason: string, isPaid: boolean) => {
-    if (!selectedSupervisorId || leaveDates.length === 0) {
-      toast.error("No supervisor or dates selected for leave")
+    if (!dates || dates.length === 0) {
+      const errorMsg = "No dates selected for leave"
+      console.error("❌", errorMsg)
+      toast.error(errorMsg)
       return false
     }
 
     if (!reason.trim()) {
-      toast.error("Please provide a reason for the leave")
+      const errorMsg = "Please provide a reason for the leave"
+      console.error("❌", errorMsg)
+      toast.error(errorMsg)
       return false
     }
 
     setIsSubmittingLeave(true)
 
     try {
-      // Process each leave date
+      // Process each date individually
       const results = await Promise.all(
-        leaveDates.map(async (date) => {
+        dates.map(async (date) => {
+          if (!(date instanceof Date) || isNaN(date.getTime())) {
+            console.error("❌ Invalid date:", date)
+            return { date: 'invalid', success: false }
+          }
+          
+          const dateStr = date.toISOString().split("T")[0]
+          console.log(`📅 Processing leave for date: ${dateStr}`)
+          
           try {
-            const dateStr = date.toISOString().split("T")[0]
-            return await updateAttendance(
-              selectedSupervisorId, 
-              "Absent", 
-              dateStr, 
-              reason.trim(), 
+            const success = await updateAttendance(
+              selectedSupervisorId,
+              "Absent",
+              dateStr,
+              reason,
               isPaid
             )
+            
+            return { date: dateStr, success }
           } catch (error) {
-            console.error(`Error processing leave for date ${date}:`, error)
-            return false
+            console.error(`❌ Error processing date ${dateStr}:`, error)
+            return { date: dateStr, success: false, error: error.message }
           }
         })
       )
 
-      const success = results.every(Boolean)
-      if (success) {
-        toast.success(`Successfully processed ${leaveDates.length} day(s) of ${isPaid ? 'paid' : 'unpaid'} leave`)
-        // Refresh the supervisors list to reflect the changes
+      // Check if all updates were successful
+      const allSuccessful = results.every((r) => r.success)
+      const anySuccessful = results.some((r) => r.success)
+
+      if (allSuccessful) {
+        console.log("✅ All leave dates processed successfully")
+        toast.success("Leave approved successfully")
+        // Refresh the supervisors list to update the attendance data
         await fetchSupervisors()
+        return true
+      } else if (anySuccessful) {
+        console.warn("⚠️ Some leave dates were not processed successfully")
+        toast.warning("Some leave dates were not processed. Please check the supervisor's attendance.")
+        await fetchSupervisors()
+        return false
       } else {
-        const successCount = results.filter(Boolean).length
-        toast.warning(`Updated ${successCount} of ${leaveDates.length} days. Some updates may have failed.`)
+        throw new Error("Failed to process any leave days")
       }
-      
-      return success
     } catch (error) {
-      console.error("Error processing leave:", error)
-      toast.error(error instanceof Error ? error.message : "Failed to process leave request")
+      console.error("❌ Error processing leave:", error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to process leave request"
+      toast.error(errorMessage)
       return false
     } finally {
+      console.log("🔄 Cleaning up leave approval state")
       setIsSubmittingLeave(false)
       setShowLeaveApproval(false)
       setLeaveReason("")
@@ -1359,6 +1386,138 @@ export default function SupervisorsManagement() {
       setSelectedSupervisorId("")
     }
   }
+
+  // Handle attendance change
+  const handleAttendanceChange = async (supervisorId: string, status: "Present" | "Absent") => {
+    console.log("🎯 Handling attendance change:", { supervisorId, status })
+
+    try {
+      const today = new Date()
+      const dateStr = today.toISOString().split("T")[0] // YYYY-MM-DD format
+      const supervisor = supervisors.find((s) => s._id === supervisorId)
+
+      if (!supervisor) {
+        throw new Error("Supervisor not found")
+      }
+
+      // If marking as present, update immediately
+      if (status === "Present") {
+        await updateAttendance(supervisorId, "Present", dateStr)
+        return
+      }
+      
+      // If marking as absent, handle leave approval flow
+      console.log("📋 Preparing leave approval for supervisor:", supervisor.name)
+      
+      // Create a new date object to ensure reactivity
+      const currentDate = new Date()
+      console.log("📅 Setting leave date:", currentDate.toISOString())
+      
+      // First set the supervisor ID and reset reason
+      setSelectedSupervisorId(supervisorId)
+      setLeaveReason("")
+      
+      // Set the dates and immediately open the modal
+      setLeaveDates([currentDate])
+      
+      // Use a small timeout to ensure state is updated before opening modal
+      setTimeout(() => {
+        console.log("🚀 Opening modal with dates:", [currentDate].map(d => d.toISOString().split('T')[0]))
+        setShowLeaveApproval(true)
+      }, 50)
+
+      // For present status, update directly
+      console.log("✅ Marking as present directly")
+      const success = await updateAttendance(supervisorId, status, dateStr)
+      if (success) {
+        toast.success(`Marked as ${status} successfully`)
+        await fetchSupervisors() // Refresh data
+      }
+    } catch (error) {
+      console.error("❌ Error updating attendance:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to update attendance")
+    } finally {
+      setLeaveDates([])
+    }
+  }
+
+  // IMPROVED: Handle leave approval with better error handling and logging
+  // const handleApproveLeave = async (reason: string, isPaid: boolean): Promise<boolean> => {
+  //   console.log("🔄 Starting leave approval process:", {
+  //     selectedSupervisorId,
+  //     leaveDates: leaveDates.map((d) => d.toISOString().split("T")[0]),
+  //     reason,
+  //     isPaid,
+  //   })
+
+  //   if (!selectedSupervisorId || leaveDates.length === 0) {
+  //     const errorMsg = "No supervisor or dates selected for leave"
+  //     console.error("❌", errorMsg)
+  //     toast.error(errorMsg)
+  //     return false
+  //   }
+
+  //   if (!reason.trim()) {
+  //     const errorMsg = "Please provide a reason for the leave"
+  //     console.error("❌", errorMsg)
+  //     toast.error(errorMsg)
+  //     return false
+  //   }
+
+  //   setIsSubmittingLeave(true)
+
+  //   try {
+  //     console.log("📋 Processing leave for", leaveDates.length, "day(s)")
+
+  //     // Process each leave date
+  //     const results = await Promise.all(
+  //       leaveDates.map(async (date, index) => {
+  //         try {
+  //           const dateStr = date.toISOString().split("T")[0]
+  //           console.log(`📅 Processing date ${index + 1}/${leaveDates.length}:`, dateStr)
+
+  //           const result = await updateAttendance(selectedSupervisorId, "Absent", dateStr, reason.trim(), isPaid)
+
+  //           console.log(`${result ? "✅" : "❌"} Date ${dateStr} processed:`, result)
+  //           return result
+  //         } catch (error) {
+  //           console.error(`❌ Error processing leave for date ${date}:`, error)
+  //           return false
+  //         }
+  //       }),
+  //     )
+
+  //     const successCount = results.filter(Boolean).length
+  //     const totalCount = results.length
+
+  //     console.log(`📊 Leave processing complete: ${successCount}/${totalCount} successful`)
+
+  //     if (successCount === totalCount) {
+  //       toast.success(`Successfully processed ${totalCount} day(s) of ${isPaid ? "paid" : "unpaid"} leave`)
+  //       // Refresh the supervisors list to reflect the changes
+  //       await fetchSupervisors()
+  //       return true
+  //     } else if (successCount > 0) {
+  //       toast.warning(`Updated ${successCount} of ${totalCount} days. Some updates may have failed.`)
+  //       await fetchSupervisors()
+  //       return false
+  //     } else {
+  //       throw new Error("Failed to process any leave days")
+  //     }
+  //   } catch (error) {
+  //     console.error("❌ Error processing leave:", error)
+  //     const errorMessage = error instanceof Error ? error.message : "Failed to process leave request"
+  //     toast.error(errorMessage)
+  //     return false
+  //   } finally {
+  //     console.log("🔄 Cleaning up leave approval state")
+  //     setIsSubmittingLeave(false)
+  //     setShowLeaveApproval(false)
+  //     setLeaveReason("")
+  //     setLeaveDates([])
+  //     setSelectedSupervisorId("")
+  //   }
+  // }
 
   // supervisor project details
   const [supervisorProjects, setSupervisorProjects] = useState<IProject[]>([])
@@ -1649,8 +1808,24 @@ export default function SupervisorsManagement() {
     </Card>
   )
 
+  // Render the leave approval modal
+  const renderLeaveApprovalModal = () => (
+    <SupervisorLeaveApprovalModal
+      isOpen={showLeaveApproval}
+      onClose={() => setShowLeaveApproval(false)}
+      onApprove={handleApproveLeave}
+      supervisorName={selectedSupervisorId ? supervisors.find(s => s._id === selectedSupervisorId)?.name || 'Supervisor' : 'Supervisor'}
+      selectedDates={leaveDates}
+      reason={leaveReason}
+      onReasonChange={setLeaveReason}
+      isSubmitting={isSubmittingLeave}
+    />
+  )
+
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto p-4 space-y-6">
+      {renderLeaveApprovalModal()}
+
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
@@ -2676,7 +2851,7 @@ export default function SupervisorsManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Leave Approval Modal - THIS WAS MISSING! */}
+      {/* Leave Approval Modal */}
       <SupervisorLeaveApprovalModal
         isOpen={showLeaveApproval}
         onClose={() => {
@@ -2686,12 +2861,12 @@ export default function SupervisorsManagement() {
           setLeaveDates([])
         }}
         onApprove={handleApproveLeave}
-        supervisorName={supervisors.find((s) => s._id === selectedSupervisorId)?.name || ""}
+        isSubmitting={isSubmittingLeave}
+        supervisorName={supervisors.find((s) => s._id === selectedSupervisorId)?.name || "Supervisor"}
         selectedDates={leaveDates}
         onDatesChange={setLeaveDates}
         reason={leaveReason}
         onReasonChange={setLeaveReason}
-        isSubmitting={isSubmittingLeave}
       />
     </div>
   )

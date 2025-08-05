@@ -6,7 +6,15 @@ import Attendance from "@/models/Attendance";
 export async function POST(req: NextRequest) {
   await connectToDB();
   try {
-    const { supervisorId, employeeId, date, status } = await req.json();
+    const { 
+      supervisorId, 
+      employeeId, 
+      date, 
+      status, 
+      leaveReason, 
+      isLeaveApproved, 
+      isLeavePaid 
+    } = await req.json();
 
     if ((!supervisorId && !employeeId) || !date || !status) {
       return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
@@ -17,13 +25,38 @@ export async function POST(req: NextRequest) {
     attendanceDate.setUTCHours(0, 0, 0, 0);
 
     let filter: any = { date: attendanceDate };
-    if (employeeId) filter.employeeId = employeeId;
-    else filter.supervisorId = supervisorId;
+    if (employeeId) {
+      filter.employeeId = employeeId;
+    } else {
+      filter.supervisorId = supervisorId;
+    }
+
+    // Prepare update object with all possible fields
+    const updateObj: any = { 
+      status,
+      updatedAt: new Date()
+    };
+
+    // Only update leave-related fields if they are provided
+    if (leaveReason !== undefined) updateObj.leaveReason = leaveReason;
+    if (isLeaveApproved !== undefined) updateObj.isLeaveApproved = isLeaveApproved;
+    if (isLeavePaid !== undefined) updateObj.isLeavePaid = isLeavePaid;
+
+    // If marking as absent without leave approval, ensure leave fields are cleared
+    if (status === 'Absent' && isLeaveApproved === false) {
+      updateObj.leaveReason = '';
+      updateObj.isLeavePaid = false;
+    }
 
     const attendance = await Attendance.findOneAndUpdate(
       filter,
-      { status },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      updateObj,
+      { 
+        upsert: true, 
+        new: true, 
+        setDefaultsOnInsert: true,
+        runValidators: true
+      }
     );
 
     return NextResponse.json(attendance, { status: 201 });
@@ -43,6 +76,7 @@ export async function GET(req: NextRequest) {
     const endDate = searchParams.get("endDate");
     const employeeId = searchParams.get("employeeId");
     const supervisorId = searchParams.get("supervisorId");
+    const includeLeave = searchParams.get("includeLeave") === 'true';
 
     let filter: any = {};
 
@@ -62,17 +96,31 @@ export async function GET(req: NextRequest) {
       filter.date = { $gte: targetDate, $lt: nextDay };
     }
 
-    if (employeeId) filter.employeeId = employeeId;
-    if (supervisorId) filter.supervisorId = supervisorId;
+    if (employeeId) {
+      filter.employeeId = employeeId;
+    } else if (supervisorId) {
+      filter.supervisorId = supervisorId;
+    }
 
+    // If includeLeave is true, only return leave records
+    if (includeLeave) {
+      filter.status = 'Absent';
+      filter.isLeaveApproved = true;
+    }
+
+    // Select all fields including leave-related ones
     const attendanceRecords = await Attendance.find(filter)
-      .populate("supervisorId", "_id name email")
-      .populate("employeeId", "_id name email");
+      .populate("supervisorId", "_id name email phone salary")
+      .populate("employeeId", "_id name email position")
+      .sort({ date: 1 });
 
     return NextResponse.json(attendanceRecords, { status: 200 });
   } catch (error) {
     console.error("Error fetching attendance:", error);
-    return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { message: "Internal Server Error", error: (error as Error).message }, 
+      { status: 500 }
+    );
   }
 }
 

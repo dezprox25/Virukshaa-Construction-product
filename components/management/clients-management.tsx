@@ -2798,8 +2798,28 @@ export default function ClientsManagement() {
   // Client CRUD Functions
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Only validate password if it's a new client or password is being changed
-    if (!editingClient || formData.password) {
+    
+    // Validate required fields
+    if (!formData.name || !formData.email || !formData.phone) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Password validation for new clients or when changing password
+    if (!editingClient) {
+      if (!formData.password) {
+        toast({
+          title: "Error",
+          description: "Password is required for new clients.",
+          variant: "destructive",
+        })
+        return
+      }
+      
       if (formData.password !== formData.confirmPassword) {
         toast({
           title: "Error",
@@ -2808,7 +2828,8 @@ export default function ClientsManagement() {
         })
         return
       }
-      if (formData.password && formData.password.length < 6) {
+      
+      if (formData.password.length < 6) {
         toast({
           title: "Error",
           description: "Password must be at least 6 characters long.",
@@ -2825,10 +2846,12 @@ export default function ClientsManagement() {
         projectTotalAmount: Number.parseFloat(formData.projectTotalAmount) || 0,
       }
 
-      // Remove password fields if they're empty (for updates)
-      if (editingClient && !formData.password) {
+      // Always remove confirmPassword as it's not needed on the server
+      delete clientData.confirmPassword
+      
+      // Remove password if it's empty during update
+      if (editingClient && (!formData.password || formData.password === '')) {
         delete clientData.password
-        delete clientData.confirmPassword
       }
 
       const url = editingClient ? `/api/clients/${editingClient._id}` : "/api/clients"
@@ -2841,17 +2864,27 @@ export default function ClientsManagement() {
       })
 
       if (response.ok) {
+        const result = await response.json()
         await fetchClients()
-        setIsAddDialogOpen(false)
-        setEditingClient(null)
-        resetForm()
+        
         toast({
           title: "Success",
           description: `${formData.name} has been ${editingClient ? "updated" : "added"} successfully.`,
         })
+        
+        // Close dialog and reset form after successful submission
+        setIsAddDialogOpen(false)
+        setEditingClient(null)
+        resetForm()
       } else {
-        const errorData = await response.json()
-        throw new Error(errorData.message || "Failed to save client")
+        let errorMessage = "Failed to save client"
+        try {
+          const errorData = await response.json()
+          errorMessage = errorData.message || errorMessage
+        } catch (e) {
+          console.error("Error parsing error response:", e)
+        }
+        throw new Error(errorMessage)
       }
     } catch (error) {
       console.error("Error saving client:", error)
@@ -2892,7 +2925,11 @@ export default function ClientsManagement() {
   }
 
   const resetForm = () => {
-    setFormData(initialFormData)
+    setFormData({
+      ...initialFormData,
+      // Preserve any important state that shouldn't be reset
+      // (e.g., if there are any filters or UI state in the form data)
+    })
   }
 
   const openEditDialog = (client: Client) => {
