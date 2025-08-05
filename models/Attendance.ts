@@ -5,6 +5,11 @@ export interface IAttendance extends Document {
   employeeId?: mongoose.Schema.Types.ObjectId;
   date: Date;
   status: "Present" | "Absent";
+  leaveReason?: string;
+  isLeaveApproved?: boolean;
+  isLeavePaid?: boolean;
+  processedBy?: mongoose.Schema.Types.ObjectId;
+  processedAt?: Date;
 }
 
 const AttendanceSchema: Schema = new Schema(
@@ -27,6 +32,27 @@ const AttendanceSchema: Schema = new Schema(
       type: String,
       enum: ["Present", "Absent"],
       required: true,
+    },
+    leaveReason: {
+      type: String,
+      default: "",
+    },
+    isLeaveApproved: {
+      type: Boolean,
+      default: false,
+    },
+    isLeavePaid: {
+      type: Boolean,
+      default: false,
+    },
+    processedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: false,
+    },
+    processedAt: {
+      type: Date,
+      required: false,
     },
   },
   { timestamps: true }

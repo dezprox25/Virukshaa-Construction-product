@@ -54,16 +54,17 @@ import {
   Package,
   UserCheck,
   Calendar,
-  FileText,
-  Clock,
-  TrendingUp,
-  ShoppingCart,
-  DollarSign,
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { X } from "lucide-react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+
+interface ProjectMaterial {
+  projectId: string
+  materialType: string
+  quantity: number
+}
 
 interface Supplier {
   _id: string
@@ -79,6 +80,7 @@ interface Supplier {
   avatar?: string
   username?: string
   password?: string
+  projectMaterials?: ProjectMaterial[]
   createdAt: string
   updatedAt: string
 }
@@ -91,6 +93,11 @@ interface Transaction {
   status: "Pending" | "Completed" | "Cancelled"
   reference: string
   description?: string
+}
+
+interface ProjectMaterial {
+  materialType: string
+  quantity: number
 }
 
 const initialFormData = {
@@ -134,8 +141,13 @@ export default function SuppliersManagement() {
   const [isDetailViewOpen, setIsDetailViewOpen] = useState(false)
   const [isDetailSheetOpen, setIsDetailSheetOpen] = useState(false)
   const [projects, setProjects] = useState<any[]>([])
-  const [selectedProjects, setSelectedProjects] = useState<string[]>([])
+  const [projectMaterials, setProjectMaterials] = useState<Record<string, {materialType: string, quantity: number}[]>>({})
   const [isLoadingProjects, setIsLoadingProjects] = useState(false)
+  const [selectedProjectForMaterial, setSelectedProjectForMaterial] = useState<string>("")
+  const [tempMaterialSelection, setTempMaterialSelection] = useState<{ materialType: string; quantity: number }>({
+    materialType: "",
+    quantity: 1,
+  })
 
   useEffect(() => {
     fetchSuppliers()
@@ -146,7 +158,30 @@ export default function SuppliersManagement() {
       const response = await fetch("/api/suppliers", { cache: "no-store" })
       if (!response.ok) throw new Error("Failed to fetch suppliers")
       const data = await response.json()
-      setSuppliers(data)
+      
+      // Convert projectMaterials array to our state format
+      const formattedData = data.map((supplier: any) => {
+        const projectMaterialsObj: Record<string, {materialType: string, quantity: number}[]> = {}
+        
+        if (supplier.projectMaterials && Array.isArray(supplier.projectMaterials)) {
+          supplier.projectMaterials.forEach((pm: any) => {
+            if (!projectMaterialsObj[pm.projectId]) {
+              projectMaterialsObj[pm.projectId] = []
+            }
+            projectMaterialsObj[pm.projectId].push({
+              materialType: pm.materialType,
+              quantity: pm.quantity
+            })
+          })
+        }
+        
+        return {
+          ...supplier,
+          projectMaterials: projectMaterialsObj
+        }
+      })
+      
+      setSuppliers(formattedData)
     } catch (error) {
       console.error("Error fetching suppliers:", error)
       toast.error("Failed to load suppliers. Please try again.")
@@ -183,6 +218,8 @@ export default function SuppliersManagement() {
   const resetForm = () => {
     setFormData(initialFormData)
     setEditingSupplier(null)
+    setProjectMaterials({})
+    setSelectedProjectForMaterial("")
   }
 
   const openEditDialog = (supplier: Supplier) => {
@@ -192,8 +229,26 @@ export default function SuppliersManagement() {
       supplyStartDate: supplier.supplyStartDate ? new Date(supplier.supplyStartDate) : undefined,
       avatar: supplier.avatar ?? "",
       username: supplier.username ?? "",
-      password: supplier.password ?? "",
+      password: "", // Don't pre-fill password for security
     })
+    
+    // Initialize project materials if they exist
+    if (supplier.projectMaterials && supplier.projectMaterials.length > 0) {
+      const materialsByProject = supplier.projectMaterials.reduce((acc, curr) => {
+        if (!acc[curr.projectId]) {
+          acc[curr.projectId] = [];
+        }
+        acc[curr.projectId].push({
+          materialType: curr.materialType,
+          quantity: curr.quantity
+        });
+        return acc;
+      }, {} as Record<string, { materialType: string; quantity: number }[]>);
+      setProjectMaterials(materialsByProject);
+    } else {
+      setProjectMaterials({})
+    }
+    
     setIsAddDialogOpen(true)
   }
 
@@ -203,19 +258,33 @@ export default function SuppliersManagement() {
     try {
       const url = editingSupplier ? `/api/suppliers/${editingSupplier._id}` : "/api/suppliers"
       const method = editingSupplier ? "PUT" : "POST"
+      
+      // Convert projectMaterials to array format for the API
+      const projectMaterialsArray = Object.entries(projectMaterials).flatMap(([projectId, materials]) => 
+        materials.map(material => ({
+          projectId,
+          materialType: material.materialType,
+          quantity: material.quantity
+        }))
+      )
+
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
           supplyStartDate: formData.supplyStartDate?.toISOString(),
+          projectMaterials: projectMaterialsArray
         }),
       })
+      
       if (response.ok) {
         await fetchSuppliers()
         setIsAddDialogOpen(false)
         setEditingSupplier(null)
         resetForm()
+        setProjectMaterials({}) // Reset project materials after successful save
+        setSelectedProjectForMaterial("")
         toast.success(`${formData.companyName} has been ${editingSupplier ? "updated" : "added"} successfully.`)
       }
     } catch (error) {
@@ -246,43 +315,299 @@ export default function SuppliersManagement() {
   }
 
   const fetchProjects = async () => {
-    setIsLoadingProjects(true);
+    setIsLoadingProjects(true)
     try {
-      const response = await fetch('/api/projects');
-      if (!response.ok) throw new Error('Failed to fetch projects');
-      const data = await response.json();
-      setProjects(data);
+      const response = await fetch("/api/projects")
+      if (!response.ok) throw new Error("Failed to fetch projects")
+      const data = await response.json()
+      setProjects(data)
     } catch (error) {
-      console.error('Error fetching projects:', error);
-      toast.error('Failed to load projects');
+      console.error("Error fetching projects:", error)
+      toast.error("Failed to load projects")
     } finally {
-      setIsLoadingProjects(false);
+      setIsLoadingProjects(false)
     }
-  };
+  }
 
   const handleProjectSelect = (projectId: string) => {
-    // Add the project if it's not already selected
-    if (!selectedProjects.includes(projectId)) {
-      setSelectedProjects(prev => [...prev, projectId]);
+    setSelectedProjectForMaterial(projectId);
+    if (!projectMaterials[projectId]) {
+      setProjectMaterials((prev) => ({
+        ...prev,
+        [projectId]: [],
+      }));
     }
-  };
-  
-  const removeProject = (projectId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setSelectedProjects(prev => prev.filter(id => id !== projectId));
-  };
+  }
+
+  const addMaterialToProject = async (projectId: string, materialType: string, quantity: number) => {
+    if (!materialType || quantity <= 0) {
+      toast.error("Please select a material and enter a valid quantity")
+      return
+    }
+
+    if (!selectedSupplier?._id) {
+      toast.error("No supplier selected")
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/suppliers/${selectedSupplier._id}/materials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          materialType,
+          quantity: Number(quantity)
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save material');
+      }
+
+      const updatedMaterials = await response.json();
+      
+      // Update local state with the server response
+      setProjectMaterials(prev => ({
+        ...prev,
+        [projectId]: updatedMaterials.filter((pm: any) => pm.projectId === projectId)
+      }));
+
+      // Update the selected supplier's project materials
+      if (selectedSupplier) {
+        setSelectedSupplier({
+          ...selectedSupplier,
+          projectMaterials: updatedMaterials
+        });
+      }
+
+      toast.success(`Added ${materialType} to project`);
+    } catch (error) {
+      console.error('Error saving material:', error);
+      toast.error("Failed to save material. Please try again.");
+    } finally {
+      // Reset temp selection
+      setTempMaterialSelection({ materialType: "", quantity: 1 });
+    }
+  }
+
+  const updateMaterialQuantity = async (projectId: string, materialType: string, newQuantity: number) => {
+    if (newQuantity <= 0) {
+      await removeMaterialFromProject(projectId, materialType);
+      return;
+    }
+
+    if (!selectedSupplier?._id) {
+      toast.error("No supplier selected");
+      return;
+    }
+
+    try {
+      // First remove the existing material
+      await fetch(`/api/suppliers/${selectedSupplier._id}/materials`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          materialType
+        })
+      });
+
+      // Then add it back with the new quantity
+      const response = await fetch(`/api/suppliers/${selectedSupplier._id}/materials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          materialType,
+          quantity: Number(newQuantity)
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update material quantity');
+      }
+
+      const updatedMaterials = await response.json();
+      
+      // Update local state with the server response
+      setProjectMaterials(prev => ({
+        ...prev,
+        [projectId]: updatedMaterials.filter((pm: any) => pm.projectId === projectId)
+      }));
+
+      // Update the selected supplier's project materials
+      if (selectedSupplier) {
+        setSelectedSupplier({
+          ...selectedSupplier,
+          projectMaterials: updatedMaterials
+        });
+      }
+
+      toast.success(`Updated ${materialType} quantity`);
+    } catch (error) {
+      console.error('Error updating material quantity:', error);
+      toast.error("Failed to update material quantity. Please try again.");
+    }
+  }
+
+  const removeMaterialFromProject = async (projectId: string, materialType: string) => {
+    if (!selectedSupplier?._id) {
+      toast.error("No supplier selected");
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/suppliers/${selectedSupplier._id}/materials`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          materialType
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to remove material');
+      }
+
+      const result = await response.json();
+      
+      // Update local state with the server response
+      setProjectMaterials(prev => ({
+        ...prev,
+        [projectId]: (prev[projectId] || []).filter(m => m.materialType !== materialType)
+      }));
+
+      // Update the selected supplier's project materials
+      if (selectedSupplier) {
+        setSelectedSupplier({
+          ...selectedSupplier,
+          projectMaterials: result.projectMaterials || []
+        });
+      }
+
+      toast.success(`Removed ${materialType} from project`);
+    } catch (error) {
+      console.error('Error removing material:', error);
+      toast.error("Failed to remove material. Please try again.");
+    }
+  }
+
+  const removeProject = async (projectId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    
+    if (!selectedSupplier?._id) {
+      toast.error("No supplier selected");
+      return;
+    }
+
+    try {
+      // Get all materials for this project to remove them
+      const projectMaterialsToRemove = projectMaterials[projectId] || [];
+      
+      // Remove each material for this project
+      await Promise.all(
+        projectMaterialsToRemove.map(material => 
+          fetch(`/api/suppliers/${selectedSupplier._id}/materials`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId,
+              materialType: material.materialType
+            })
+          })
+        )
+      );
+      
+      // Update local state
+      setProjectMaterials(prev => {
+        const newProjectMaterials = { ...prev };
+        delete newProjectMaterials[projectId];
+        return newProjectMaterials;
+      });
+      
+      // Update the selected supplier's project materials
+      if (selectedSupplier) {
+        const response = await fetch(`/api/suppliers/${selectedSupplier._id}/materials`);
+        if (response.ok) {
+          const updatedMaterials = await response.json();
+          setSelectedSupplier({
+            ...selectedSupplier,
+            projectMaterials: updatedMaterials
+          });
+        }
+      }
+      
+      toast.success("Removed project assignment and all associated materials");
+    } catch (error) {
+      console.error('Error removing project:', error);
+      toast.error("Failed to remove project. Please try again.");
+    }
+  }
+
+  // const removeMaterialFromProject = (projectId: string, materialType: string) => {
+  //   setProjectMaterials((prev) => ({
+  //     ...prev,
+  //     [projectId]: (prev[projectId] || []).filter((m) => m.materialType !== materialType),
+  //   }))
+  //   toast.success(`Removed ${materialType} from project`)
+  // }
+
+  // const updateMaterialQuantity = (projectId: string, materialType: string, newQuantity: number) => {
+  //   if (newQuantity <= 0) {
+  //     removeMaterialFromProject(projectId, materialType)
+  //     return
+  //   }
+
+  //   setProjectMaterials((prev) => ({
+  //     ...prev,
+  //     [projectId]: (prev[projectId] || []).map((material) =>
+  //       material.materialType === materialType ? { ...material, quantity: newQuantity } : material,
+  //     ),
+  //   }))
+  // }
+
+  // const removeProject = (projectId: string, e: React.MouseEvent) => {
+  //   e.stopPropagation()
+  //   setProjectMaterials((prev) => {
+  //     const newProjectMaterials = { ...prev }
+  //     delete newProjectMaterials[projectId]
+  //     return newProjectMaterials
+  //   })
+  //   toast.success("Removed project assignment")
+  // }
 
   const fetchSupplierTransactions = async (supplierId: string) => {
-    setIsLoadingTransactions(true);
+    setIsLoadingTransactions(true)
     try {
       // Fetch projects when opening the detail view
-      await fetchProjects();
-      
-      // If you want to load the supplier's current projects, you would do it here
-      // For now, we'll just clear any selected projects
-      setSelectedProjects([]);
-      
-      // Mock transactions data
+      await fetchProjects()
+
+      // Reset project materials for this supplier
+      setProjectMaterials({})
+
+      // Fetch project materials for this supplier
+      const materialsResponse = await fetch(`/api/suppliers/${supplierId}/materials`);
+      if (materialsResponse.ok) {
+        const materialsData = await materialsResponse.json();
+        
+        // Group materials by projectId
+        const groupedMaterials = materialsData.reduce((acc: any, material: any) => {
+          if (!acc[material.projectId]) {
+            acc[material.projectId] = [];
+          }
+          acc[material.projectId].push({
+            materialType: material.materialType,
+            quantity: material.quantity
+          });
+          return acc;
+        }, {});
+        
+        setProjectMaterials(groupedMaterials);
+      }
+
+      // Mock transactions data (replace with actual API call when available)
       const mockTransactions: Transaction[] = [
         {
           id: "1",
@@ -302,14 +627,14 @@ export default function SuppliersManagement() {
           reference: "ORD-2023-045",
           description: "Bulk cement order",
         },
-      ];
-      
-      setTransactions(mockTransactions);
+      ]
+
+      setTransactions(mockTransactions)
     } catch (error) {
-      console.error("Error loading supplier data:", error);
-      toast.error("Failed to load supplier data");
+      console.error("Error loading supplier data:", error)
+      toast.error("Failed to load supplier data")
     } finally {
-      setIsLoadingTransactions(false);
+      setIsLoadingTransactions(false)
     }
   }
 
@@ -685,7 +1010,6 @@ export default function SuppliersManagement() {
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            {/* Keep existing dialog content */}
             <DialogHeader>
               <DialogTitle>{editingSupplier ? "Edit Supplier" : "Add New Supplier"}</DialogTitle>
               <DialogDescription>
@@ -693,7 +1017,6 @@ export default function SuppliersManagement() {
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Keep all existing form content */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="companyName">Company Name *</Label>
@@ -1014,14 +1337,12 @@ export default function SuppliersManagement() {
                   </Button>
                 </div>
               </SheetHeader>
-
               <Tabs defaultValue="overview" className="mt-6 flex flex-col h-[calc(100%-100px)]">
                 <TabsList className="grid w-full grid-cols-3 mb-4">
                   <TabsTrigger value="overview">Overview</TabsTrigger>
-                  <TabsTrigger value="transactions">Transactions</TabsTrigger>
+                  <TabsTrigger value="transactions">Sites</TabsTrigger>
                   <TabsTrigger value="materials">Materials</TabsTrigger>
                 </TabsList>
-
                 <TabsContent value="overview" className="flex-1 overflow-y-auto pr-2 space-y-6">
                   {/* Quick Stats */}
                   <div className="grid grid-cols-2 gap-4">
@@ -1052,7 +1373,6 @@ export default function SuppliersManagement() {
                       </CardContent>
                     </Card>
                   </div>
-
                   {/* Company Information */}
                   <Card>
                     <CardHeader className="pb-2">
@@ -1101,112 +1421,259 @@ export default function SuppliersManagement() {
                     </CardContent>
                   </Card>
                 </TabsContent>
-
                 <TabsContent value="transactions" className="flex-1 overflow-y-auto pr-2 space-y-4">
                   <div>
-                    <h4 className="text-lg font-semibold mb-4">Project Assignment</h4>
-                    
+                    <h4 className="text-lg font-semibold mb-4">Site Assignment & Material Tracking</h4>
+
                     <div className="space-y-4">
-                      <div>
-                        <div className="space-y-2">
-                          <Label htmlFor="project-select" className="block text-sm font-medium mb-2">
-                            Select Projects
-                          </Label>
-                          
-                          {/* Selected Projects Badges */}
-                          <div className="flex flex-wrap gap-2 mb-2">
-                            {selectedProjects.map(projectId => {
-                              const project = projects.find(p => p._id === projectId);
-                              if (!project) return null;
-                              
-                              return (
-                                <div 
-                                  key={project._id} 
-                                  className="inline-flex items-center gap-1 px-2 py-1 text-sm rounded-md bg-muted text-muted-foreground"
-                                >
+                      {/* Add New Project */}
+                      <div className="space-y-2">
+                        <Label htmlFor="project-select" className="block text-sm font-medium mb-2">
+                          Add New Site
+                        </Label>
+                        <Select onValueChange={handleProjectSelect} value="" disabled={isLoadingProjects}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue
+                              placeholder={isLoadingProjects ? "Loading projects..." : "Select a site to add"}
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {projects
+                              .filter((project) => !projectMaterials[project._id])
+                              .map((project) => (
+                                <SelectItem key={project._id} value={project._id}>
                                   {project.title}
-                                  <button 
-                                    type="button"
-                                    onClick={(e) => removeProject(project._id, e)}
-                                    className="ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5"
-                                  >
-                                    <X className="h-3.5 w-3.5" />
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                          
-                          <Select 
-                            onValueChange={handleProjectSelect}
-                            value=""
-                            disabled={isLoadingProjects}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder={isLoadingProjects ? "Loading projects..." : "Add a project"} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {projects
-                                .filter(project => !selectedProjects.includes(project._id))
-                                .map((project) => (
-                                  <SelectItem key={project._id} value={project._id}>
-                                    {project.title}
-                                  </SelectItem>
-                                ))}
-                              
-                              {!isLoadingProjects && projects.length === selectedProjects.length && (
-                                <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                                  No more projects available
-                                </div>
-                              )}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                                </SelectItem>
+                              ))}
+
+                            {!isLoadingProjects && projects.length === Object.keys(projectMaterials).length && (
+                              <div className="px-2 py-1.5 text-sm text-muted-foreground">No more sites available</div>
+                            )}
+                          </SelectContent>
+                        </Select>
                       </div>
 
-                      {selectedProjects.length > 0 && (
-                        <div className="space-y-4 mt-4">
-                          <h5 className="font-medium">Selected Projects Details:</h5>
-                          <div className="space-y-3">
-                            {selectedProjects.map(projectId => {
-                              const project = projects.find(p => p._id === projectId);
-                              if (!project) return null;
-                              
+                      {/* Project Materials List */}
+                      {Object.keys(projectMaterials).length > 0 && (
+                        <div className="space-y-4 mt-6">
+                          <div className="flex justify-between items-center">
+                            <h5 className="font-medium">Assigned Sites & Materials:</h5>
+                            <Button 
+                              size="sm" 
+                              onClick={async () => {
+                                try {
+                                  setLoading(true);
+                                  const response = await fetch(`/api/suppliers/${selectedSupplier._id}`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      ...selectedSupplier,
+                                      projectMaterials: Object.entries(projectMaterials).flatMap(([projectId, materials]) => 
+                                        materials.map(material => ({
+                                          projectId,
+                                          materialType: material.materialType,
+                                          quantity: material.quantity
+                                        })))
+                                    })
+                                  });
+                                  
+                                  if (response.ok) {
+                                    const updatedSupplier = await response.json();
+                                    setSelectedSupplier(updatedSupplier);
+                                    toast.success("Site assignments saved successfully!");
+                                  } else {
+                                    throw new Error('Failed to save site assignments');
+                                  }
+                                } catch (error) {
+                                  console.error('Error saving site assignments:', error);
+                                  toast.error("Failed to save site assignments. Please try again.");
+                                } finally {
+                                  setLoading(false);
+                                }
+                              }}
+                              disabled={loading}
+                            >
+                              {loading ? (
+                                <>
+                                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                                  Saving...
+                                </>
+                              ) : (
+                                'Save Assignments'
+                              )}
+                            </Button>
+                          </div>
+                          <div className="space-y-4">
+                            {Object.entries(projectMaterials).map(([projectId, materials]) => {
+                              const project = projects.find((p) => p._id === projectId)
+                              if (!project) return null
+
                               return (
-                                <div key={project._id} className="p-3 bg-muted/20 rounded-lg border">
-                                  <div className="flex justify-between items-start">
-                                    <div>
-                                      <p className="font-medium">{project.title}</p>
-                                      {project.description && (
-                                        <p className="text-sm text-muted-foreground mt-1">
-                                          {project.description}
+                                <Card key={projectId} className="border-l-4 border-l-blue-500">
+                                  <CardContent className="p-4">
+                                    <div className="flex justify-between items-start mb-3">
+                                      <div>
+                                        <h6 className="font-medium text-lg">{project.title}</h6>
+                                        {project.description && (
+                                          <p className="text-sm text-muted-foreground mt-1">{project.description}</p>
+                                        )}
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+                                          <Calendar className="w-4 h-4 flex-shrink-0" />
+                                          <span>
+                                            {format(new Date(project.startDate || new Date()), "MMM d, yyyy")}
+                                            {" - "}
+                                            {project.endDate
+                                              ? format(new Date(project.endDate), "MMM d, yyyy")
+                                              : "Present"}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => removeProject(projectId, e)}
+                                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+
+                                    {/* Add Material to Project */}
+                                    <div className="border-t pt-3 mt-3">
+                                      <div className="flex gap-2 mb-3">
+                                        <Select
+                                          value={
+                                            selectedProjectForMaterial === projectId
+                                              ? tempMaterialSelection.materialType
+                                              : ""
+                                          }
+                                          onValueChange={(value) => {
+                                            setSelectedProjectForMaterial(projectId)
+                                            setTempMaterialSelection((prev) => ({ ...prev, materialType: value }))
+                                          }}
+                                        >
+                                          <SelectTrigger className="flex-1">
+                                            <SelectValue placeholder="Select material" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {selectedSupplier.materialTypes
+                                              .filter((material) => !materials.some((m) => m.materialType === material))
+                                              .map((material) => (
+                                                <SelectItem key={material} value={material}>
+                                                  {material}
+                                                </SelectItem>
+                                              ))}
+                                          </SelectContent>
+                                        </Select>
+                                        <Input
+                                          type="number"
+                                          placeholder="Qty"
+                                          min="1"
+                                          className="w-20"
+                                          value={
+                                            selectedProjectForMaterial === projectId
+                                              ? tempMaterialSelection.quantity
+                                              : 1
+                                          }
+                                          onChange={(e) => {
+                                            if (selectedProjectForMaterial === projectId) {
+                                              setTempMaterialSelection((prev) => ({
+                                                ...prev,
+                                                quantity: Number.parseInt(e.target.value) || 1,
+                                              }))
+                                            }
+                                          }}
+                                        />
+                                        <Button
+                                          size="sm"
+                                          onClick={() => {
+                                            if (selectedProjectForMaterial === projectId) {
+                                              addMaterialToProject(
+                                                projectId,
+                                                tempMaterialSelection.materialType,
+                                                tempMaterialSelection.quantity,
+                                              )
+                                              setSelectedProjectForMaterial("")
+                                            }
+                                          }}
+                                          disabled={!selectedProjectForMaterial || !tempMaterialSelection.materialType}
+                                        >
+                                          <Plus className="w-4 h-4" />
+                                        </Button>
+                                      </div>
+
+                                      {/* Materials List for this Project */}
+                                      {materials.length > 0 ? (
+                                        <div className="space-y-2">
+                                          <p className="text-sm font-medium text-muted-foreground">
+                                            Materials & Quantities:
+                                          </p>
+                                          {materials.map((material, index) => (
+                                            <div
+                                              key={index}
+                                              className="flex items-center justify-between bg-muted/20 p-2 rounded"
+                                            >
+                                              <div className="flex items-center gap-2">
+                                                <Package className="w-4 h-4 text-blue-600" />
+                                                <span className="font-medium">{material.materialType}</span>
+                                              </div>
+                                              <div className="flex items-center gap-2">
+                                                <Input
+                                                  type="number"
+                                                  min="1"
+                                                  value={material.quantity}
+                                                  onChange={(e) =>
+                                                    updateMaterialQuantity(
+                                                      projectId,
+                                                      material.materialType,
+                                                      Number.parseInt(e.target.value) || 0,
+                                                    )
+                                                  }
+                                                  className="w-16 h-8 text-center"
+                                                />
+                                                <Button
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  onClick={() =>
+                                                    removeMaterialFromProject(projectId, material.materialType)
+                                                  }
+                                                  className="text-red-600 hover:text-red-700 h-8 w-8 p-0"
+                                                >
+                                                  <X className="h-3 w-3" />
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p className="text-sm text-muted-foreground italic">
+                                          No materials assigned yet
                                         </p>
                                       )}
-                                      <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
-                                        <Calendar className="w-4 h-4 flex-shrink-0" />
-                                        <span>
-                                          {format(new Date(project.startDate || new Date()), 'MMM d, yyyy')}
-                                          {' - '}
-                                          {project.endDate 
-                                            ? format(new Date(project.endDate), 'MMM d, yyyy')
-                                            : 'Present'}
-                                        </span>
-                                      </div>
                                     </div>
-                                  </div>
-                                </div>
-                              );
+                                  </CardContent>
+                                </Card>
+                              )
                             })}
                           </div>
+                        </div>
+                      )}
+
+                      {Object.keys(projectMaterials).length === 0 && (
+                        <div className="text-center py-8 border rounded-lg bg-muted/10">
+                          <Building2 className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+                          <h4 className="font-medium mb-1">No Sites Assigned</h4>
+                          <p className="text-sm text-muted-foreground">
+                            Select a site above to start assigning materials and quantities.
+                          </p>
                         </div>
                       )}
                     </div>
                   </div>
                 </TabsContent>
-
                 <TabsContent value="materials" className="flex-1 overflow-y-auto pr-2 space-y-3">
                   <div className="flex justify-between items-center">
-                    <h4 className="text-lg font-semibold">Supplied Materials</h4>
+                    <h4 className="text-lg font-semibold">Available Materials</h4>
                     <Button
                       size="sm"
                       variant="outline"
@@ -1220,7 +1687,6 @@ export default function SuppliersManagement() {
                       Edit Materials
                     </Button>
                   </div>
-
                   {selectedSupplier.materialTypes.length > 0 ? (
                     <div className="space-y-3">
                       {selectedSupplier.materialTypes.map((material, index) => (

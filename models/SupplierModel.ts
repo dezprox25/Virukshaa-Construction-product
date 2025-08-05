@@ -1,5 +1,11 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
+export interface IProjectMaterial {
+  projectId: mongoose.Types.ObjectId;
+  materialType: string;
+  quantity: number;
+}
+
 export interface ISupplier extends Document {
   companyName: string;
   contactPerson: string;
@@ -8,6 +14,7 @@ export interface ISupplier extends Document {
   password: string;
   phone: string;
   materialTypes: string[];
+  projectMaterials?: IProjectMaterial[];
   supplyStartDate?: Date;
   paymentType: 'Cash' | 'Credit';
   address: string;
@@ -18,6 +25,23 @@ export interface ISupplier extends Document {
   avatar?: string;
 }
 
+const projectMaterialSchema = new Schema<IProjectMaterial>({
+  projectId: { 
+    type: Schema.Types.ObjectId, 
+    ref: 'Project',
+    required: true 
+  },
+  materialType: { 
+    type: String, 
+    required: true 
+  },
+  quantity: { 
+    type: Number, 
+    required: true,
+    min: 1
+  }
+});
+
 const supplierSchema = new Schema<ISupplier>({
   companyName: { type: String, required: true },
   contactPerson: { type: String, required: true },
@@ -26,6 +50,7 @@ const supplierSchema = new Schema<ISupplier>({
   password: { type: String, required: true, select: false },
   phone: { type: String, required: true },
   materialTypes: [{ type: String, required: true }],
+  projectMaterials: [projectMaterialSchema],
   supplyStartDate: { type: Date },
   paymentType: {
     type: String,

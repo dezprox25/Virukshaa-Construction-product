@@ -21,7 +21,10 @@ export interface IProject extends Document {
   clientId: string;
   client?: string;
   manager?: string;
-
+  address: string;
+  city: string;
+  state: string;
+  postalCode: string;
   tasks: ITaskSubDoc[];
 }
 
@@ -57,7 +60,10 @@ const ProjectSchema = new Schema<IProject>({
   clientId: { type: String, required: true },
   client: { type: String },
   manager: { type: String },
-
+  address: { type: String, required: true },
+  city: { type: String, required: true },
+  state: { type: String, required: true },
+  postalCode: { type: String, required: true },
   tasks: [TaskSubSchema],
 }, { timestamps: true });
 

@@ -77,19 +77,27 @@ export async function GET() {
     };
     
     // Process the materials
-    const materialDocs: MaterialDocument[] = materials.map(doc => {
+    const materialDocs: MaterialDocument[] = materials.map((doc: any) => {
       if (!doc || !doc._id) {
-        console.error('Invalid material document:', doc)
-        throw new Error('Invalid material document received from database')
+        console.error('Invalid material document:', doc);
+        throw new Error('Invalid material document received from database');
       }
       
-      return {
+      // Ensure _id is a valid ObjectId
+      const materialId = doc._id instanceof Types.ObjectId 
+        ? doc._id 
+        : new Types.ObjectId(String(doc._id));
+      
+      // Create a new object with proper typing
+      const materialDoc: Omit<MaterialDocument, keyof Document> & { _id: Types.ObjectId } = {
         ...doc,
-        _id: doc._id instanceof Types.ObjectId ? doc._id : new Types.ObjectId(doc._id.toString()),
+        _id: materialId,
         createdAt: new Date(doc.createdAt),
         updatedAt: new Date(doc.updatedAt),
         lastUpdated: new Date(doc.lastUpdated)
-      } as MaterialDocument
+      };
+      
+      return materialDoc as unknown as MaterialDocument;
     });
     
     // Map to the response type
@@ -168,8 +176,8 @@ export async function POST(request: Request) {
       ...(data.tags && { tags: data.tags })
     }
     
-    const material: MaterialDocument = new Material(materialData)
-    await material.save()
+    const material = new Material(materialData) as unknown as MaterialDocument;
+    await material.save();
     
     const response: MaterialResponse = {
       _id: material._id.toString(),

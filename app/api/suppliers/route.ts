@@ -29,6 +29,7 @@ export async function POST(request: Request) {
       password,
       phone,
       materialTypes,
+      projectMaterials,
       paymentType,
       address,
       supplyStartDate,
@@ -66,6 +67,25 @@ export async function POST(request: Request) {
     const bcrypt = await import('bcryptjs');
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Validate project materials if provided
+    const validatedProjectMaterials = [];
+    if (projectMaterials && Array.isArray(projectMaterials)) {
+      // Validate each project material entry
+      for (const pm of projectMaterials) {
+        if (!pm.projectId || !pm.materialType || typeof pm.quantity !== 'number' || pm.quantity <= 0) {
+          return NextResponse.json(
+            { error: 'Invalid project materials format. Each item must have projectId, materialType, and quantity > 0' },
+            { status: 400 }
+          );
+        }
+        validatedProjectMaterials.push({
+          projectId: pm.projectId,
+          materialType: pm.materialType,
+          quantity: pm.quantity
+        });
+      }
+    }
+
     const newSupplier = new Supplier({
       companyName,
       contactPerson,
@@ -74,6 +94,7 @@ export async function POST(request: Request) {
       password: hashedPassword,
       phone,
       materialTypes,
+      projectMaterials: validatedProjectMaterials,
       paymentType,
       address,
       supplyStartDate,

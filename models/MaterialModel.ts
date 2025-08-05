@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document, Types, Model } from 'mongoose';
 
-export interface IMaterial extends Document {
+export interface IMaterial {
+  _id: Types.ObjectId;
   name: string;
   category: string;
   unit: string;
@@ -22,9 +23,9 @@ export interface IMaterial extends Document {
   updatedAt: Date;
 }
 
-export interface MaterialDocument extends IMaterial {
-  _id: Types.ObjectId;
-}
+export type MaterialDocument = Document<unknown, {}, IMaterial> & 
+  IMaterial & 
+  Required<{ _id: Types.ObjectId }>;
 
 const materialSchema = new Schema<IMaterial>(
   {

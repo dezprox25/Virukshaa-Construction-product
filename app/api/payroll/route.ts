@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import connectToDB from '@/lib/db';
 import Payroll, { IPayroll } from '@/models/PayrollModel';
+import '@/models/Supervisor'; // Import Supervisor model to ensure it's registered
 import mongoose from 'mongoose';
 
 // Helper function to get error details

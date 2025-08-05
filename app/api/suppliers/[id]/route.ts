@@ -68,13 +68,34 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     // Create a clean update object with only allowed fields
     const updateData: Partial<ISupplier> = {};
     const allowedFields: (keyof ISupplier)[] = [
-      'companyName', 'contactPerson', 'email', 'username', 'phone', 'materialTypes',
-      'paymentType', 'address', 'status', 'supplyStartDate', 'avatar',
-      'totalPaid', 'dueAmount', 'lastPaymentDate'
+      'companyName', 'contactPerson', 'email', 'username', 'password', 'phone', 
+      'materialTypes', 'projectMaterials', 'paymentType', 'address', 
+      'supplyStartDate', 'avatar', 'totalPaid', 'dueAmount', 'lastPaymentDate', 'status'
     ];
 
+    // Process projectMaterials if provided
+    if (body.projectMaterials && Array.isArray(body.projectMaterials)) {
+      // Validate project materials structure
+      const isValidProjectMaterials = body.projectMaterials.every((pm: any) => 
+        pm.projectId && pm.materialType && typeof pm.quantity === 'number' && pm.quantity > 0
+      );
+      
+      if (!isValidProjectMaterials) {
+        return NextResponse.json(
+          { error: 'Invalid project materials format. Each item must have projectId, materialType, and quantity > 0' },
+          { status: 400 }
+        );
+      }
+      
+      updateData.projectMaterials = body.projectMaterials;
+    } else if (body.projectMaterials === null || body.projectMaterials === undefined) {
+      // If projectMaterials is explicitly set to null/undefined, clear it
+      updateData.projectMaterials = [];
+    }
+
+    // Process other fields
     allowedFields.forEach(field => {
-      if (body[field] !== undefined) {
+      if (field !== 'projectMaterials' && body[field] !== undefined) {
         (updateData as any)[field] = body[field];
       }
     });
