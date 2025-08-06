@@ -20,7 +20,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { MessageCircle } from "lucide-react"
+import { MessageCircle } from 'lucide-react'
 import { SupervisorLeaveApprovalModal } from "./SupervisorLeaveApprovalModal"
 import {
   AlertDialog,
@@ -37,34 +37,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "sonner"
-import {
-  Plus,
-  Edit,
-  Trash2,
-  Phone,
-  Mail,
-  Calendar,
-  Search,
-  Filter,
-  Users,
-  IndianRupee,
-  Grid3X3,
-  List,
-  CheckCircle,
-  XCircle,
-  Clock,
-  RefreshCw,
-  MapPin,
-  ClipboardList,
-  Eye,
-  UserPlus,
-  CalendarPlus,
-  FileText,
-  Folder,
-  Hash,
-  Calculator,
-  HelpCircle,
-} from "lucide-react"
+import { Plus, Edit, Trash2, Phone, Mail, Calendar, Search, Filter, Users, IndianRupee, Grid3X3, List, CheckCircle, XCircle, Clock, RefreshCw, MapPin, ClipboardList, Eye, UserPlus, CalendarPlus, FileText, Folder, Hash, Calculator, HelpCircle } from 'lucide-react'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -198,9 +171,9 @@ function CombinedAttendanceView({
     const fetchAttendance = async () => {
       try {
         setLoading(true)
-        const [year, monthNum] = selectedMonth.split("-").map(Number)
-        const startDate = new Date(Date.UTC(year, monthNum - 1, 1))
-        const endDate = new Date(Date.UTC(year, monthNum, 0, 23, 59, 59, 999))
+        const [fetchYear, fetchMonthNum] = selectedMonth.split("-").map(Number)
+        const startDate = new Date(Date.UTC(fetchYear, fetchMonthNum - 1, 1))
+        const endDate = new Date(Date.UTC(fetchYear, fetchMonthNum, 0, 23, 59, 59, 999))
 
         const response = await fetch(
           `/api/attendance?supervisorId=${supervisorId}` +
@@ -215,75 +188,73 @@ function CombinedAttendanceView({
         const attendanceData = await response.json()
         const map: Record<string, AttendanceStatus> = {}
 
-        // Process attendance records and store their status and leave information
-        if (Array.isArray(attendanceData)) {
-          attendanceData.forEach((record) => {
-            if (record.date) {
-              const date = new Date(record.date)
-              if (!isNaN(date.getTime())) {
-                const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-                const dateKey = localDate.toISOString().split("T")[0]
-                // Store the full record in the map to access all fields later
-                map[dateKey] = record.status || 'Absent' // Default to 'Absent' if status is missing
-              }
-            }
-          })
-        }
-
-        // Calculate stats from attendance records
-        const daysInMonth = endDate.getUTCDate()
+        // Reset counters
         let presentCount = 0
         let paidLeaveCount = 0
         let unpaidLeaveCount = 0
         let pendingLeaveCount = 0
         let totalWorkingDays = 0
 
-        // First, process all attendance records to get leave statuses
+        const [currentYear, currentMonth] = selectedMonth.split('-').map(Number)
+        const daysInMonth = new Date(currentYear, currentMonth, 0).getDate()
+
+        // Process attendance records
         if (Array.isArray(attendanceData)) {
+          // First pass: Process all attendance records to count present/absent days
           attendanceData.forEach((record) => {
-            console.log("📊 Processing attendance record:", {
-              date: record.date,
-              status: record.status,
-              isLeaveApproved: record.isLeaveApproved,
-              isLeavePaid: record.isLeavePaid,
-              leaveReason: record.leaveReason
-            });
+            if (!record.date) return;
             
+            const date = new Date(record.date);
+            if (isNaN(date.getTime())) return;
+            
+            const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+            const dateKey = localDate.toISOString().split("T")[0];
+            
+            // Store the status in the map
+            map[dateKey] = record.status || 'Absent';
+            
+            // Count present/absent days
             if (record.status === "Present") {
-              presentCount++
+              presentCount++;
+              console.log("✅ Counted as Present");
             } else if (record.status === "Absent") {
               if (record.isLeaveApproved === true) {
-                if (record.isLeavePaid === true) {
-                  paidLeaveCount++
-                  console.log("✅ Counted as Paid Leave")
+                // FIXED: Check for both isPaid and isLeavePaid for backward compatibility
+                if (record.isLeavePaid === true || record.isPaid === true) {
+                  paidLeaveCount++;
+                  console.log("💰 Counted as Paid Leave");
                 } else {
-                  unpaidLeaveCount++
-                  console.log("❌ Counted as Unpaid Leave")
+                  unpaidLeaveCount++;
+                  console.log("❌ Counted as Unpaid Leave");
                 }
-              } else if (record.isLeaveApproved === false || record.isLeaveApproved === undefined) {
-                pendingLeaveCount++
-                console.log("⏳ Counted as Pending Leave")
+              } else {
+                pendingLeaveCount++;
+                console.log("⏳ Counted as Pending Leave");
               }
             }
-          })
+          });
         }
 
-        // Then calculate working days and present days
-        for (let d = 1; d <= daysInMonth; d++) {
-          const date = new Date(Date.UTC(year, monthNum - 1, d))
-          const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-          const dateKey = localDate.toISOString().split("T")[0]
-          const dayOfWeek = date.getUTCDay()
-
+        // Calculate working days (Monday to Saturday)
+        for (let day = 1; day <= daysInMonth; day++) {
+          const date = new Date(Date.UTC(currentYear, currentMonth - 1, day));
+          
           // Only count past dates and today for statistics
-          if (date <= new Date()) {
-            // Skip Sundays from working days calculation
-            if (dayOfWeek !== 0) {
-              totalWorkingDays++
-              if (map[dateKey] === "Present") {
-                presentCount++
-              }
-            }
+          if (date > new Date()) continue;
+          
+          const dayOfWeek = date.getUTCDay();
+          
+          // Skip Sundays (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+          if (dayOfWeek === 0) continue;
+          
+          totalWorkingDays++;
+          
+          const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+          const dateKey = localDate.toISOString().split("T")[0];
+          
+          // Log unmarked working days
+          if (!map[dateKey]) {
+            console.log(`ℹ️ No record for ${dateKey}, counting as unmarked`);
           }
         }
 
@@ -334,6 +305,7 @@ function CombinedAttendanceView({
     date?: string | Date
     isLeaveApproved?: boolean
     isLeavePaid?: boolean
+    isPaid?: boolean // FIXED: Added for backward compatibility
     leaveReason?: string
   }
 
@@ -349,8 +321,10 @@ function CombinedAttendanceView({
           const date = new Date(record.date)
           const dateKey = date.toISOString().split("T")[0]
           if (record.isLeaveApproved === true) {
+            // FIXED: Check for both field names for backward compatibility
+            const isPaidLeave = record.isLeavePaid === true || record.isPaid === true
             map[dateKey] = {
-              status: record.isLeavePaid ? "paid" : "unpaid",
+              status: isPaidLeave ? "paid" : "unpaid",
               reason: record.leaveReason,
             }
           } else if (record.isLeaveApproved === undefined) {
@@ -433,6 +407,7 @@ function CombinedAttendanceView({
   }, [selectedMonth, attendanceMap, year, monthNum, daysInMonth, startDayIdx])
 
   const selectedMonthLabel = months.find((m) => m.value === selectedMonth)?.label || selectedMonth
+
   // Calculate total salary including paid leave days
   const totalSalary = (presentDays + paidLeaveDays) * dailySalary
 
@@ -634,7 +609,6 @@ function CombinedAttendanceView({
                     })}
                   </div>
                 </TooltipProvider>
-
                 {/* Legend */}
                 <div className="flex justify-center gap-4 mt-4 text-xs">
                   <div className="flex items-center gap-2">
@@ -701,6 +675,7 @@ export default function SupervisorsManagement() {
   const [leaveDates, setLeaveDates] = useState<Date[]>([])
   const [leaveReason, setLeaveReason] = useState("")
   const [isSubmittingLeave, setIsSubmittingLeave] = useState(false)
+  const [existingPaidLeaveDays, setExistingPaidLeaveDays] = useState(0) // Add this line
 
   useEffect(() => {
     fetchSupervisors()
@@ -785,6 +760,8 @@ export default function SupervisorsManagement() {
     } catch (error) {
       console.error("Error fetching supervisor employees:", error)
       toast.error("Failed to load assigned employees")
+    } finally {
+      setLoadingEmployees(false)
     }
   }
 
@@ -1050,12 +1027,12 @@ export default function SupervisorsManagement() {
                 present: att.status === "Present",
                 checkIn: att.checkIn || "",
                 checkOut: att.checkOut || "",
-                status: att.status as AttendanceStatus,
+                status: att.status as AttendanceStatus | null, // Update type to include null
                 _attendanceId: att._id,
               }
             : {
                 present: false,
-                status: null as AttendanceStatus, // No status set
+                status: null, // No status set
               },
         }
       })
@@ -1066,6 +1043,45 @@ export default function SupervisorsManagement() {
       toast.error("Failed to load supervisors. Please try again.")
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Fetch existing paid leave days for a supervisor in a given month
+  const fetchSupervisorPaidLeaveDays = async (supervisorId: string, month: string): Promise<number> => {
+    try {
+      const [year, monthNum] = month.split("-").map(Number)
+      const startDate = new Date(Date.UTC(year, monthNum - 1, 1))
+      const endDate = new Date(Date.UTC(year, monthNum, 0, 23, 59, 59, 999))
+
+      const response = await fetch(
+        `/api/attendance?supervisorId=${supervisorId}` +
+          `&startDate=${startDate.toISOString()}` +
+          `&endDate=${endDate.toISOString()}`
+      )
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch attendance data")
+      }
+
+      const attendanceData = await response.json()
+      
+      // Count paid leave days
+      let paidLeaveDays = 0
+      if (Array.isArray(attendanceData)) {
+        attendanceData.forEach((record) => {
+          if (record.status === "Absent" && 
+              record.isLeaveApproved === true && 
+              (record.isLeavePaid === true || record.isPaid === true)) {
+            paidLeaveDays++
+          }
+        })
+      }
+
+      console.log(`📊 Supervisor ${supervisorId} has ${paidLeaveDays} paid leave days in ${month}`)
+      return paidLeaveDays
+    } catch (error) {
+      console.error("Error fetching paid leave days:", error)
+      return 0
     }
   }
 
@@ -1201,7 +1217,7 @@ export default function SupervisorsManagement() {
   const noStatusToday = totalSupervisors - presentToday - absentToday
   const attendanceRate = totalSupervisors > 0 ? Math.round((presentToday / totalSupervisors) * 100) : 0
 
-  // IMPROVED: Update attendance function with better error handling and logging
+  // FIXED: Update attendance function with consistent field naming
   const updateAttendance = async (
     supervisorId: string,
     status: AttendanceStatus,
@@ -1228,7 +1244,8 @@ export default function SupervisorsManagement() {
       // Add leave-related fields only for Absent status
       if (status === "Absent") {
         requestBody.leaveReason = leaveReason || "Not specified"
-        requestBody.isPaid = isPaid
+        // FIXED: Use isLeavePaid instead of isPaid for consistency
+        requestBody.isLeavePaid = isPaid
         requestBody.isLeaveApproved = true // Auto-approve for now
         requestBody.checkOut = new Date().toISOString()
       } else {
@@ -1250,14 +1267,12 @@ export default function SupervisorsManagement() {
       if (!response.ok) {
         const errorText = await response.text()
         console.error("❌ API Error Response:", errorText)
-
         let errorData
         try {
           errorData = JSON.parse(errorText)
         } catch {
           errorData = { message: errorText || `HTTP ${response.status}` }
         }
-
         throw new Error(errorData.message || `Failed to update attendance (${response.status})`)
       }
 
@@ -1294,108 +1309,141 @@ export default function SupervisorsManagement() {
   }
 
   // Handle leave approval with better error handling and logging
-  const handleApproveLeave = async (reason: string, isPaid: boolean, dates: Date[]): Promise<boolean> => {
-    console.log("🔄 Starting leave approval process:", {
-      selectedSupervisorId,
-      leaveDates: dates.map((d) => d.toISOString().split("T")[0]),
-      reason,
-      isPaid,
+  const handleApproveLeave = async (reason: string, _isPaid: boolean, dates: Date[]): Promise<boolean> => {
+  console.log("🔄 Starting leave approval process:", {
+    selectedSupervisorId,
+    leaveDates: dates.map((d) => d.toISOString().split("T")[0]),
+    reason,
+    existingPaidLeaveDays
+  })
+
+  if (!selectedSupervisorId) {
+    const errorMsg = "No supervisor selected for leave"
+    console.error("❌", errorMsg)
+    toast.error(errorMsg)
+    return false
+  }
+
+  if (!dates || dates.length === 0) {
+    const errorMsg = "No dates selected for leave"
+    console.error("❌", errorMsg)
+    toast.error(errorMsg)
+    return false
+  }
+
+  if (!reason.trim()) {
+    const errorMsg = "Please provide a reason for the leave"
+    console.error("❌", errorMsg)
+    toast.error(errorMsg)
+    return false
+  }
+
+  setIsSubmittingLeave(true)
+  try {
+    // Calculate paid leave logic automatically
+    const PAID_LEAVE_LIMIT = 2
+    const totalRequestedDays = dates.length
+    const availablePaidDays = Math.max(0, PAID_LEAVE_LIMIT - existingPaidLeaveDays)
+    const paidDaysToApprove = Math.min(totalRequestedDays, availablePaidDays)
+    const unpaidDaysToApprove = totalRequestedDays - paidDaysToApprove
+
+    console.log("📊 Automatic leave calculation:", {
+      totalRequestedDays,
+      existingPaidLeaveDays,
+      availablePaidDays,
+      paidDaysToApprove,
+      unpaidDaysToApprove
     })
 
-    if (!selectedSupervisorId) {
-      const errorMsg = "No supervisor selected for leave"
-      console.error("❌", errorMsg)
-      toast.error(errorMsg)
-      return false
-    }
-
-    if (!dates || dates.length === 0) {
-      const errorMsg = "No dates selected for leave"
-      console.error("❌", errorMsg)
-      toast.error(errorMsg)
-      return false
-    }
-
-    if (!reason.trim()) {
-      const errorMsg = "Please provide a reason for the leave"
-      console.error("❌", errorMsg)
-      toast.error(errorMsg)
-      return false
-    }
-
-    setIsSubmittingLeave(true)
-
-    try {
-      // Process each date individually
-      const results = await Promise.all(
-        dates.map(async (date) => {
-          if (!(date instanceof Date) || isNaN(date.getTime())) {
-            console.error("❌ Invalid date:", date)
-            return { date: 'invalid', success: false }
-          }
+    // Process each date individually with automatic paid/unpaid logic
+    const results = await Promise.all(
+      dates.map(async (date, index) => {
+        if (!(date instanceof Date) || isNaN(date.getTime())) {
+          console.error("❌ Invalid date:", date)
+          return { date: 'invalid', success: false }
+        }
+        
+        const dateStr = date.toISOString().split("T")[0]
+        console.log(`📅 Processing leave for date: ${dateStr}`)
+        
+        try {
+          // Automatically determine if this specific day should be paid or unpaid
+          // First 'paidDaysToApprove' days will be paid, rest will be unpaid
+          const shouldBePaid = index < paidDaysToApprove
           
-          const dateStr = date.toISOString().split("T")[0]
-          console.log(`📅 Processing leave for date: ${dateStr}`)
+          console.log(`💰 Day ${index + 1}: ${shouldBePaid ? 'PAID (Auto)' : 'UNPAID (Auto)'}`)
           
-          try {
-            const success = await updateAttendance(
-              selectedSupervisorId,
-              "Absent",
-              dateStr,
-              reason,
-              isPaid
-            )
-            
-            return { date: dateStr, success }
-          } catch (error) {
-            console.error(`❌ Error processing date ${dateStr}:`, error)
-            return { date: dateStr, success: false, error: error.message }
-          }
-        })
-      )
+          const success = await updateAttendance(
+            selectedSupervisorId,
+            "Absent",
+            dateStr,
+            reason,
+            shouldBePaid
+          )
+          
+          return { date: dateStr, success, isPaid: shouldBePaid }
+        } catch (error) {
+          console.error(`❌ Error processing date ${dateStr}:`, error)
+          return { date: dateStr, success: false, error: error as string }
+        }
+      })
+    )
 
-      // Check if all updates were successful
-      const allSuccessful = results.every((r) => r.success)
-      const anySuccessful = results.some((r) => r.success)
+    // Check if all updates were successful
+    const allSuccessful = results.every((r) => r.success)
+    const anySuccessful = results.some((r) => r.success)
 
-      if (allSuccessful) {
-        console.log("✅ All leave dates processed successfully")
-        toast.success("Leave approved successfully")
-        // Refresh the supervisors list to update the attendance data
-        await fetchSupervisors()
-        return true
-      } else if (anySuccessful) {
-        console.warn("⚠️ Some leave dates were not processed successfully")
-        toast.warning("Some leave dates were not processed. Please check the supervisor's attendance.")
-        await fetchSupervisors()
-        return false
+    if (allSuccessful) {
+      console.log("✅ All leave dates processed successfully with automatic paid/unpaid logic")
+      
+      // Create success message based on the automatic calculation
+      let successMessage = "Leave approved successfully"
+      if (paidDaysToApprove > 0 && unpaidDaysToApprove > 0) {
+        successMessage = `Leave approved: ${paidDaysToApprove} paid day${paidDaysToApprove !== 1 ? 's' : ''} + ${unpaidDaysToApprove} unpaid day${unpaidDaysToApprove !== 1 ? 's' : ''} (auto-calculated)`
+      } else if (unpaidDaysToApprove > 0) {
+        successMessage = `Leave approved as unpaid (${unpaidDaysToApprove} day${unpaidDaysToApprove !== 1 ? 's' : ''}) - monthly limit exceeded`
       } else {
-        throw new Error("Failed to process any leave days")
+        successMessage = `Leave approved as paid (${paidDaysToApprove} day${paidDaysToApprove !== 1 ? 's' : ''})`
       }
-    } catch (error) {
-      console.error("❌ Error processing leave:", error)
-      const errorMessage = error instanceof Error ? error.message : "Failed to process leave request"
-      toast.error(errorMessage)
+      
+      toast.success(successMessage)
+      
+      // Refresh the supervisors list to update the attendance data
+      await fetchSupervisors()
+      return true
+    } else if (anySuccessful) {
+      console.warn("⚠️ Some leave dates were not processed successfully")
+      toast.warning("Some leave dates were not processed. Please check the supervisor's attendance.")
+      await fetchSupervisors()
       return false
-    } finally {
-      console.log("🔄 Cleaning up leave approval state")
-      setIsSubmittingLeave(false)
-      setShowLeaveApproval(false)
-      setLeaveReason("")
-      setLeaveDates([])
-      setSelectedSupervisorId("")
+    } else {
+      throw new Error("Failed to process any leave days")
     }
+  } catch (error) {
+    console.error("❌ Error processing leave:", error)
+    const errorMessage = error instanceof Error ? error.message : "Failed to process leave request"
+    toast.error(errorMessage)
+    return false
+  } finally {
+    console.log("🔄 Cleaning up leave approval state")
+    setIsSubmittingLeave(false)
+    setShowLeaveApproval(false)
+    setLeaveReason("")
+    setLeaveDates([])
+    setSelectedSupervisorId("")
+    setExistingPaidLeaveDays(0)
   }
+}
 
   // Handle attendance change
   const handleAttendanceChange = async (supervisorId: string, status: "Present" | "Absent") => {
     console.log("🎯 Handling attendance change:", { supervisorId, status })
-
     try {
       const today = new Date()
       const dateStr = today.toISOString().split("T")[0] // YYYY-MM-DD format
-      const supervisor = supervisors.find((s) => s._id === supervisorId)
+      const currentMonth = today.toISOString().slice(0, 7) // YYYY-MM format
 
+      const supervisor = supervisors.find((s) => s._id === supervisorId)
       if (!supervisor) {
         throw new Error("Supervisor not found")
       }
@@ -1409,117 +1457,40 @@ export default function SupervisorsManagement() {
       // If marking as absent, handle leave approval flow
       console.log("📋 Preparing leave approval for supervisor:", supervisor.name)
       
+      // Fetch existing paid leave days for current month
+      const existingPaidDays = await fetchSupervisorPaidLeaveDays(supervisorId, currentMonth)
+      console.log(`📊 Existing paid leave days: ${existingPaidDays}`)
+      
       // Create a new date object to ensure reactivity
       const currentDate = new Date()
       console.log("📅 Setting leave date:", currentDate.toISOString())
       
-      // First set the supervisor ID and reset reason
+      // Set all the required state
       setSelectedSupervisorId(supervisorId)
       setLeaveReason("")
-      
-      // Set the dates and immediately open the modal
       setLeaveDates([currentDate])
+      setExistingPaidLeaveDays(existingPaidDays) // Set the existing paid leave days
       
       // Use a small timeout to ensure state is updated before opening modal
       setTimeout(() => {
         console.log("🚀 Opening modal with dates:", [currentDate].map(d => d.toISOString().split('T')[0]))
+        console.log("📊 Existing paid leave days:", existingPaidDays)
         setShowLeaveApproval(true)
       }, 50)
-
-      // For present status, update directly
-      console.log("✅ Marking as present directly")
-      const success = await updateAttendance(supervisorId, status, dateStr)
-      if (success) {
-        toast.success(`Marked as ${status} successfully`)
-        await fetchSupervisors() // Refresh data
-      }
     } catch (error) {
       console.error("❌ Error updating attendance:", error)
       toast.error(error instanceof Error ? error.message : "Failed to update attendance")
-    } finally {
-      setLeaveDates([])
     }
   }
 
-  // IMPROVED: Handle leave approval with better error handling and logging
-  // const handleApproveLeave = async (reason: string, isPaid: boolean): Promise<boolean> => {
-  //   console.log("🔄 Starting leave approval process:", {
-  //     selectedSupervisorId,
-  //     leaveDates: leaveDates.map((d) => d.toISOString().split("T")[0]),
-  //     reason,
-  //     isPaid,
-  //   })
+  
 
-  //   if (!selectedSupervisorId || leaveDates.length === 0) {
-  //     const errorMsg = "No supervisor or dates selected for leave"
-  //     console.error("❌", errorMsg)
-  //     toast.error(errorMsg)
-  //     return false
-  //   }
 
-  //   if (!reason.trim()) {
-  //     const errorMsg = "Please provide a reason for the leave"
-  //     console.error("❌", errorMsg)
-  //     toast.error(errorMsg)
-  //     return false
-  //   }
 
-  //   setIsSubmittingLeave(true)
 
-  //   try {
-  //     console.log("📋 Processing leave for", leaveDates.length, "day(s)")
 
-  //     // Process each leave date
-  //     const results = await Promise.all(
-  //       leaveDates.map(async (date, index) => {
-  //         try {
-  //           const dateStr = date.toISOString().split("T")[0]
-  //           console.log(`📅 Processing date ${index + 1}/${leaveDates.length}:`, dateStr)
-
-  //           const result = await updateAttendance(selectedSupervisorId, "Absent", dateStr, reason.trim(), isPaid)
-
-  //           console.log(`${result ? "✅" : "❌"} Date ${dateStr} processed:`, result)
-  //           return result
-  //         } catch (error) {
-  //           console.error(`❌ Error processing leave for date ${date}:`, error)
-  //           return false
-  //         }
-  //       }),
-  //     )
-
-  //     const successCount = results.filter(Boolean).length
-  //     const totalCount = results.length
-
-  //     console.log(`📊 Leave processing complete: ${successCount}/${totalCount} successful`)
-
-  //     if (successCount === totalCount) {
-  //       toast.success(`Successfully processed ${totalCount} day(s) of ${isPaid ? "paid" : "unpaid"} leave`)
-  //       // Refresh the supervisors list to reflect the changes
-  //       await fetchSupervisors()
-  //       return true
-  //     } else if (successCount > 0) {
-  //       toast.warning(`Updated ${successCount} of ${totalCount} days. Some updates may have failed.`)
-  //       await fetchSupervisors()
-  //       return false
-  //     } else {
-  //       throw new Error("Failed to process any leave days")
-  //     }
-  //   } catch (error) {
-  //     console.error("❌ Error processing leave:", error)
-  //     const errorMessage = error instanceof Error ? error.message : "Failed to process leave request"
-  //     toast.error(errorMessage)
-  //     return false
-  //   } finally {
-  //     console.log("🔄 Cleaning up leave approval state")
-  //     setIsSubmittingLeave(false)
-  //     setShowLeaveApproval(false)
-  //     setLeaveReason("")
-  //     setLeaveDates([])
-  //     setSelectedSupervisorId("")
-  //   }
-  // }
-
-  // supervisor project details
+  
+  // supervisor project details 
   const [supervisorProjects, setSupervisorProjects] = useState<IProject[]>([])
 
   useEffect(() => {
@@ -1572,7 +1543,11 @@ export default function SupervisorsManagement() {
                   <div className="mt-2" onClick={(e) => e.stopPropagation()}>
                     <Select
                       value={supervisor.attendance?.status || ""}
-                      onValueChange={(value) => handleAttendanceChange(supervisor._id, value as AttendanceStatus)}
+                      onValueChange={(value: string) => {
+                        if (value === "Present" || value === "Absent") {
+                          handleAttendanceChange(supervisor._id, value);
+                        }
+                      }}
                     >
                       <SelectTrigger
                         className={cn(
@@ -1819,6 +1794,7 @@ export default function SupervisorsManagement() {
       reason={leaveReason}
       onReasonChange={setLeaveReason}
       isSubmitting={isSubmittingLeave}
+      existingPaidLeaveDays={existingPaidLeaveDays} // Add this line
     />
   )
 
@@ -2756,9 +2732,6 @@ export default function SupervisorsManagement() {
                 {taskFormData.file && (
                   <div className="text-xs text-muted-foreground">Selected: {taskFormData.file.name}</div>
                 )}
-                {taskFormData.documentUrl && !taskFormData.file && (
-                  <div className="text-xs text-muted-foreground">Current: Document attached</div>
-                )}
               </div>
             )}
             <div className="flex justify-end gap-2 pt-4">
@@ -2772,102 +2745,52 @@ export default function SupervisorsManagement() {
       </Dialog>
 
       {/* Employee Assignment Dialog */}
-      <Dialog open={isEmployeeAssignOpen} onOpenChange={setIsEmployeeAssignOpen}>
-        <DialogContent className="sm:max-w-[500px] max-h-[80vh]">
+      <Dialog open={isEmployeeAssignOpen} onOpenChange={() => setIsEmployeeAssignOpen(false)}>
+        <DialogContent className="max-w-md" aria-label="Assign employee form">
           <DialogHeader>
-            <DialogTitle>Assign Employee to {selectedSupervisor?.name}</DialogTitle>
-            <DialogDescription>
-              Select an employee to assign to this supervisor. Click on any employee to assign them.
-            </DialogDescription>
+            <DialogTitle>Assign Employee</DialogTitle>
+            <DialogDescription>Select an employee to assign to {selectedSupervisor?.name}.</DialogDescription>
           </DialogHeader>
-          <div className="max-h-[60vh] overflow-y-auto">
-            {loadingEmployees ? (
-              <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary" />
-              </div>
-            ) : availableEmployees.length > 0 ? (
-              <div className="space-y-2">
-                {availableEmployees.map((employee) => {
-                  const isAlreadyAssigned = supervisorEmployees.some((emp) => emp._id === employee._id)
-                  return (
-                    <div
-                      key={employee._id}
-                      className={cn(
-                        "flex items-center justify-between p-3 border rounded-lg transition-colors",
-                        isAlreadyAssigned
-                          ? "bg-muted border-muted cursor-not-allowed opacity-60"
-                          : "hover:bg-accent cursor-pointer",
-                      )}
-                      onClick={() => !isAlreadyAssigned && handleEmployeeAssign(employee._id)}
-                    >
-                      <div className="flex items-center space-x-3">
-                        <Avatar className="h-10 w-10">
-                          <AvatarImage
-                            src={employee.avatar || "/placeholder.svg?height=40&width=40"}
-                            alt={employee.name}
-                          />
-                          <AvatarFallback>
-                            {employee.name
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("")}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium">{employee.name}</p>
-                          <p className="text-sm text-muted-foreground">{employee.position}</p>
-                          <p className="text-xs text-muted-foreground">{employee.email}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {isAlreadyAssigned ? (
-                          <Badge variant="secondary" className="bg-green-100 text-green-800">
-                            <CheckCircle className="w-3 h-3 mr-1" />
-                            Assigned
-                          </Badge>
-                        ) : (
-                          <Button size="sm" variant="outline">
-                            <UserPlus className="w-4 h-4 mr-1" />
-                            Assign
-                          </Button>
-                        )}
-                      </div>
+          {loadingEmployees ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary" />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {availableEmployees.map((employee) => (
+                <Button
+                  key={employee._id}
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => handleEmployeeAssign(employee._id)}
+                >
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={employee.avatar || "/placeholder.svg?height=32&width=32"} alt={employee.name} />
+                      <AvatarFallback>
+                        {employee.name
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <h4 className="font-medium">{employee.name}</h4>
+                      <p className="text-sm text-muted-foreground">{employee.position}</p>
                     </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">No employees available to assign</p>
-              </div>
-            )}
-          </div>
-          <div className="flex justify-end pt-4 border-t">
-            <Button variant="outline" onClick={() => setIsEmployeeAssignOpen(false)}>
-              Close
-            </Button>
-          </div>
+                  </div>
+                </Button>
+              ))}
+              {availableEmployees.length === 0 && (
+                <div className="text-center py-4">
+                  <Users className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-muted-foreground">No employees available to assign</p>
+                </div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
-
-      {/* Leave Approval Modal */}
-      <SupervisorLeaveApprovalModal
-        isOpen={showLeaveApproval}
-        onClose={() => {
-          setShowLeaveApproval(false)
-          setSelectedSupervisorId("")
-          setLeaveReason("")
-          setLeaveDates([])
-        }}
-        onApprove={handleApproveLeave}
-        isSubmitting={isSubmittingLeave}
-        supervisorName={supervisors.find((s) => s._id === selectedSupervisorId)?.name || "Supervisor"}
-        selectedDates={leaveDates}
-        onDatesChange={setLeaveDates}
-        reason={leaveReason}
-        onReasonChange={setLeaveReason}
-      />
     </div>
   )
 }
