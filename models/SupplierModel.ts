@@ -4,6 +4,7 @@ export interface IProjectMaterial {
   projectId: mongoose.Types.ObjectId;
   materialType: string;
   quantity: number;
+  amount: number;
 }
 
 export interface ISupplier extends Document {
@@ -39,6 +40,11 @@ const projectMaterialSchema = new Schema<IProjectMaterial>({
     type: Number, 
     required: true,
     min: 1
+  },
+  amount: {
+    type: Number,
+    required: true,
+    min: 0
   }
 });
 

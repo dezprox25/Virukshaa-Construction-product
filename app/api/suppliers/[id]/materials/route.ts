@@ -7,6 +7,7 @@ type ProjectMaterial = {
   projectId: string;
   materialType: string;
   quantity: number;
+  amount: number;
 };
 
 // GET /api/suppliers/[id]/materials
@@ -52,7 +53,7 @@ export async function POST(
 ) {
   try {
     const { id } = params;
-    const { projectId, materialType, quantity } = await request.json();
+    const { projectId, materialType, quantity, amount } = await request.json();
     
     if (!Types.ObjectId.isValid(id)) {
       return NextResponse.json(
@@ -61,9 +62,9 @@ export async function POST(
       );
     }
     
-    if (!projectId || !materialType || !quantity) {
+    if (!projectId || !materialType || !quantity || amount === undefined) {
       return NextResponse.json(
-        { message: 'Project ID, material type, and quantity are required' },
+        { message: 'Project ID, material type, quantity, and amount are required' },
         { status: 400 }
       );
     }
@@ -71,6 +72,13 @@ export async function POST(
     if (isNaN(quantity) || quantity <= 0) {
       return NextResponse.json(
         { message: 'Quantity must be a positive number' },
+        { status: 400 }
+      );
+    }
+    
+    if (isNaN(amount) || amount < 0) {
+      return NextResponse.json(
+        { message: 'Amount must be a non-negative number' },
         { status: 400 }
       );
     }
@@ -87,7 +95,7 @@ export async function POST(
     let updatedSupplier;
     
     if (existingMaterial) {
-      // Update existing material quantity
+      // Update existing material quantity and amount
       updatedSupplier = await Supplier.findOneAndUpdate(
         { 
           _id: id,
@@ -95,25 +103,31 @@ export async function POST(
           'projectMaterials.materialType': materialType
         },
         { 
-          $inc: { 'projectMaterials.$.quantity': quantity } 
-        },
-        { new: true }
-      );
-    } else {
-      // Add new material to project
-      updatedSupplier = await Supplier.findByIdAndUpdate(
-        id,
-        {
-          $addToSet: {
-            projectMaterials: {
-              projectId,
-              materialType,
-              quantity: Number(quantity)
-            }
+          $inc: { 
+            'projectMaterials.$.quantity': quantity
+          },
+          $set: {
+            'projectMaterials.$.amount': amount
           }
         },
         { new: true }
       );
+    } else {
+      // Add new material
+      const newMaterial = {
+        projectId,
+        materialType,
+        quantity: Number(quantity),
+        amount: Number(amount)
+      };
+      
+      updatedSupplier = await Supplier.findByIdAndUpdate(
+        id,
+        { $push: { projectMaterials: newMaterial } },
+        { new: true }
+      );
+      
+      console.log('Added new material:', newMaterial);
     }
     
     if (!updatedSupplier) {
