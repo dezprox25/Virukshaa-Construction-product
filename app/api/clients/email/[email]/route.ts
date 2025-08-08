@@ -31,65 +31,75 @@ export async function GET(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    
+
     if (!session) {
-      return NextResponse.json(
-        { message: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
     const { email } = params;
-    
+
     if (!email) {
       return NextResponse.json(
-        { message: 'Email is required' },
+        { message: "Email is required" },
         { status: 400 }
       );
     }
 
     await connectToDB();
-    
-    const client = await Client.findOne({ email })
-      .select('-__v -password')
-      .lean()
-      .exec();
-    
+
+    const client = (await Client.findOne({ email })
+      .select("-__v -password")
+      .lean()) as {
+      _id: Types.ObjectId;
+      name: string;
+      email: string;
+      phone?: string;
+      company?: string;
+      address?: string;
+      city?: string;
+      state?: string;
+      postalCode?: string;
+      taxId?: string;
+      website?: string;
+      projectTotalAmount?: number;
+      status?: string;
+      avatar?: string;
+      createdAt?: Date;
+      updatedAt?: Date;
+    } | null;
+
     if (!client) {
-      return NextResponse.json(
-        { message: 'Client not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ message: "Client not found" }, { status: 404 });
     }
 
-    // Convert MongoDB document to plain object
-    const clientObj = client as any;
-    
-    // Create response object with only the fields we want to expose
     const responseData: ClientResponse = {
-      _id: clientObj._id.toString(),
-      name: clientObj.name || '',
-      email: clientObj.email || '',
-      phone: clientObj.phone,
-      company: clientObj.company,
-      address: clientObj.address,
-      city: clientObj.city,
-      state: clientObj.state,
-      postalCode: clientObj.postalCode,
-      taxId: clientObj.taxId,
-      website: clientObj.website,
-      projectTotalAmount: clientObj.projectTotalAmount,
-      status: clientObj.status,
-      avatar: clientObj.avatar,
-      createdAt: clientObj.createdAt ? new Date(clientObj.createdAt).toISOString() : new Date().toISOString(),
-      updatedAt: clientObj.updatedAt ? new Date(clientObj.updatedAt).toISOString() : new Date().toISOString()
+      _id: client._id.toString(),
+      name: client.name || "",
+      email: client.email || "",
+      phone: client.phone,
+      company: client.company,
+      address: client.address,
+      city: client.city,
+      state: client.state,
+      postalCode: client.postalCode,
+      taxId: client.taxId,
+      website: client.website,
+      projectTotalAmount: client.projectTotalAmount,
+      status: client.status,
+      avatar: client.avatar,
+      createdAt: client.createdAt
+        ? client.createdAt.toISOString()
+        : new Date().toISOString(),
+      updatedAt: client.updatedAt
+        ? client.updatedAt.toISOString()
+        : new Date().toISOString(),
     };
 
     return NextResponse.json(responseData);
   } catch (error) {
-    console.error('Error fetching client by email:', error);
+    console.error("Error fetching client by email:", error);
     return NextResponse.json(
-      { message: 'Internal server error' },
+      { message: "Internal server error" },
       { status: 500 }
     );
   }

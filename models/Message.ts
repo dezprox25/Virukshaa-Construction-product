@@ -1,17 +1,19 @@
-import mongoose from 'mongoose';
+import mongoose, { Schema, Document } from 'mongoose';
 
-const messageSchema = new mongoose.Schema({
+export interface IMessage extends Document {
+  text: string;
+  sender: 'client' | 'superadmin';
+  conversationId: string;
+  timestamp: Date;
+  read: boolean;
+}
+
+const MessageSchema = new Schema<IMessage>({
   text: { type: String, required: true },
-  sender: { type: String, required: true, enum: ['client', 'superadmin'] },
-  receiver: { type: String, required: true, enum: ['client', 'superadmin'] },
-  conversationId: { type: String, required: true, index: true },
+  sender: { type: String, enum: ['client', 'superadmin'], required: true },
+  conversationId: { type: String, required: true },
   timestamp: { type: Date, default: Date.now },
   read: { type: Boolean, default: false },
 });
 
-// Create compound index for faster querying
-messageSchema.index({ conversationId: 1, timestamp: 1 });
-
-const Message = mongoose.models.Message || mongoose.model('Message', messageSchema);
-
-export default Message;
+export default mongoose.models.Message || mongoose.model<IMessage>('Message', MessageSchema);

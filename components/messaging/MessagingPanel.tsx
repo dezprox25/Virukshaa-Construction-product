@@ -31,9 +31,9 @@ const MessagingPanel: React.FC = () => {
           <MessageBox
             userType="admin"
             title={selectedClient.name}
-            conversationId={`admin-${selectedClient._id}`}
+            conversationId={selectedClient.email} // or selectedClient._id
             onBack={handleBackToClientList}
-            className="flex-1"
+            
           />
         </div>
       ) : (

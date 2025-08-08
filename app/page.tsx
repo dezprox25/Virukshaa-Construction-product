@@ -38,13 +38,12 @@ export default function LoginPage() {
         throw new Error('Please select a role')
       }
 
-      const response = await fetch('/api/auth/signup', {
+      const response = await fetch('/api/admin/signup', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: signupData.name,
           email: signupData.email,
           password: signupData.password,
           role: signupData.role
@@ -69,51 +68,66 @@ export default function LoginPage() {
     }
   }
 
-  const handleLogin = async (demoRole?: string) => {
-    setIsLoading(true);
-
+  const handleLogin = async () => {
+  setIsLoading(true);
+  
     try {
-      const selectedRole = demoRole || role;
+      if (role === "superadmin") {
+      // Clear old data
+      localStorage.clear();
 
-      if (!selectedRole) {
-        throw new Error('Please select a role');
-      }
+      // Set role and mock data
+      localStorage.setItem("userRole", "superadmin");
+      localStorage.setItem("userEmail", "superadmin@virukshaa.com");
+      localStorage.setItem("userName", "Super Admin");
 
-      if (selectedRole !== 'admin') {
-        const validRoles = ['superadmin', 'supervisor', 'client'];
-        const userRole = validRoles.includes(selectedRole) ? selectedRole : 'client';
-
-        localStorage.setItem("userRole", userRole);
-        localStorage.setItem("userEmail", email);
-        router.push("/dashboard");
-        return;
-      }
-
-      const response = await fetch('/api/auth/login', {
+      // Navigate to dashboard
+      router.push("/dashboard");
+      return;
+    }
+      const res = await fetch('/api/admin/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password, role: selectedRole }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, role }),
       });
 
-      const data = await response.json();
+      const data = await res.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Login failed');
+      if (res.ok) {
+        
+        const user = data.user;
+
+        // ✅ Clear old data
+        localStorage.removeItem("clientEmail");
+        localStorage.removeItem("clientName");
+        localStorage.removeItem("userEmail");
+        localStorage.removeItem("userName");
+        localStorage.removeItem("userRole");
+
+        // ✅ Set common user data
+        localStorage.setItem("userRole", role);
+        localStorage.setItem("userEmail", user.email);
+        localStorage.setItem("userName", user.name || 'User');
+
+        // ✅ Set client-specific data
+        if (role === "client") {
+          localStorage.setItem("clientEmail", user.email);
+          localStorage.setItem("clientName", user.name);
+        }
+
+        // ✅ Navigate to dashboard
+        router.push('/dashboard');
+      } else {
+        alert(data.error || 'Login failed.');
       }
-
-      localStorage.setItem("userRole", selectedRole);
-      localStorage.setItem("userEmail", data.user.email);
-      localStorage.setItem("userName", data.user.name || 'User');
-      router.push("/dashboard");
     } catch (error) {
       console.error('Login error:', error);
       alert(error instanceof Error ? error.message : 'Login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
-  }
+  };
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -254,7 +268,7 @@ export default function LoginPage() {
                 </Button>
               </form>
 
-              <div className="text-center text-sm mt-4">
+              <div className="text-cdyenter text-sm mt-4">
                 Already have an account?{' '}
                 <button 
                   onClick={() => (document.querySelector('button[data-value="login"]') as HTMLButtonElement)?.click()}

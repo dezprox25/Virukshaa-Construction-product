@@ -1,44 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDB from "@/lib/db";
-import Admin from "@/models/AdminModel";
-import bcrypt from "bcryptjs"; // optional if you hash passwords
+import Client from "@/models/ClientModel";
 
 export async function POST(req: NextRequest) {
   try {
     await connectToDB();
 
-    const { email, password, role } = await req.json();
+    const { email, password } = await req.json();
 
-    if (!email || !password || !role) {
+    if (!email || !password) {
       return NextResponse.json({ error: "Missing credentials" }, { status: 400 });
     }
 
-    const user = await Admin.findOne({ email, role });
+    const user = await Client.findOne({ email });
 
     if (!user) {
-      return NextResponse.json({ error: "Invalid username or role" }, { status: 401 });
+      return NextResponse.json({ error: "Invalid email" }, { status: 401 });
     }
 
-    // If you're using hashed passwords
+    // If using hashed password:
     // const isMatch = await bcrypt.compare(password, user.password);
     // if (!isMatch) {
     //   return NextResponse.json({ error: "Invalid password" }, { status: 401 });
 
-    // If not using hashing:
     if (user.password !== password) {
       return NextResponse.json({ error: "Invalid password" }, { status: 401 });
     }
 
     return NextResponse.json({
-      message: "Login successful",
+      message: "Client login successful",
       user: {
-        name: user.name,
+        name: user.adminName,
         email: user.email,
-        role: user.role
-      }
+        role: "client",
+      },
     });
   } catch (error) {
-    console.error("Login error:", error);
+    console.error("Client login error:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

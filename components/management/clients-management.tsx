@@ -37,7 +37,10 @@ import { MessageDialog } from "./message-dialog"
 import { Plus, Edit, Trash2, Phone, Mail, Building2, MapPin, Globe, Search, Filter, User, FileText, Grid3X3, List, CheckCircle, XCircle, RefreshCw, Users, IndianRupee, Calendar, Eye, Hash, FolderOpen, Send } from 'lucide-react'
 
 interface Client {
-  _id: string
+   _id: string;
+  title: string;
+  description: string;
+  clientId: string;
   name: string
   email: string
   phone: string
@@ -186,60 +189,7 @@ export default function ClientsManagement() {
       if (!response.ok) {
         // Mock data fallback
         const mockClients: Client[] = [
-          {
-            _id: "1",
-            name: "John Smith",
-            email: "john.smith@techcorp.com",
-            phone: "+1 (555) 123-4567",
-            company: "TechCorp Solutions",
-            address: "123 Business Ave, Suite 100",
-            city: "San Francisco",
-            state: "CA",
-            postalCode: "94105",
-            projectTotalAmount: 150000,
-            taxId: "12-3456789",
-            website: "https://techcorp.com",
-            status: "Active",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            avatar: "/placeholder.svg?height=150&width=150",
-          },
-          {
-            _id: "2",
-            name: "Sarah Johnson",
-            email: "sarah@innovatedesign.com",
-            phone: "+1 (555) 987-6543",
-            company: "Innovate Design Studio",
-            address: "456 Creative Blvd",
-            city: "New York",
-            state: "NY",
-            postalCode: "10001",
-            projectTotalAmount: 85000,
-            taxId: "98-7654321",
-            website: "https://innovatedesign.com",
-            status: "Active",
-            createdAt: new Date(Date.now() - 86400000).toISOString(),
-            updatedAt: new Date().toISOString(),
-            avatar: "/placeholder.svg?height=150&width=150",
-          },
-          {
-            _id: "3",
-            name: "Michael Chen",
-            email: "m.chen@globalventures.com",
-            phone: "+1 (555) 456-7890",
-            company: "Global Ventures Inc",
-            address: "789 Enterprise Way",
-            city: "Austin",
-            state: "TX",
-            postalCode: "73301",
-            projectTotalAmount: 220000,
-            taxId: "45-6789012",
-            website: "https://globalventures.com",
-            status: "Inactive",
-            createdAt: new Date(Date.now() - 172800000).toISOString(),
-            updatedAt: new Date().toISOString(),
-            avatar: "/placeholder.svg?height=150&width=150",
-          },
+          
         ]
         setClients(mockClients)
         return
@@ -255,24 +205,7 @@ export default function ClientsManagement() {
       })
       // Mock data fallback
       const mockClients: Client[] = [
-        {
-          _id: "1",
-          name: "John Smith",
-          email: "john.smith@techcorp.com",
-          phone: "+1 (555) 123-4567",
-          company: "TechCorp Solutions",
-          address: "123 Business Ave, Suite 100",
-          city: "San Francisco",
-          state: "CA",
-          postalCode: "94105",
-          projectTotalAmount: 150000,
-          taxId: "12-3456789",
-          website: "https://techcorp.com",
-          status: "Active",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          avatar: "/placeholder.svg?height=150&width=150",
-        },
+       
       ]
       setClients(mockClients)
     } finally {
@@ -281,21 +214,21 @@ export default function ClientsManagement() {
   }
 
   // Fetch projects for a specific client
-  const fetchClientProjects = async (clientId: string) => {
-    setIsLoadingProjects(true)
-    try {
-      const response = await fetch(`/api/projects`)
-      if (!response.ok) throw new Error("Failed to fetch projects")
-      const allProjects: Project[] = await response.json()
-      const projects = allProjects.filter((project) => project.clientId === clientId)
-      setClientProjects(projects)
-    } catch (error) {
-      console.error("Error fetching client projects:", error)
-      setClientProjects([])
-    } finally {
-      setIsLoadingProjects(false)
-    }
+  const fetchClientProjects = async (clientEmail: string) => {
+  setIsLoadingProjects(true);
+  try {
+    const response = await fetch(`/api/projects?email=${encodeURIComponent(clientEmail)}`);
+    if (!response.ok) throw new Error("Failed to fetch projects");
+
+    const projects: Project[] = await response.json();
+    setClientProjects(projects);
+  } catch (error) {
+    console.error("Error fetching client projects:", error);
+    setClientProjects([]);
+  } finally {
+    setIsLoadingProjects(false);
   }
+};
 
   // Fetch invoices for a specific client
   const fetchClientInvoices = async (clientId: string) => {
@@ -379,6 +312,7 @@ export default function ClientsManagement() {
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [isDeleteProjectDialogOpen, setIsDeleteProjectDialogOpen] = useState(false)
   const [pendingDeleteProjectId, setPendingDeleteProjectId] = useState<string | null>(null)
+const [allProjects, setAllProjects] = useState<Project[]>([]);
 
   const openNewProjectDialog = () => {
     if (!selectedClient) return
@@ -410,26 +344,41 @@ export default function ClientsManagement() {
   }
 
   const deleteProject = async (projectId: string) => {
-    setIsDeleteProjectDialogOpen(false)
-    try {
-      const updatedProjects = allProjects.filter((p) => p._id !== projectId)
-      saveProjectsToStorage(updatedProjects)
-      if (selectedClient) fetchClientProjects(selectedClient._id)
-      toast({
-        title: "Success",
-        description: "Project deleted successfully!",
-      })
-    } catch (error) {
-      console.error("Error deleting project:", error)
-      toast({
-        title: "Error",
-        description: "Failed to delete project. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setPendingDeleteProjectId(null)
+  setIsDeleteProjectDialogOpen(false);
+  try {
+    // Delete project from backend
+    const response = await fetch(`/api/projects/${projectId}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to delete project");
     }
+
+    // Remove project from local state/storage
+    const updatedProjects = allProjects.filter((p) => p._id !== projectId);
+    setAllProjects(updatedProjects);
+    setAllProjects(updatedProjects); // optional: update state if needed
+
+    // Refetch or update client projects
+    if (selectedClient?.email) {
+      await fetchClientProjects(selectedClient.email);
+    }
+
+    toast({
+      title: "Success",
+      description: "Project deleted successfully!",
+    });
+  } catch (error) {
+    console.error("Error deleting project:", error);
+    toast({
+      title: "Error",
+      description: "Something went wrong while deleting the project.",
+      variant: "destructive",
+    });
   }
+};
+
 
   const closeProjectDialog = () => {
     setIsProjectDialogOpen(false)
@@ -477,7 +426,7 @@ export default function ClientsManagement() {
         description: "Project created successfully!",
       })
       closeProjectDialog()
-      fetchClientProjects(selectedClient._id)
+      fetchClientProjects(selectedClient.email)
     } catch (error) {
       console.error("Error creating project:", error)
       toast({
@@ -640,14 +589,19 @@ export default function ClientsManagement() {
     setIsAddDialogOpen(true)
   }
 
-  const filteredClients = clients.filter((client) => {
-    const matchesSearch =
-      client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (client.company && client.company.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      client.email.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === "All" || client.status === statusFilter
-    return matchesSearch && matchesStatus
-  })
+  const search = searchTerm.trim().toLowerCase()
+
+const filteredClients = clients.filter((client) => {
+  const nameMatch = client.name?.toLowerCase().includes(search)
+  const companyMatch = client.company?.toLowerCase().includes(search)
+  const emailMatch = client.email?.toLowerCase().includes(search)
+
+  const matchesSearch = nameMatch || companyMatch || emailMatch
+  const matchesStatus = statusFilter === "All" || client.status === statusFilter
+
+  return matchesSearch && matchesStatus
+})
+
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -744,12 +698,17 @@ export default function ClientsManagement() {
               <div className="flex items-center gap-3">
                 <Avatar className="h-12 w-12">
                   <AvatarImage src={client.avatar || "/placeholder.svg?height=48&width=48"} alt={client.name} />
-                  <AvatarFallback>
-                    {client.name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")}
-                  </AvatarFallback>
+                  {client.name ? (
+  <AvatarFallback>
+    {client.name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")}
+  </AvatarFallback>
+) : (
+  <AvatarFallback>NA</AvatarFallback>
+)}
+
                 </Avatar>
                 <div>
                   <h3 className="font-semibold text-lg">{client.name}</h3>
@@ -1638,7 +1597,7 @@ export default function ClientsManagement() {
                         <Button
                           size="icon"
                           variant="outline"
-                          onClick={() => selectedClient && fetchClientProjects(selectedClient._id)}
+                          onClick={() => selectedClient && fetchClientProjects(selectedClient.email)}
                           title="Refresh Projects"
                           disabled={isLoadingProjects}
                         >
@@ -1807,3 +1766,11 @@ export default function ClientsManagement() {
     </>
   )
 }
+function saveProjectsToStorage(updatedProjects: any) {
+  throw new Error("Function not implemented.")
+}
+
+function setAllProjects(updatedProjects: any) {
+  throw new Error("Function not implemented.")
+}
+

@@ -17,6 +17,14 @@ import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 
 // Types
+// (same types as in your code)
+
+// Constants
+// (same PROJECT_STATS, PROJECTS, UPDATES)
+
+// Components: StatCard, ProjectCard, UpdateCard, QuickActionCard
+// (same component definitions)
+// Types
 type Project = {
   id: string
   name: string
@@ -161,7 +169,6 @@ const StatCard = ({ title, value, icon: Icon, color, bgColor }: StatCard) => (
     </CardContent>
   </Card>
 )
-
 const ProjectCard = ({ project }: { project: Project }) => {
   const statusColors = {
     'On Track': 'bg-green-100 text-green-800 border-green-200',
@@ -242,6 +249,7 @@ const QuickActionCard = ({
   color: string
   onClick: () => void
 }) => (
+  <>
   <Card
     className="hover:shadow-md transition-shadow duration-200 cursor-pointer"
     onClick={onClick}
@@ -254,21 +262,40 @@ const QuickActionCard = ({
         {title}
       </CardTitle>
     </CardHeader>
+    
     <CardContent>
       <p className="text-gray-600 mb-4">{description}</p>
       <Button className="w-full">
-        {title.startsWith('View') ? title : `Go to ${title}`}
+        {title.startsWith("View") ? title : `Go to ${title}`}
       </Button>
     </CardContent>
   </Card>
+</>
+
 )
 
-// Main Component
+
 export default function ClientDashboard() {
   const [activeSection, setActiveSection] = useState('dashboard')
   const router = useRouter()
   const { data: session } = useSession()
   const { client, isLoading, error } = useClient()
+  const [clientProjects, setClientProjects] = useState<any[]>([])
+  const [projectsLoading, setProjectsLoading] = useState(true)
+ const conversationId = 'client1@example.com';
+  useEffect(() => {
+    if (client?.email) {
+      fetch(`/api/projects?clientEmail=${client.email}`)
+        .then(res => res.json())
+        .then(data => {
+          setClientProjects(data)
+          setProjectsLoading(false)
+        })
+        .catch(() => setProjectsLoading(false))
+    } else {
+      setProjectsLoading(false)
+    }
+  }, [client?.email])
 
   useEffect(() => {
     if (error) {
@@ -283,21 +310,16 @@ export default function ClientDashboard() {
   const renderContent = () => {
     switch (activeSection) {
       case 'projects':
-        return (
-          <>
-            <ClientProjectsManagement />
-          </>
-        )
+        return <ClientProjectsManagement />
       case 'payments':
-        return <MessageBox userType="client" title="Messages" conversationId="default-conversation" />
+        return <ClientPaymentsManagement />
       case 'message':
-        return <MessageBox userType="client" title="Messages" conversationId="client-messages" />
+        return <MessageBox userType="client" conversationId={conversationId} title={""} />;
       case 'settings':
         return <ClientSettingsManagement />
       default:
         return (
           <div className="space-y-8">
-            {/* Welcome Section */}
             {isLoading ? (
               <div className="flex items-center justify-center p-8 bg-white rounded-lg border">
                 <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
@@ -324,8 +346,7 @@ export default function ClientDashboard() {
                     </div>
                   )}
                 </div>
-                
-                {/* Client Info Badges */}
+
                 <div className="flex flex-wrap gap-2 mt-4">
                   {client.email && (
                     <Badge variant="outline" className="flex items-center gap-1">
@@ -351,7 +372,7 @@ export default function ClientDashboard() {
               </div>
             ) : (
               <div className="bg-gradient-to-r from-red-50 to-pink-50 rounded-lg p-6 border border-red-100">
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome!</h1>
+                <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome !</h1>
                 <p className="text-gray-600">Please complete your profile to get started.</p>
                 <Button 
                   variant="outline" 
@@ -363,36 +384,32 @@ export default function ClientDashboard() {
               </div>
             )}
 
-            {/* Project Stats */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {PROJECT_STATS.map((stat) => {
-                // Update stats based on client data if available
-                const statWithClientData = { ...stat };
-                
+                const statWithClientData = { ...stat }
                 if (client) {
                   switch(stat.id) {
                     case 'active-projects':
-                      statWithClientData.value = client.projectTotalAmount ? '3' : '0';
-                      break;
+  statWithClientData.value = `${clientProjects.length}`; // instead of hardcoded '3'
+  break;
+
                     case 'total-investment':
-                      statWithClientData.value = `$${client.projectTotalAmount?.toLocaleString() || '0'}`;
-                      break;
+                      statWithClientData.value = `$${client.projectTotalAmount?.toLocaleString() || '0'}`
+                      break
                   }
                 }
-                
-                return <StatCard key={statWithClientData.id} {...statWithClientData} />;
+                return <StatCard key={statWithClientData.id} {...statWithClientData} />
               })}
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-              {/* My Projects */}
               <div className="xl:col-span-2">
                 <Card className="h-fit">
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <div>
                         <CardTitle className="text-xl">My Projects</CardTitle>
-                        <CardDescription>Overview of your actijhkhkhve construction projects</CardDescription>
+                        <CardDescription>Overview of your active construction projects</CardDescription>
                       </div>
                       <Button variant="outline" size="sm" onClick={() => setActiveSection('projects')}>
                         View All
@@ -401,15 +418,30 @@ export default function ClientDashboard() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-6">
-                      {PROJECTS.map((project) => (
-                        <ProjectCard key={project.id} project={project} />
-                      ))}
+                      {projectsLoading ? (
+                        <div className="text-gray-500 text-sm">Loading projects...</div>
+                      ) : clientProjects.length > 0 ? (
+                        clientProjects.map((project) => (
+                          <ProjectCard key={project._id} project={{
+                            id: project._id,
+                            name: project.title,
+                            progress: project.progress,
+                            status: project.status,
+                            budget: `$${project.budget.toLocaleString()}`,
+                            completion: new Date(project.endDate).toLocaleDateString(),
+                            manager: project.manager || "N/A",
+                            location: project.client?.address || "N/A",
+                            lastUpdate: "Recently",
+                          }} />
+                        ))
+                      ) : (
+                        <div className="text-gray-500 text-sm">No projects found.</div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
               </div>
 
-              {/* Recent Updates */}
               <div>
                 <Card className="h-fit">
                   <CardHeader>
@@ -427,7 +459,6 @@ export default function ClientDashboard() {
               </div>
             </div>
 
-            {/* Quick Actions */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <QuickActionCard
                 title="Submit Feedback"
@@ -436,7 +467,6 @@ export default function ClientDashboard() {
                 color="bg-blue-50 text-blue-600"
                 onClick={() => setActiveSection('feedback')}
               />
-
               <QuickActionCard
                 title="Payment Status"
                 description="View payment schedules and transaction history"
@@ -444,7 +474,6 @@ export default function ClientDashboard() {
                 color="bg-green-50 text-green-600"
                 onClick={() => setActiveSection('payments')}
               />
-
               <QuickActionCard
                 title="Notifications"
                 description="Stay updated with project notifications and alerts"

@@ -9,6 +9,7 @@ export interface IAdminProfile extends Document {
   username?: string;
   password: string;
   website?: string;
+  role: string;
   bio?: string;
   profileImage?: string;
   showJobTitle?: boolean;
@@ -25,12 +26,15 @@ const AdminProfileSchema = new Schema<IAdminProfile>({
   username: { type: String },
   password: { type: String, required: true },
   website: { type: String },
+  role: { type: String, required: true },
   bio: { type: String },
   profileImage: { type: String },
   showJobTitle: { type: Boolean, default: true },
   searchQuery: { type: String },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
+ 
+
 });
 
 // Create a pre-save hook to update the updatedAt field

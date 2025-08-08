@@ -11,7 +11,6 @@ interface ClientForMessaging {
   avatar?: string;
 }
 
-// Define consistent response structure
 type ClientResponse = Omit<IClient, '_id' | 'createdAt' | 'updatedAt'> & {
   _id: string;
   createdAt: string;
@@ -27,43 +26,64 @@ function toClientResponse(client: any): ClientResponse {
   };
 }
 
-// GET all clients
-export async function GET() {
+// GET all clients or single by email
+export async function GET(request: Request) {
   try {
     await connectToDB();
-    // Get all client fields
-    const clients = await Client.find({})
-      .sort({ name: 1 })
-      .lean();
+    const url = new URL(request.url);
+    const email = url.searchParams.get("email");
 
-    // Transform MongoDB documents to include all fields
-    const result = clients.map((client: any) => ({
-      _id: client._id.toString(),
-      name: client.name,
-      email: client.email,
-      phone: client.phone || '',
-      company: client.company || '',
-      address: client.address || '',
-      city: client.city || '',
-      state: client.state || '',
-      postalCode: client.postalCode || '',
-      taxId: client.taxId || '',
-      website: client.website || '',
-      status: client.status || 'Active',
-      projectTotalAmount: client.projectTotalAmount || 0,
-      totalPaid: client.totalPaid || 0,
-      dueAmount: client.dueAmount || 0,
-      lastPaymentDate: client.lastPaymentDate?.toISOString() || null,
-      avatar: client.avatar || '',
-      createdAt: client.createdAt?.toISOString() || new Date().toISOString(),
-      updatedAt: client.updatedAt?.toISOString() || new Date().toISOString()
-    }));
-    
-    return NextResponse.json(result);
+    if (email) {
+      const client = await Client.findOne({ email }).lean();
+
+      if (!client) {
+        return NextResponse.json({ message: "Client not found" }, { status: 404 });
+      }
+
+      return NextResponse.json(toClientResponse(client), { status: 200 });
+    }
+
+    const clients = await Client.find({}).sort({ name: 1 }).lean();
+
+    const result = clients.map(toClientResponse);
+    return NextResponse.json(result, { status: 200 });
   } catch (error) {
-    console.error('Error fetching clients:', error);
+    console.error("Error fetching clients:", error);
     return NextResponse.json(
-      { message: 'Failed to fetch clients' },
+      { message: "Failed to fetch clients" },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT update existing client by email
+export async function PUT(request: Request) {
+  try {
+    await connectToDB();
+    const url = new URL(request.url);
+    const email = url.searchParams.get("email");
+
+    if (!email) {
+      return NextResponse.json({ message: "Email is required" }, { status: 400 });
+    }
+
+    const body = await request.json();
+
+    const updatedClient = await Client.findOneAndUpdate(
+      { email },
+      { $set: body },
+      { new: true }
+    ).lean();
+
+    if (!updatedClient) {
+      return NextResponse.json({ message: "Client not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(toClientResponse(updatedClient), { status: 200 });
+  } catch (error) {
+    console.error("Error updating client:", error);
+    return NextResponse.json(
+      { message: "Failed to update client" },
       { status: 500 }
     );
   }
