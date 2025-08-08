@@ -19,53 +19,50 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     await dbConnect();
+    console.log('Received request to create supplier');
     const body = await request.json();
+    console.log('Request body:', JSON.stringify(body, null, 2));
 
     const {
       companyName,
       contactPerson,
       email,
-      username,
-      password,
       phone,
-      materialTypes,
-      projectMaterials,
-      paymentType,
+      materialTypes = [],
+      projectMaterials = [],
+      bankDetails = [],
       address,
       supplyStartDate,
       avatar,
     } = body;
 
-    if (!companyName || !contactPerson || !email || !username || !password || !phone || !materialTypes || !paymentType || !address) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    // Validate required fields
+    const requiredFields = [
+      { field: 'companyName', value: companyName },
+      { field: 'contactPerson', value: contactPerson },
+      { field: 'email', value: email },
+      { field: 'phone', value: phone },
+      { field: 'address', value: address }
+    ];
+
+    const missingFields = requiredFields.filter(field => !field.value).map(f => f.field);
+    if (missingFields.length > 0) {
+      console.error('Missing required fields:', missingFields);
+      return NextResponse.json(
+        { error: `Missing required fields: ${missingFields.join(', ')}` }, 
+        { status: 400 }
+      );
     }
 
-    // Check if email or username already exists
-    const existingSupplier = await Supplier.findOne({
-      $or: [
-        { email },
-        { username }
-      ]
-    });
+    // Check if email already exists
+    const existingSupplier = await Supplier.findOne({ email });
     
     if (existingSupplier) {
-      if (existingSupplier.email === email) {
-        return NextResponse.json(
-          { error: "A supplier with this email already exists" },
-          { status: 400 }
-        );
-      }
-      if (existingSupplier.username === username) {
-        return NextResponse.json(
-          { error: "This username is already taken" },
-          { status: 400 }
-        );
-      }
+      return NextResponse.json(
+        { error: "A supplier with this email already exists" },
+        { status: 400 }
+      );
     }
-
-    // Hash password
-    const bcrypt = await import('bcryptjs');
-    const hashedPassword = await bcrypt.hash(password, 10);
 
     // Validate project materials if provided
     const validatedProjectMaterials = [];
@@ -86,28 +83,72 @@ export async function POST(request: Request) {
       }
     }
 
+    console.log('Creating new supplier with data:', {
+      companyName,
+      contactPerson,
+      email,
+      phone,
+      materialTypes,
+      projectMaterials: validatedProjectMaterials,
+      bankDetails,
+      address,
+      supplyStartDate,
+      avatar
+    });
+
+    // Validate bank details if provided
+    const validatedBankDetails = Array.isArray(bankDetails) 
+      ? bankDetails.map(detail => ({
+          accountNumber: detail.accountNumber?.toString().trim() || '',
+          accountHolderName: detail.accountHolderName?.toString().trim() || '',
+          bankName: detail.bankName?.toString().trim() || '',
+          branch: detail.branch?.toString().trim() || '',
+          ifscCode: detail.ifscCode?.toString().trim().toUpperCase() || '',
+          upiId: detail.upiId?.toString().trim().toLowerCase() || '',
+          accountType: ['Savings', 'Current', 'Other'].includes(detail.accountType) 
+            ? detail.accountType 
+            : 'Savings',
+          isPrimary: !!detail.isPrimary
+        }))
+      : [];
+
     const newSupplier = new Supplier({
       companyName,
       contactPerson,
       email,
-      username,
-      password: hashedPassword,
       phone,
-      materialTypes,
+      materialTypes: Array.isArray(materialTypes) ? materialTypes : [],
       projectMaterials: validatedProjectMaterials,
-      paymentType,
+      bankDetails: validatedBankDetails,
       address,
       supplyStartDate,
       avatar,
       status: 'Active',
     });
 
+    console.log('Attempting to save supplier...');
     const savedSupplier = await newSupplier.save();
+    console.log('Supplier saved successfully:', savedSupplier._id);
+    
     return NextResponse.json(savedSupplier, { status: 201 });
-  } catch (error) {
-    console.error("Error creating supplier:", error);
+  } catch (error: any) {
+    console.error("Error creating supplier:", {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      keyPattern: error.keyPattern,
+      keyValue: error.keyValue,
+      errors: error.errors
+    });
+    
     return NextResponse.json(
-      { error: "Failed to create supplier" },
+      { 
+        error: "Failed to create supplier",
+        details: error.message,
+        code: error.code,
+        keyPattern: error.keyPattern
+      },
       { status: 500 }
     );
   }

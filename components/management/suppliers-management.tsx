@@ -1,9 +1,9 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { format } from "date-fns"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { CalendarIcon, Check, ChevronsUpDown } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -36,7 +37,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "sonner"
-import { Plus, Edit, Trash2, Phone, Mail, MapPin, Search, Filter, CreditCard, Grid3X3, List, RefreshCw, Building2, CheckCircle, XCircle, Package, UserCheck, Calendar, DollarSign } from 'lucide-react'
+import { Plus, Edit, Trash2, Phone, Mail, MapPin, Search, Filter, CreditCard, Grid3X3, List, RefreshCw, Building2, CheckCircle, XCircle, Package, UserCheck, Calendar, IndianRupee, Edit3, Eye, MessageCircle } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { X } from 'lucide-react'
@@ -49,6 +50,17 @@ interface ProjectMaterial {
   amount: number
 }
 
+interface BankDetail {
+  accountNumber?: string
+  accountHolderName?: string
+  bankName?: string
+  branch?: string
+  ifscCode?: string
+  upiId?: string
+  accountType?: 'Savings' | 'Current' | 'Other'
+  isPrimary?: boolean
+}
+
 interface Supplier {
   _id: string
   companyName: string
@@ -57,15 +69,16 @@ interface Supplier {
   phone: string
   materialTypes: string[]
   supplyStartDate?: string
-  paymentType: "Cash" | "Credit"
   address: string
   status: "Active" | "Inactive"
   avatar?: string
-  username?: string
-  password?: string
+  bankDetails?: BankDetail[]
   projectMaterials?: ProjectMaterial[]
   createdAt: string
   updatedAt: string
+  totalPaid?: number
+  dueAmount?: number
+  lastPaymentDate?: string
 }
 
 interface Transaction {
@@ -88,19 +101,42 @@ const initialFormData = {
   companyName: "",
   contactPerson: "",
   email: "",
-  username: "",
-  password: "",
   phone: "",
   materialTypes: [] as string[],
   supplyStartDate: undefined as Date | undefined,
-  paymentType: "Credit" as "Cash" | "Credit",
   address: "",
   status: "Active" as "Active" | "Inactive",
   avatar: "",
+  bankDetails: [] as Array<{
+    accountNumber?: string;
+    accountHolderName?: string;
+    bankName?: string;
+    branch?: string;
+    ifscCode?: string;
+    upiId?: string;
+    accountType?: 'Savings' | 'Current' | 'Other';
+    isPrimary?: boolean;
+  }>,
 }
 
-export default function SuppliersManagement() {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+const SuppliersManagement: React.FC = () => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [isDetailSheetOpen, setIsDetailSheetOpen] = useState(false);
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [formData, setFormData] = useState(initialFormData);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+  const [projectMaterialInputs, setProjectMaterialInputs] = useState<Record<string, ProjectMaterialLocal>>({});
+  const [projectMaterials, setProjectMaterials] = useState<Record<string, ProjectMaterialLocal[]>>({});
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  
   const [materialOptions, setMaterialOptions] = useState([
     { value: "Cement", label: "Cement" },
     { value: "Sand", label: "Sand" },
@@ -110,32 +146,31 @@ export default function SuppliersManagement() {
     { value: "Concrete Mix", label: "Concrete Mix" },
     { value: "Wood / Timber", label: "Wood / Timber" },
     { value: "Paint", label: "Paint" },
-  ])
-  const [materialInputValue, setMaterialInputValue] = useState("")
-  const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState("All")
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [formData, setFormData] = useState(initialFormData)
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
-  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
-  const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false)
-  const [isDetailSheetOpen, setIsDetailSheetOpen] = useState(false)
-  const [projects, setProjects] = useState<any[]>([])
-  const [projectMaterials, setProjectMaterials] = useState<Record<string, ProjectMaterialLocal[]>>({})
-  const [isLoadingProjects, setIsLoadingProjects] = useState(false)
-  const [selectedProjectForMaterial, setSelectedProjectForMaterial] = useState<string>("")
+  ]);
   
-  // Separate state for each project's material input
-  const [projectMaterialInputs, setProjectMaterialInputs] = useState<Record<string, {
-    materialType: string;
-    quantity: string;
-    amount: string;
-  }>>({})
-  
-  const [isSaving, setIsSaving] = useState(false)
+  const [materialInputValue, setMaterialInputValue] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [editingBankDetails, setEditingBankDetails] = useState<BankDetail[]>([]);
+  const [isBankDetailsOpen, setIsBankDetailsOpen] = useState(false);
+  const [currentBankDetail, setCurrentBankDetail] = useState<BankDetail | null>(null);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
+  const [selectedProjectForMaterial, setSelectedProjectForMaterial] = useState<string>("");
+
+  const filteredSuppliers = useMemo(() => {
+    return suppliers.filter((supplier: Supplier) => {
+      const matchesSearch = !searchTerm || 
+        supplier.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        supplier.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        supplier.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        supplier.phone.includes(searchTerm);
+        
+      const matchesStatus = statusFilter === 'all' || 
+        (statusFilter === 'active' && supplier.status === 'Active') ||
+        (statusFilter === 'inactive' && supplier.status === 'Inactive');
+        
+      return matchesSearch && matchesStatus;
+    });
+  }, [suppliers, searchTerm, statusFilter]);
 
   useEffect(() => {
     fetchSuppliers()
@@ -146,11 +181,9 @@ export default function SuppliersManagement() {
       const response = await fetch("/api/suppliers", { cache: "no-store" })
       if (!response.ok) throw new Error("Failed to fetch suppliers")
       const data = await response.json()
-      
       // Convert projectMaterials array to our state format
       const formattedData = data.map((supplier: any) => {
         const projectMaterialsObj: Record<string, ProjectMaterialLocal[]> = {}
-        
         if (supplier.projectMaterials && Array.isArray(supplier.projectMaterials)) {
           supplier.projectMaterials.forEach((pm: any) => {
             if (!projectMaterialsObj[pm.projectId]) {
@@ -163,13 +196,11 @@ export default function SuppliersManagement() {
             })
           })
         }
-        
         return {
           ...supplier,
           projectMaterials: projectMaterialsObj
         }
       })
-      
       setSuppliers(formattedData)
     } catch (error) {
       console.error("Error fetching suppliers:", error)
@@ -213,33 +244,19 @@ export default function SuppliersManagement() {
   }
 
   const openEditDialog = (supplier: Supplier) => {
-    setEditingSupplier(supplier)
     setFormData({
-      ...supplier,
+      companyName: supplier.companyName,
+      contactPerson: supplier.contactPerson,
+      email: supplier.email,
+      phone: supplier.phone,
+      materialTypes: [...supplier.materialTypes],
       supplyStartDate: supplier.supplyStartDate ? new Date(supplier.supplyStartDate) : undefined,
-      avatar: supplier.avatar ?? "",
-      username: supplier.username ?? "",
-      password: "", // Don't pre-fill password for security
+      address: supplier.address,
+      status: supplier.status,
+      avatar: supplier.avatar || "",
+      bankDetails: supplier.bankDetails ? [...supplier.bankDetails] : [],
     })
-    
-    // Initialize project materials if they exist
-    if (supplier.projectMaterials && supplier.projectMaterials.length > 0) {
-      const materialsByProject = supplier.projectMaterials.reduce((acc, curr) => {
-        if (!acc[curr.projectId]) {
-          acc[curr.projectId] = [];
-        }
-        acc[curr.projectId].push({
-          materialType: curr.materialType,
-          quantity: Number(curr.quantity) || 0,
-          amount: Number(curr.amount) || 0
-        });
-        return acc;
-      }, {} as Record<string, ProjectMaterialLocal[]>);
-      setProjectMaterials(materialsByProject);
-    } else {
-      setProjectMaterials({})
-    }
-    
+    setEditingSupplier(supplier)
     setIsAddDialogOpen(true)
   }
 
@@ -249,37 +266,35 @@ export default function SuppliersManagement() {
     try {
       const url = editingSupplier ? `/api/suppliers/${editingSupplier._id}` : "/api/suppliers"
       const method = editingSupplier ? "PUT" : "POST"
-      
-      // Convert projectMaterials to array format for the API
-      const projectMaterialsArray = Object.entries(projectMaterials).flatMap(([projectId, materials]) =>
-        materials.map(material => ({
-          projectId,
-          materialType: material.materialType,
-          quantity: Number(material.quantity) || 0,
-          amount: Number(material.amount) || 0
-        }))
-      )
-
       const response = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           ...formData,
-          supplyStartDate: formData.supplyStartDate?.toISOString(),
-          projectMaterials: projectMaterialsArray
+          // Remove empty strings and undefined values
+          ...Object.fromEntries(
+            Object.entries(formData).filter(([_, v]) => v !== "" && v !== undefined)
+          ),
         }),
       })
-      
-      if (response.ok) {
-        await fetchSuppliers()
-        setIsAddDialogOpen(false)
-        setEditingSupplier(null)
-        resetForm()
-        toast.success(`${formData.companyName} has been ${editingSupplier ? "updated" : "added"} successfully.`)
-      } else {
-        const errorData = await response.json()
-        throw new Error(errorData.message || "Failed to save supplier")
+      if (!response.ok) {
+        throw new Error("Failed to save supplier")
       }
+      const savedSupplier = await response.json()
+      toast.success(`Supplier ${editingSupplier ? "updated" : "created"} successfully`)
+      
+      // Update the suppliers list
+      if (editingSupplier) {
+        setSuppliers(suppliers.map(s => s._id === savedSupplier._id ? savedSupplier : s))
+      } else {
+        setSuppliers([...suppliers, savedSupplier])
+      }
+      // Close the dialog and reset the form
+      setIsAddDialogOpen(false)
+      setEditingSupplier(null)
+      resetForm()
     } catch (error) {
       console.error("Error saving supplier:", error)
       toast.error("Failed to save supplier. Please try again.")
@@ -332,27 +347,26 @@ export default function SuppliersManagement() {
         [projectId]: [],
       }));
     }
-    
     // Initialize input state for this project if it doesn't exist
     if (!projectMaterialInputs[projectId]) {
       setProjectMaterialInputs(prev => ({
         ...prev,
         [projectId]: {
           materialType: "",
-          quantity: "1",
-          amount: "0"
+          quantity: 1,
+          amount: 0
         }
       }));
     }
   }
 
   // Update project material input
-  const updateProjectMaterialInput = (projectId: string, field: string, value: string) => {
+  const updateProjectMaterialInput = (projectId: string, field: string, value: string | number) => {
     setProjectMaterialInputs(prev => ({
       ...prev,
       [projectId]: {
         ...prev[projectId],
-        [field]: value
+        [field]: field === 'materialType' ? value : Number(value)
       }
     }));
   }
@@ -363,7 +377,6 @@ export default function SuppliersManagement() {
       toast.error("No input data found for this project");
       return;
     }
-
     const materialType = input.materialType;
     const quantity = Number(input.quantity);
     const amount = Number(input.amount);
@@ -373,17 +386,14 @@ export default function SuppliersManagement() {
       toast.error("Please select a material type");
       return;
     }
-    
     if (!quantity || quantity <= 0) {
       toast.error("Please enter a valid quantity (greater than 0)");
       return;
     }
-    
     if (amount < 0) {
       toast.error("Amount cannot be negative");
       return;
     }
-    
     if (!selectedSupplier?._id) {
       toast.error("No supplier selected");
       return;
@@ -446,7 +456,7 @@ export default function SuppliersManagement() {
           quantity,
           amount
         });
-        
+
         setSelectedSupplier({
           ...selectedSupplier,
           projectMaterials: updatedProjectMaterials
@@ -458,8 +468,8 @@ export default function SuppliersManagement() {
         ...prev,
         [projectId]: {
           materialType: "",
-          quantity: "1",
-          amount: "0"
+          quantity: 1,
+          amount: 0
         }
       }));
 
@@ -477,12 +487,10 @@ export default function SuppliersManagement() {
       toast.error("Quantity must be greater than 0");
       return;
     }
-    
     if (newAmount < 0) {
       toast.error("Amount cannot be negative");
       return;
     }
-
     if (!selectedSupplier?._id) {
       toast.error("No supplier selected");
       return;
@@ -542,7 +550,7 @@ export default function SuppliersManagement() {
             ? { ...pm, quantity: newQuantity, amount: newAmount }
             : pm
         );
-        
+
         setSelectedSupplier({
           ...selectedSupplier,
           projectMaterials: updatedProjectMaterials
@@ -591,7 +599,7 @@ export default function SuppliersManagement() {
         const updatedProjectMaterials = (selectedSupplier.projectMaterials || []).filter(pm =>
           !(pm.projectId === projectId && pm.materialType === materialType)
         );
-        
+
         setSelectedSupplier({
           ...selectedSupplier,
           projectMaterials: updatedProjectMaterials
@@ -609,7 +617,6 @@ export default function SuppliersManagement() {
 
   const removeProject = async (projectId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    
     if (!selectedSupplier?._id) {
       toast.error("No supplier selected");
       return;
@@ -619,7 +626,7 @@ export default function SuppliersManagement() {
     try {
       // Get all materials for this project to remove them
       const projectMaterialsToRemove = projectMaterials[projectId] || [];
-      
+
       // Remove each material for this project
       await Promise.all(
         projectMaterialsToRemove.map(material =>
@@ -633,7 +640,7 @@ export default function SuppliersManagement() {
           })
         )
       );
-      
+
       // Update local state
       setProjectMaterials(prev => {
         const newProjectMaterials = { ...prev };
@@ -647,19 +654,19 @@ export default function SuppliersManagement() {
         delete newInputs[projectId];
         return newInputs;
       });
-      
+
       // Update the selected supplier's project materials
       if (selectedSupplier) {
         const updatedProjectMaterials = (selectedSupplier.projectMaterials || []).filter(pm =>
           pm.projectId !== projectId
         );
-        
+
         setSelectedSupplier({
           ...selectedSupplier,
           projectMaterials: updatedProjectMaterials
         });
       }
-      
+
       toast.success("Removed project assignment and all associated materials");
     } catch (error) {
       console.error('Error removing project:', error);
@@ -674,17 +681,17 @@ export default function SuppliersManagement() {
     try {
       // Fetch projects when opening the detail view
       await fetchProjects();
-      
+
       // Reset project materials for this supplier
       setProjectMaterials({});
       setProjectMaterialInputs({});
-      
+
       // Fetch project materials for this supplier
       const materialsResponse = await fetch(`/api/suppliers/${supplierId}/materials`);
       if (materialsResponse.ok) {
         const materialsData = await materialsResponse.json();
         console.log("Fetched materials data:", materialsData);
-        
+
         // Group materials by projectId
         const groupedMaterials = materialsData.reduce((acc: any, material: any) => {
           if (!acc[material.projectId]) {
@@ -697,17 +704,17 @@ export default function SuppliersManagement() {
           });
           return acc;
         }, {});
-        
+
         console.log("Grouped materials:", groupedMaterials);
         setProjectMaterials(groupedMaterials);
 
         // Initialize input states for existing projects
-        const inputStates: Record<string, { materialType: string; quantity: string; amount: string }> = {};
+        const inputStates: Record<string, { materialType: string; quantity: number; amount: number }> = {};
         Object.keys(groupedMaterials).forEach(projectId => {
           inputStates[projectId] = {
             materialType: "",
-            quantity: "1",
-            amount: "0"
+            quantity: 1,
+            amount: 0
           };
         });
         setProjectMaterialInputs(inputStates);
@@ -734,6 +741,7 @@ export default function SuppliersManagement() {
           description: "Bulk cement order",
         },
       ];
+
       setTransactions(mockTransactions);
     } catch (error) {
       console.error("Error loading supplier data:", error);
@@ -742,16 +750,6 @@ export default function SuppliersManagement() {
       setIsLoadingTransactions(false);
     }
   }
-
-  const filteredSuppliers = suppliers.filter((supplier: Supplier) => {
-    const matchesSearch =
-      supplier.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      supplier.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      supplier.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      supplier.materialTypes.join(" ").toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === "All" || supplier.status === statusFilter
-    return matchesSearch && matchesStatus
-  })
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -781,7 +779,6 @@ export default function SuppliersManagement() {
   const totalSuppliers = suppliers.length
   const activeSuppliers = suppliers.filter((supplier) => supplier.status === "Active").length
   const inactiveSuppliers = suppliers.filter((supplier) => supplier.status === "Inactive").length
-  const creditSuppliers = suppliers.filter((supplier) => supplier.paymentType === "Credit").length
 
   if (loading && suppliers.length === 0) {
     return (
@@ -794,127 +791,224 @@ export default function SuppliersManagement() {
     )
   }
 
+  const renderSupplierCard = (supplier: Supplier) => {
+    const primaryBankAccount = supplier.bankDetails?.find(acc => acc.isPrimary) || supplier.bankDetails?.[0];
+    
+    return (
+      <Card key={supplier._id} className="hover:shadow-md transition-shadow">
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <Avatar className="h-12 w-12">
+                <AvatarImage
+                  src={supplier.avatar || `https://avatar.vercel.sh/${supplier.email}.png`}
+                  alt={supplier.companyName}
+                />
+                <AvatarFallback>
+                  {supplier.companyName
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <h3 className="font-semibold">{supplier.companyName}</h3>
+                <p className="text-sm text-muted-foreground">{supplier.contactPerson}</p>
+              </div>
+            </div>
+            <Badge variant={supplier.status === "Active" ? "default" : "secondary"}>
+              {supplier.status}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="flex items-center text-sm">
+            <Mail className="mr-2 h-4 w-4 text-muted-foreground" />
+            <a href={`mailto:${supplier.email}`} className="hover:underline">
+              {supplier.email}
+            </a>
+          </div>
+          <div className="flex items-center text-sm">
+            <Phone className="mr-2 h-4 w-4 text-muted-foreground" />
+            <a href={`tel:${supplier.phone}`} className="hover:underline">
+              {supplier.phone}
+            </a>
+          </div>
+          {primaryBankAccount && (
+            <div className="mt-2 pt-2 border-t">
+              <p className="text-xs text-muted-foreground mb-1">Bank Account</p>
+              <div className="text-sm">
+                <div>{primaryBankAccount.accountHolderName}</div>
+                <div className="text-muted-foreground">
+                  {primaryBankAccount.bankName} ••••{primaryBankAccount.accountNumber?.slice(-4)}
+                </div>
+                {primaryBankAccount.isPrimary && (
+                  <Badge variant="outline" className="mt-1">
+                    Primary
+                  </Badge>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+        <CardFooter className="flex justify-between">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              openEditDialog(supplier);
+            }}
+          >
+            <Edit3 className="w-4 h-4 mr-1" /> Edit
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSelectedSupplier(supplier);
+              setIsDetailSheetOpen(true);
+            }}
+          >
+            <Eye className="w-4 h-4 mr-1" /> View
+          </Button>
+        </CardFooter>
+      </Card>
+    );
+  };
+
   const renderGridView = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {filteredSuppliers.map((supplier) => (
-        <Card
-          key={supplier._id}
-          className="hover:shadow-lg transition-shadow cursor-pointer"
-          onClick={() => handleSupplierClick(supplier)}
-        >
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <Avatar className="h-12 w-12">
-                  <AvatarImage
-                    src={supplier.avatar || `https://avatar.vercel.sh/${supplier.email}.png`}
-                    alt={supplier.companyName}
-                  />
-                  <AvatarFallback>
-                    {supplier.companyName
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <h3 className="font-semibold text-lg">{supplier.companyName}</h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge className={getStatusColor(supplier.status)} variant="secondary">
-                      {supplier.status === "Active" ? (
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                      ) : (
-                        <XCircle className="w-3 h-3 mr-1" />
-                      )}
-                      {supplier.status}
-                    </Badge>
-                  </div>
-                </div>
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    {filteredSuppliers.map((supplier) => (
+      <Card
+        key={supplier._id}
+        className="hover:shadow-lg transition-all duration-200 cursor-pointer hover:scale-[1.02]"
+        onClick={() => handleSupplierClick(supplier)}
+      >
+        <CardContent className="p-6">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Avatar className="h-12 w-12">
+                <AvatarImage
+                  src={supplier.avatar || `https://avatar.vercel.sh/${supplier.email}.png`}
+                  alt={supplier.companyName}
+                />
+                <AvatarFallback>
+                  {supplier.companyName
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <h3 className="font-semibold text-lg">{supplier.companyName}</h3>
+                <p className="text-sm text-muted-foreground">{supplier.contactPerson}</p>
               </div>
-              <Badge
-                className={
-                  supplier.paymentType === "Credit" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"
-                }
-              >
-                {supplier.paymentType}
-              </Badge>
             </div>
-            <div className="space-y-2 mb-4">
-              <div className="flex items-center gap-2 text-sm">
-                <UserCheck className="w-4 h-4 text-muted-foreground" />
-                <span>{supplier.contactPerson}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <Phone className="w-4 h-4 text-muted-foreground" />
-                <span>{supplier.phone}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <MapPin className="w-4 h-4 text-muted-foreground" />
-                <span>{supplier.address}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <CreditCard className="w-4 h-4 text-muted-foreground" />
-                <span>Payment: {supplier.paymentType}</span>
-              </div>
-              {supplier.supplyStartDate && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Calendar className="w-4 h-4 text-muted-foreground" />
-                  <span>Started: {new Date(supplier.supplyStartDate).toLocaleDateString()}</span>
-                </div>
-              )}
+            <Badge className={getStatusColor(supplier.status)}>{supplier.status}</Badge>
+          </div>
+          <div className="space-y-2 mb-4">
+            <div className="flex items-center gap-2 text-sm">
+              <Mail className="w-4 h-4 text-muted-foreground" />
+              <span>{supplier.email}</span>
             </div>
-            {supplier.materialTypes && supplier.materialTypes.length > 0 && (
-              <div className="mb-4">
-                <p className="text-sm font-medium mb-2">Materials:</p>
-                <div className="flex flex-wrap gap-1">
-                  {supplier.materialTypes.slice(0, 3).map((material, index) => (
-                    <Badge key={index} variant="outline" className="text-xs">
-                      {material}
-                    </Badge>
-                  ))}
-                  {supplier.materialTypes.length > 3 && (
-                    <Badge variant="outline" className="text-xs">
-                      +{supplier.materialTypes.length - 3} more
-                    </Badge>
-                  )}
-                </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Phone className="w-4 h-4 text-muted-foreground" />
+              <span>{supplier.phone}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <MapPin className="w-4 h-4 text-muted-foreground" />
+              <span>{supplier.address}</span>
+            </div>
+            {supplier.supplyStartDate && (
+              <div className="flex items-center gap-2 text-sm">
+                <Calendar className="w-4 h-4 text-muted-foreground" />
+                <span>Supply Started: {format(new Date(supplier.supplyStartDate), "MMM yyyy")}</span>
               </div>
             )}
-            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 bg-transparent"
-                onClick={() => openEditDialog(supplier)}
-              >
-                <Edit className="w-4 h-4 mr-2" />
-                Edit
-              </Button>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive" size="sm">
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Supplier</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to delete {supplier.companyName}? This action cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => handleDelete(supplier._id)}>Delete</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+            {supplier.bankDetails && supplier.bankDetails.length > 0 && (
+              <div className="flex items-center gap-2 text-sm">
+                <CreditCard className="w-4 h-4 text-muted-foreground" />
+                <span>
+                  {supplier.bankDetails.find(acc => acc.isPrimary)?.bankName || supplier.bankDetails[0]?.bankName || 'Bank Account'} 
+                  {supplier.bankDetails.find(acc => acc.isPrimary) && ' (Primary)'}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center gap-2 text-sm">
+              <Calendar className="w-4 h-4 text-muted-foreground" />
+              <span>Registered: {format(new Date(supplier.createdAt), "MMM yyyy")}</span>
             </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  )
+          </div>
+          {supplier.materialTypes && supplier.materialTypes.length > 0 && (
+            <div className="mb-4">
+              <p className="text-sm font-medium mb-2">Materials:</p>
+              <div className="flex flex-wrap gap-1">
+                {supplier.materialTypes.slice(0, 3).map((material, index) => (
+                  <Badge key={index} variant="outline" className="text-xs">
+                    {material}
+                  </Badge>
+                ))}
+                {supplier.materialTypes.length > 3 && (
+                  <Badge variant="outline" className="text-xs">
+                    +{supplier.materialTypes.length - 3} more
+                  </Badge>
+                )}
+              </div>
+            </div>
+          )}
+          <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 bg-transparent"
+              onClick={() => openEditDialog(supplier)}
+            >
+              <Edit className="w-4 h-4 mr-2" />
+              Edit
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-green-600 hover:text-green-700 border-green-500 hover:bg-green-50 bg-transparent"
+              onClick={() => window.open(`https://wa.me/${supplier.phone.replace(/[^0-9]/g, "")}`, "_blank")}
+            >
+              <MessageCircle className="w-4 h-4" />
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => {
+                setSelectedSupplier(supplier);
+                setIsDetailSheetOpen(true);
+              }}
+            >
+              <Eye className="w-4 h-4" />
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm">
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Supplier</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to delete {supplier.companyName}? This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => handleDelete(supplier._id)}>Delete</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </CardContent>
+      </Card>
+    ))}
+  </div>
+)
 
   const renderListView = () => (
     <Card>
@@ -924,7 +1018,6 @@ export default function SuppliersManagement() {
             <TableRow>
               <TableHead>Company</TableHead>
               <TableHead>Contact Person</TableHead>
-              <TableHead>Payment Type</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Materials</TableHead>
               <TableHead>Contact</TableHead>
@@ -960,15 +1053,6 @@ export default function SuppliersManagement() {
                 </TableCell>
                 <TableCell>
                   <div className="font-medium">{supplier.contactPerson}</div>
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    className={
-                      supplier.paymentType === "Credit" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"
-                    }
-                  >
-                    {supplier.paymentType}
-                  </Badge>
                 </TableCell>
                 <TableCell>
                   <Badge className={getStatusColor(supplier.status)}>{supplier.status}</Badge>
@@ -1067,8 +1151,10 @@ export default function SuppliersManagement() {
             <CreditCard className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{creditSuppliers}</div>
-            <p className="text-xs text-muted-foreground">Credit payment terms</p>
+            <div className="text-2xl font-bold text-blue-600">
+              {suppliers.filter(s => s.bankDetails?.length).length}
+            </div>
+            <p className="text-xs text-muted-foreground">Suppliers with bank details</p>
           </CardContent>
         </Card>
       </div>
@@ -1166,30 +1252,6 @@ export default function SuppliersManagement() {
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="username">Username *</Label>
-                  <Input
-                    id="username"
-                    value={formData.username}
-                    onChange={(e) => handleFormChange("username", e.target.value)}
-                    placeholder="Enter username"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password *</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => handleFormChange("password", e.target.value)}
-                    placeholder="Enter password"
-                    required={!editingSupplier}
-                  />
-                  {editingSupplier && (
-                    <p className="text-xs text-muted-foreground">Leave blank to keep current password</p>
-                  )}
-                </div>
               </div>
               <div className="space-y-2">
                 <Label>Material Types *</Label>
@@ -1202,7 +1264,7 @@ export default function SuppliersManagement() {
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-(--radix-popover-trigger-width) p-0">
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
                     <Command>
                       <CommandInput
                         placeholder="Search or create..."
@@ -1239,45 +1301,270 @@ export default function SuppliersManagement() {
                   </PopoverContent>
                 </Popover>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="paymentType">Payment Type *</Label>
-                  <select
-                    id="paymentType"
-                    value={formData.paymentType}
-                    onChange={(e) => handleFormChange("paymentType", e.target.value)}
-                    className="w-full p-2 border rounded-md"
-                    required
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Label>Bank Account Details</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setCurrentBankDetail({
+                        accountType: 'Savings',
+                        isPrimary: false
+                      });
+                      setIsBankDetailsOpen(true);
+                    }}
                   >
-                    <option value="Credit">Credit</option>
-                    <option value="Cash">Cash</option>
-                  </select>
+                    <Plus className="w-4 h-4 mr-2" /> Add Bank Account
+                  </Button>
                 </div>
-                <div className="space-y-2">
-                  <Label>Supply Start Date (Optional)</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant={"outline"}
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !formData.supplyStartDate && "text-muted-foreground",
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formData.supplyStartDate ? format(formData.supplyStartDate, "PPP") : <span>Pick a date</span>}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <CalendarComponent
-                        mode="single"
-                        selected={formData.supplyStartDate}
-                        onSelect={(date) => handleFormChange("supplyStartDate", date)}
-                        initialFocus
+                
+                {formData.bankDetails?.length ? (
+                  <div className="space-y-2">
+                    {formData.bankDetails.map((detail, index) => (
+                      <div key={index} className="space-y-2">
+                        <div className="flex justify-between">
+                          <div className="font-medium">
+                            {detail.bankName || 'Bank Account'} {detail.isPrimary && '(Primary)'}
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setCurrentBankDetail(detail);
+                                setIsBankDetailsOpen(true);
+                              }}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const updatedDetails = [...formData.bankDetails];
+                                updatedDetails.splice(index, 1);
+                                handleFormChange('bankDetails', updatedDetails);
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="mt-2 text-sm text-muted-foreground">
+                          <div>Account: {detail.accountNumber}</div>
+                          <div>Name: {detail.accountHolderName}</div>
+                          {detail.ifscCode && <div>IFSC: {detail.ifscCode}</div>}
+                          {detail.upiId && <div>UPI: {detail.upiId}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground italic">
+                    No bank accounts added
+                  </div>
+                )}
+              </div>
+              
+              {/* Bank Details Dialog */}
+              <Dialog open={isBankDetailsOpen} onOpenChange={setIsBankDetailsOpen}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>
+                      {currentBankDetail?.accountNumber ? 'Edit Bank Account' : 'Add Bank Account'}
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Bank Name</Label>
+                        <Input
+                          value={currentBankDetail?.bankName || ''}
+                          onChange={(e) => setCurrentBankDetail({
+                            ...currentBankDetail,
+                            bankName: e.target.value
+                          })}
+                          placeholder="Bank name (optional)"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Account Number</Label>
+                        <Input
+                          value={currentBankDetail?.accountNumber || ''}
+                          onChange={(e) => setCurrentBankDetail({
+                            ...currentBankDetail,
+                            accountNumber: e.target.value.replace(/\D/g, '')
+                          })}
+                          placeholder="Account number (optional)"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Account Holder Name</Label>
+                        <Input
+                          value={currentBankDetail?.accountHolderName || ''}
+                          onChange={(e) => setCurrentBankDetail({
+                            ...currentBankDetail,
+                            accountHolderName: e.target.value
+                          })}
+                          placeholder="Account holder name (optional)"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Account Type *</Label>
+                        <Select
+                          value={currentBankDetail?.accountType || 'Savings'}
+                          onValueChange={(value) => setCurrentBankDetail({
+                            ...currentBankDetail,
+                            accountType: value as 'Savings' | 'Current' | 'Other'
+                          })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select account type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Savings">Savings</SelectItem>
+                            <SelectItem value="Current">Current</SelectItem>
+                            <SelectItem value="Other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>IFSC Code</Label>
+                        <Input
+                          value={currentBankDetail?.ifscCode || ''}
+                          onChange={(e) => setCurrentBankDetail({
+                            ...currentBankDetail,
+                            ifscCode: e.target.value.toUpperCase()
+                          })}
+                          placeholder="e.g., SBIN0001234"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Branch</Label>
+                        <Input
+                          value={currentBankDetail?.branch || ''}
+                          onChange={(e) => setCurrentBankDetail({
+                            ...currentBankDetail,
+                            branch: e.target.value
+                          })}
+                          placeholder="e.g., Mumbai Main"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label>UPI ID</Label>
+                      <Input
+                        value={currentBankDetail?.upiId || ''}
+                        onChange={(e) => setCurrentBankDetail({
+                          ...currentBankDetail,
+                          upiId: e.target.value.toLowerCase()
+                        })}
+                        placeholder="e.g., name@bank"
                       />
-                    </PopoverContent>
-                  </Popover>
-                </div>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="isPrimary"
+                        checked={currentBankDetail?.isPrimary || false}
+                        onCheckedChange={(checked) => setCurrentBankDetail({
+                          ...currentBankDetail,
+                          isPrimary: Boolean(checked)
+                        })}
+                      />
+                      <Label htmlFor="isPrimary" className="font-normal">
+                        Set as primary account
+                      </Label>
+                    </div>
+                    
+                    <div className="flex justify-end gap-2 pt-4">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsBankDetailsOpen(false)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          // Remove the required validation check
+                          // onClick={() => {
+                          //   if (!currentBankDetail?.bankName || !currentBankDetail.accountNumber || !currentBankDetail.accountHolderName) {
+                          //     toast.error('Please fill in all required fields');
+                          //     return;
+                          //   }
+                          
+                          // Only validate if user has entered some data
+                          if (currentBankDetail?.bankName || currentBankDetail?.accountNumber || currentBankDetail?.accountHolderName) {
+                            if (!currentBankDetail?.bankName || !currentBankDetail.accountNumber || !currentBankDetail.accountHolderName) {
+                              toast.error('Please fill in Bank Name, Account Number, and Account Holder Name if adding bank details');
+                              return;
+                            }
+                          }
+                          
+                          const updatedDetails = [...(formData.bankDetails || [])];
+                          const existingIndex = updatedDetails.findIndex(
+                            d => d.accountNumber === currentBankDetail.accountNumber
+                          );
+                          
+                          if (currentBankDetail.isPrimary) {
+                            updatedDetails.forEach(d => { d.isPrimary = false; });
+                          }
+                          
+                          if (existingIndex >= 0) {
+                            updatedDetails[existingIndex] = { ...currentBankDetail };
+                          } else {
+                            updatedDetails.push({ ...currentBankDetail });
+                          }
+                          
+                          handleFormChange('bankDetails', updatedDetails);
+                          setIsBankDetailsOpen(false);
+                          setCurrentBankDetail(null);
+                        }}
+                      >
+                        Save Bank Account
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+              
+              <div className="space-y-2">
+                <Label>Supply Start Date (Optional)</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !formData.supplyStartDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {formData.supplyStartDate ? format(formData.supplyStartDate, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <CalendarComponent
+                      mode="single"
+                      selected={formData.supplyStartDate}
+                      onSelect={(date) => handleFormChange("supplyStartDate", date)}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
               {editingSupplier && (
                 <div className="space-y-2">
@@ -1342,12 +1629,12 @@ export default function SuppliersManagement() {
             <Filter className="w-4 h-4 text-muted-foreground" />
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
               className="p-2 border rounded-md"
             >
-              <option value="All">All Status</option>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
             </select>
           </div>
           <Badge variant="secondary" className="self-center">
@@ -1383,11 +1670,11 @@ export default function SuppliersManagement() {
           <Building2 className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-medium mb-2">No suppliers found</h3>
           <p className="text-muted-foreground mb-4">
-            {searchTerm || statusFilter !== "All"
+            {searchTerm || statusFilter !== "all"
               ? "Try adjusting your search or filter criteria"
               : "Get started by adding your first supplier"}
           </p>
-          {!searchTerm && statusFilter === "All" && (
+          {!searchTerm && statusFilter === "all" && (
             <Button onClick={() => setIsAddDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
               Add First Supplier
@@ -1443,10 +1730,9 @@ export default function SuppliersManagement() {
                 </div>
               </SheetHeader>
               <Tabs defaultValue="overview" className="mt-6 flex flex-col h-[calc(100%-100px)]">
-                <TabsList className="grid w-full grid-cols-3 mb-4">
+                <TabsList className="grid w-full grid-cols-2 mb-4">
                   <TabsTrigger value="overview">Overview</TabsTrigger>
-                  <TabsTrigger value="transactions">Sites</TabsTrigger>
-                  <TabsTrigger value="materials">Materials</TabsTrigger>
+                  <TabsTrigger value="sites">Sites</TabsTrigger>
                 </TabsList>
                 <TabsContent value="overview" className="flex-1 overflow-y-auto pr-2 space-y-6">
                   {/* Quick Stats */}
@@ -1456,8 +1742,10 @@ export default function SuppliersManagement() {
                         <div className="flex items-center gap-2">
                           <CreditCard className="w-5 h-5 text-blue-600" />
                           <div>
-                            <p className="text-sm font-medium">Payment Type</p>
-                            <p className="text-xs text-muted-foreground">{selectedSupplier.paymentType}</p>
+                            <p className="text-sm font-medium">Bank Details</p>
+                            <p className="text-xs text-muted-foreground">
+                              {selectedSupplier.bankDetails?.length || 0} accounts
+                            </p>
                           </div>
                         </div>
                       </CardContent>
@@ -1478,6 +1766,7 @@ export default function SuppliersManagement() {
                       </CardContent>
                     </Card>
                   </div>
+
                   {/* Company Information */}
                   <Card>
                     <CardHeader className="pb-2">
@@ -1525,21 +1814,42 @@ export default function SuppliersManagement() {
                       </div>
                     </CardContent>
                   </Card>
+
+                  {/* Materials */}
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-lg">Available Materials</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {selectedSupplier.materialTypes.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {selectedSupplier.materialTypes.map((material, index) => (
+                            <Badge key={index} variant="outline" className="flex items-center gap-1">
+                              <Package className="w-3 h-3" />
+                              {material}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No materials specified</p>
+                      )}
+                    </CardContent>
+                  </Card>
                 </TabsContent>
-                <TabsContent value="transactions" className="flex-1 overflow-y-auto pr-2 space-y-4">
-                  <div>
-                    <h4 className="text-lg font-semibold mb-4">Site Assignment & Material Tracking</h4>
-                    <div className="space-y-4">
-                      {/* Add New Project */}
+                <TabsContent value="sites" className="flex-1 overflow-y-auto space-y-6">
+                  <Card className="shadow-md border rounded-xl">
+                    <CardHeader>
+                      <CardTitle className="text-xl font-semibold">🏗️ Site Assignment & Material Tracking</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {/* Add New Site Select */}
                       <div className="space-y-2">
-                        <Label htmlFor="project-select" className="block text-sm font-medium mb-2">
-                          Add New Site
+                        <Label htmlFor="project-select" className="text-sm font-medium text-muted-foreground">
+                          ➕ Add New Site
                         </Label>
                         <Select onValueChange={handleProjectSelect} value="" disabled={isLoadingProjects}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue
-                              placeholder={isLoadingProjects ? "Loading projects..." : "Select a site to add"}
-                            />
+                          <SelectTrigger className="w-full h-10 rounded-md border px-4 text-sm shadow-sm">
+                            <SelectValue placeholder={isLoadingProjects ? "Loading projects..." : "Select a site to add"} />
                           </SelectTrigger>
                           <SelectContent>
                             {projects
@@ -1550,289 +1860,174 @@ export default function SuppliersManagement() {
                                 </SelectItem>
                               ))}
                             {!isLoadingProjects && projects.length === Object.keys(projectMaterials).length && (
-                              <div className="px-2 py-1.5 text-sm text-muted-foreground">No more sites available</div>
+                              <div className="px-3 py-2 text-sm text-muted-foreground italic">No more sites available</div>
                             )}
                           </SelectContent>
                         </Select>
                       </div>
-                      {/* Project Materials List */}
-                      {Object.keys(projectMaterials).length > 0 && (
-                        <div className="space-y-4 mt-6">
-                          <div className="space-y-4">
-                            {Object.entries(projectMaterials).map(([projectId, materials]) => {
-                              const project = projects.find((p) => p._id === projectId)
-                              const currentInput = projectMaterialInputs[projectId] || { materialType: "", quantity: "1", amount: "0" }
-                              if (!project) return null
-                              return (
-                                <Card key={projectId} className="border-l-4 border-l-blue-500">
-                                  <CardContent className="p-4">
-                                    <div className="flex justify-between items-start mb-3">
-                                      <div>
-                                        <h6 className="font-medium text-lg">{project.title}</h6>
-                                        {project.description && (
-                                          <p className="text-sm text-muted-foreground mt-1">{project.description}</p>
-                                        )}
-                                        <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
-                                          <Calendar className="w-4 h-4 flex-shrink-0" />
-                                          <span>
-                                            {format(new Date(project.startDate || new Date()), "MMM d, yyyy")}
-                                            {" - "}
-                                            {project.endDate
-                                              ? format(new Date(project.endDate), "MMM d, yyyy")
-                                              : "Present"}
-                                          </span>
-                                        </div>
-                                      </div>
+
+                      {/* Site Cards */}
+                      {Object.entries(projectMaterials).map(([projectId, materials]) => {
+                        const project = projects.find((p) => p._id === projectId)
+                        const currentInput = projectMaterialInputs[projectId] || { materialType: "", quantity: 1, amount: 0 }
+                        if (!project) return null
+
+                        return (
+                          <Card key={projectId} className="border shadow rounded-xl bg-muted/5">
+                            <CardHeader className="flex flex-row justify-between items-start gap-2">
+                              <div>
+                                <h6 className="text-lg font-semibold">{project.title}</h6>
+                                <p className="text-sm text-muted-foreground">{project.description}</p>
+                                <div className="text-xs mt-1 text-muted-foreground flex items-center gap-1">
+                                  <Calendar className="w-4 h-4" />
+                                  <span>
+                                    {format(new Date(project.startDate || new Date()), "MMM d, yyyy")} -{" "}
+                                    {project.endDate ? format(new Date(project.endDate), "MMM d, yyyy") : "Present"}
+                                  </span>
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-red-500 hover:bg-red-50"
+                                onClick={(e) => removeProject(projectId, e)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                              {/* Add Material Form */}
+                              <div className="space-y-2">
+                                <Label className="text-sm font-medium">Add Material</Label>
+                                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                                  <div className="sm:col-span-5">
+                                    <Select
+                                      value={currentInput.materialType}
+                                      onValueChange={(value) => updateProjectMaterialInput(projectId, "materialType", value)}
+                                    >
+                                      <SelectTrigger className="w-full h-9">
+                                        <SelectValue placeholder="Select material" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {selectedSupplier.materialTypes
+                                          .filter((material) => !materials.some((m) => m.materialType === material))
+                                          .map((material) => (
+                                            <SelectItem key={material} value={material}>
+                                              {material}
+                                            </SelectItem>
+                                          ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <Input
+                                    type="number"
+                                    placeholder="Qty"
+                                    min="1"
+                                    value={currentInput.quantity}
+                                    onChange={(e) => updateProjectMaterialInput(projectId, "quantity", e.target.value)}
+                                    className="sm:col-span-2 text-center h-9"
+                                  />
+                                  <div className="relative sm:col-span-3">
+                                    <IndianRupee className="absolute left-2 top-2.5 w-4 h-4 text-muted-foreground" />
+                                    <Input
+                                      type="number"
+                                      placeholder="Amount"
+                                      min="0"
+                                      step="0.01"
+                                      value={currentInput.amount}
+                                      onChange={(e) => updateProjectMaterialInput(projectId, "amount", e.target.value)}
+                                      className="pl-8 text-center h-9"
+                                    />
+                                  </div>
+                                  <Button
+                                    onClick={() => addMaterialToProject(projectId)}
+                                    disabled={
+                                      !currentInput.materialType ||
+                                      !currentInput.quantity ||
+                                      Number(currentInput.quantity) <= 0 ||
+                                      Number(currentInput.amount) < 0 ||
+                                      isSaving
+                                    }
+                                    className="sm:col-span-2 h-9"
+                                  >
+                                    {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                                  </Button>
+                                </div>
+                              </div>
+
+                              {/* Material List */}
+                              <div className="space-y-2">
+                                {materials.map((material, index) => (
+                                  <div
+                                    key={index}
+                                    className="flex flex-wrap sm:flex-nowrap justify-between items-center bg-white p-3 rounded border"
+                                  >
+                                    <div className="flex items-center gap-2 mb-2 sm:mb-0">
+                                      <Package className="w-4 h-4 text-blue-600" />
+                                      <span className="font-medium text-sm">{material.materialType}</span>
+                                    </div>
+                                    <div className="flex gap-3 items-center">
+                                      <Input
+                                        type="number"
+                                        min="1"
+                                        value={material.quantity}
+                                        onChange={(e) =>
+                                          updateMaterialQuantityAndAmount(
+                                            projectId,
+                                            material.materialType,
+                                            Number(e.target.value),
+                                            material.amount
+                                          )
+                                        }
+                                        className="w-16 text-center h-8"
+                                      />
+                                      <Input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={material.amount}
+                                        onChange={(e) =>
+                                          updateMaterialQuantityAndAmount(
+                                            projectId,
+                                            material.materialType,
+                                            material.quantity,
+                                            Number(e.target.value)
+                                          )
+                                        }
+                                        className="w-20 text-center h-8"
+                                      />
                                       <Button
                                         variant="ghost"
-                                        size="sm"
-                                        onClick={(e) => removeProject(projectId, e)}
-                                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                        disabled={isSaving}
+                                        size="icon"
+                                        className="text-red-600 hover:bg-red-50"
+                                        onClick={() => removeMaterialFromProject(projectId, material.materialType)}
                                       >
-                                        <X className="h-4 w-4" />
+                                        <X className="w-4 h-4" />
                                       </Button>
                                     </div>
-                                    {/* Add Material to Project */}
-                                    <div className="border-t pt-3 mt-3">
-                                      <div className="space-y-3 mb-3">
-                                        <div className="text-sm font-medium text-muted-foreground">Add New Material:</div>
-                                        <div className="grid grid-cols-12 gap-2">
-                                          <div className="col-span-5">
-                                            <Select
-                                              value={currentInput.materialType}
-                                              onValueChange={(value) => updateProjectMaterialInput(projectId, "materialType", value)}
-                                            >
-                                              <SelectTrigger className="w-full">
-                                                <SelectValue placeholder="Select material" />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                {selectedSupplier.materialTypes
-                                                  .filter((material) => !materials.some((m) => m.materialType === material))
-                                                  .map((material) => (
-                                                    <SelectItem key={material} value={material}>
-                                                      {material}
-                                                    </SelectItem>
-                                                  ))}
-                                              </SelectContent>
-                                            </Select>
-                                          </div>
-                                          <div className="col-span-2">
-                                            <Input
-                                              type="number"
-                                              placeholder="Qty"
-                                              min="1"
-                                              value={currentInput.quantity}
-                                              onChange={(e) => updateProjectMaterialInput(projectId, "quantity", e.target.value)}
-                                              className="text-center"
-                                            />
-                                          </div>
-                                          <div className="col-span-3">
-                                            <div className="relative">
-                                              <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                              <Input
-                                                type="number"
-                                                placeholder="Amount"
-                                                min="0"
-                                                step="0.01"
-                                                value={currentInput.amount}
-                                                onChange={(e) => updateProjectMaterialInput(projectId, "amount", e.target.value)}
-                                                className="pl-8 text-center"
-                                              />
-                                            </div>
-                                          </div>
-                                          <div className="col-span-2">
-                                            <Button
-                                              size="sm"
-                                              onClick={() => addMaterialToProject(projectId)}
-                                              disabled={
-                                                !currentInput.materialType ||
-                                                !currentInput.quantity ||
-                                                Number(currentInput.quantity) <= 0 ||
-                                                Number(currentInput.amount) < 0 ||
-                                                isSaving
-                                              }
-                                              className="w-full"
-                                            >
-                                              {isSaving ? (
-                                                <RefreshCw className="w-4 h-4 animate-spin" />
-                                              ) : (
-                                                <Plus className="w-4 h-4" />
-                                              )}
-                                            </Button>
-                                          </div>
-                                        </div>
-                                        {/* Validation Messages */}
-                                        <div className="text-xs text-muted-foreground">
-                                          <div className="flex items-center gap-4">
-                                            <span className={currentInput.materialType ? "text-green-600" : "text-red-600"}>
-                                              • Material: {currentInput.materialType ? "✓" : "Required"}
-                                            </span>
-                                            <span className={Number(currentInput.quantity) > 0 ? "text-green-600" : "text-red-600"}>
-                                              • Quantity: {Number(currentInput.quantity) > 0 ? "✓" : "Must be > 0"}
-                                            </span>
-                                            <span className={Number(currentInput.amount) >= 0 ? "text-green-600" : "text-red-600"}>
-                                              • Amount: {Number(currentInput.amount) >= 0 ? "✓" : "Cannot be negative"}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      </div>
-                                      {/* Materials List for this Project */}
-                                      {materials.length > 0 ? (
-                                        <div className="space-y-2">
-                                          <p className="text-sm font-medium text-muted-foreground">
-                                            Assigned Materials:
-                                          </p>
-                                          {materials.map((material, index) => (
-                                            <div
-                                              key={index}
-                                              className="flex items-center justify-between bg-muted/20 p-3 rounded border"
-                                            >
-                                              <div className="flex items-center gap-2">
-                                                <Package className="w-4 h-4 text-blue-600" />
-                                                <span className="font-medium">{material.materialType}</span>
-                                              </div>
-                                              <div className="flex items-center gap-2">
-                                                <div className="flex items-center gap-1">
-                                                  <span className="text-xs text-muted-foreground">Qty:</span>
-                                                  <Input
-                                                    type="number"
-                                                    min="1"
-                                                    value={material.quantity}
-                                                    onChange={(e) => {
-                                                      const newQuantity = Number.parseInt(e.target.value) || 0
-                                                      if (newQuantity > 0) {
-                                                        updateMaterialQuantityAndAmount(
-                                                          projectId,
-                                                          material.materialType,
-                                                          newQuantity,
-                                                          material.amount
-                                                        )
-                                                      }
-                                                    }}
-                                                    className="w-16 h-8 text-center"
-                                                    disabled={isSaving}
-                                                  />
-                                                </div>
-                                                <div className="flex items-center gap-1">
-                                                  <DollarSign className="w-3 h-3 text-muted-foreground" />
-                                                  <Input
-                                                    type="number"
-                                                    min="0"
-                                                    step="0.01"
-                                                    value={material.amount}
-                                                    onChange={(e) => {
-                                                      const newAmount = Number.parseFloat(e.target.value) || 0
-                                                      if (newAmount >= 0) {
-                                                        updateMaterialQuantityAndAmount(
-                                                          projectId,
-                                                          material.materialType,
-                                                          material.quantity,
-                                                          newAmount
-                                                        )
-                                                      }
-                                                    }}
-                                                    className="w-20 h-8 text-center"
-                                                    disabled={isSaving}
-                                                  />
-                                                </div>
-                                                <Button
-                                                  variant="ghost"
-                                                  size="sm"
-                                                  onClick={() =>
-                                                    removeMaterialFromProject(projectId, material.materialType)
-                                                  }
-                                                  className="text-red-600 hover:text-red-700 h-8 w-8 p-0"
-                                                  disabled={isSaving}
-                                                >
-                                                  <X className="h-3 w-3" />
-                                                </Button>
-                                              </div>
-                                            </div>
-                                          ))}
-                                          <div className="text-xs text-muted-foreground mt-2 p-2 bg-blue-50 rounded">
-                                            <strong>Total for this project:</strong> {materials.length} materials, 
-                                            Total Amount: ${materials.reduce((sum, m) => sum + m.amount, 0).toFixed(2)}
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        <p className="text-sm text-muted-foreground italic">
-                                          No materials assigned yet. Use the form above to add materials.
-                                        </p>
-                                      )}
-                                    </div>
-                                  </CardContent>
-                                </Card>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )}
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Totals */}
+                              <div className="text-sm font-medium text-blue-800 bg-blue-50 p-3 rounded border mt-4">
+                                Total: {materials.length} materials – ₹{materials.reduce((sum, m) => sum + m.amount, 0).toFixed(2)}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )
+                      })}
+
+                      {/* Empty State */}
                       {Object.keys(projectMaterials).length === 0 && (
-                        <div className="text-center py-8 border rounded-lg bg-muted/10">
-                          <Building2 className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-                          <h4 className="font-medium mb-1">No Sites Assigned</h4>
-                          <p className="text-sm text-muted-foreground">
-                            Select a site above to start assigning materials, quantities, and amounts.
-                          </p>
+                        <div className="text-center py-10 rounded-lg border border-dashed bg-muted/20 space-y-2">
+                          <Building2 className="w-10 h-10 mx-auto text-muted-foreground mb-1" />
+                          <h4 className="text-lg font-semibold">No Sites Assigned</h4>
+                          <p className="text-sm text-muted-foreground">Select a site to begin assigning materials.</p>
                         </div>
                       )}
-                    </div>
-                  </div>
-                </TabsContent>
-                <TabsContent value="materials" className="flex-1 overflow-y-auto pr-2 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <h4 className="text-lg font-semibold">Available Materials</h4>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="bg-transparent"
-                      onClick={() => {
-                        openEditDialog(selectedSupplier)
-                        setIsDetailSheetOpen(false)
-                      }}
-                    >
-                      <Edit className="w-4 h-4 mr-2" />
-                      Edit Materials
-                    </Button>
-                  </div>
-                  {selectedSupplier.materialTypes.length > 0 ? (
-                    <div className="space-y-3">
-                      {selectedSupplier.materialTypes.map((material, index) => (
-                        <Card key={index}>
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 rounded-full bg-blue-100">
-                                <Package className="w-4 h-4 text-blue-600" />
-                              </div>
-                              <div>
-                                <h4 className="font-medium">{material}</h4>
-                                <p className="text-sm text-muted-foreground">Available for supply</p>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 border rounded-lg bg-muted/10">
-                      <Package className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-                      <h4 className="font-medium mb-1">No Materials Listed</h4>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        This supplier doesn't have any materials specified yet.
-                      </p>
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          openEditDialog(selectedSupplier)
-                          setIsDetailSheetOpen(false)
-                        }}
-                      >
-                        <Edit className="w-4 h-4 mr-2" />
-                        Add Materials
-                      </Button>
-                    </div>
-                  )}
+                    </CardContent>
+                  </Card>
                 </TabsContent>
               </Tabs>
             </div>
@@ -1842,3 +2037,5 @@ export default function SuppliersManagement() {
     </div>
   )
 }
+
+export default SuppliersManagement

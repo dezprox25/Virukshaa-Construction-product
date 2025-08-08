@@ -11,19 +11,28 @@ export interface ISupplier extends Document {
   companyName: string;
   contactPerson: string;
   email: string;
-  username: string;
-  password: string;
+  // username: string;
+  // password: string;
   phone: string;
   materialTypes: string[];
   projectMaterials?: IProjectMaterial[];
   supplyStartDate?: Date;
-  paymentType: 'Cash' | 'Credit';
   address: string;
   status: 'Active' | 'Inactive';
   totalPaid?: number;
   dueAmount?: number;
   lastPaymentDate?: Date;
   avatar?: string;
+  bankDetails?: {
+    accountNumber?: string;
+    accountHolderName?: string;
+    bankName?: string;
+    branch?: string;
+    ifscCode?: string;
+    upiId?: string;
+    accountType?: 'Savings' | 'Current' | 'Other';
+    isPrimary?: boolean;
+  }[];
 }
 
 const projectMaterialSchema = new Schema<IProjectMaterial>({
@@ -52,18 +61,27 @@ const supplierSchema = new Schema<ISupplier>({
   companyName: { type: String, required: true },
   contactPerson: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  username: { type: String, required: true, unique: true },
-  password: { type: String, required: true, select: false },
+  // username: { type: String, required: true, unique: true },
+  // password: { type: String, required: true, select: false },
   phone: { type: String, required: true },
   materialTypes: [{ type: String, required: true }],
   projectMaterials: [projectMaterialSchema],
   supplyStartDate: { type: Date },
-  paymentType: {
-    type: String,
-    enum: ['Cash', 'Credit'],
-    required: true
-  },
   address: { type: String, required: true },
+  bankDetails: [{
+    accountNumber: { type: String, trim: true },
+    accountHolderName: { type: String, trim: true },
+    bankName: { type: String, trim: true },
+    branch: { type: String, trim: true },
+    ifscCode: { type: String, trim: true, uppercase: true },
+    upiId: { type: String, trim: true, lowercase: true },
+    accountType: {
+      type: String,
+      enum: ['Savings', 'Current', 'Other'],
+      default: 'Savings'
+    },
+    isPrimary: { type: Boolean, default: false }
+  }],
   status: {
     type: String,
     enum: ['Active', 'Inactive'],
@@ -81,7 +99,7 @@ const supplierSchema = new Schema<ISupplier>({
 supplierSchema.index({
   companyName: 'text',
   email: 'text',
-  username: 'text',
+  // username: 'text',  
   contactPerson: 'text'
 });
 

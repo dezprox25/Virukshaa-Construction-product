@@ -498,13 +498,6 @@ export default function AdminDashboard() {
       action: () => setActiveSection("employees"),
     },
     {
-      title: "Process Payroll",
-      description: "Manage salary payments",
-      icon: DollarSign,
-      color: "bg-green-500",
-      action: () => setActiveSection("payroll"),
-    },
-    {
       title: "Add Client",
       description: "Register new client",
       icon: UserCheck,
@@ -512,12 +505,27 @@ export default function AdminDashboard() {
       action: () => setActiveSection("clients"),
     },
     {
-      title: "Manage Materials",
-      description: "Update inventory",
+      title: "Add Supplier",
+      description: "Register a new supplier",
       icon: Truck,
-      color: "bg-orange-500",
-      action: () => setActiveSection("materials"),
+      color: "bg-green-500",
+      action: () => setActiveSection("suppliers"),
     },
+    {
+        title:"Add supervisor",
+        description:"Register a new supervisor",
+        icon:UserCheck,
+        color:"bg-purple-500",
+        action:()=>setActiveSection("supervisors"),
+    },
+    {
+      title: "Process Payroll",
+      description: "Manage salary payments",
+      icon: DollarSign,
+      color: "bg-green-500",
+      action: () => setActiveSection("payroll"),
+    },
+ 
     {
       title: "View Reports",
       description: "Generate reports",
@@ -525,13 +533,7 @@ export default function AdminDashboard() {
       color: "bg-red-500",
       action: () => setActiveSection("reports"),
     },
-    {
-      title: "Send Message",
-      description: "Communicate with team",
-      icon: Mail,
-      color: "bg-indigo-500",
-      action: () => setActiveSection("message"),
-    },
+ 
   ]
 
   const stats = [

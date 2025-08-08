@@ -9,7 +9,7 @@ export interface ISupervisor extends Document {
   phone: string;
   salary: number;
   address: string;
-  status: 'Active' | 'On Leave' | 'Inactive';
+  status: 'Active' | 'Inactive';
   totalPaid?: number;
   dueAmount?: number;
   lastPaymentDate?: Date;
@@ -27,7 +27,7 @@ const supervisorSchema = new Schema<ISupervisor>({
   address: { type: String, default: '' },
   status: { 
     type: String, 
-    enum: ['Active', 'On Leave', 'Inactive'],
+    enum: ['Active', 'Inactive'],
     default: 'Active' 
   },
   totalPaid: { type: Number, default: 0 },

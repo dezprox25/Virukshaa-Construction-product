@@ -61,7 +61,7 @@ interface Supervisor {
   phone: string
   salary: number // This is now daily salary
   address: string
-  status: "Active" | "On Leave" | "Inactive"
+  status: "Active"  | "Inactive"
   avatar?: string
   createdAt: string
   updatedAt: string
@@ -1188,8 +1188,6 @@ export default function SupervisorsManagement() {
     switch (status) {
       case "Active":
         return "bg-green-100 text-green-800"
-      case "On Leave":
-        return "bg-yellow-100 text-yellow-800"
       case "Inactive":
         return "bg-red-100 text-red-800"
       default:
@@ -1979,7 +1977,7 @@ export default function SupervisorsManagement() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Active">Active</SelectItem>
-                      <SelectItem value="On Leave">On Leave</SelectItem>
+                      {/* <SelectItem value="On Leave">On Leave</SelectItem> */}
                       <SelectItem value="Inactive">Inactive</SelectItem>
                     </SelectContent>
                   </Select>
@@ -2037,7 +2035,7 @@ export default function SupervisorsManagement() {
               <SelectContent>
                 <SelectItem value="All">All Status</SelectItem>
                 <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="On Leave">On Leave</SelectItem>
+                {/* <SelectItem value="On Leave">On Leave</SelectItem> */}
                 <SelectItem value="Inactive">Inactive</SelectItem>
               </SelectContent>
             </Select>
