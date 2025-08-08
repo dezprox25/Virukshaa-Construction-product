@@ -5,14 +5,13 @@ export interface IProjectMaterial {
   materialType: string;
   quantity: number;
   amount: number;
+  date: Date;
 }
 
 export interface ISupplier extends Document {
   companyName: string;
   contactPerson: string;
   email: string;
-  // username: string;
-  // password: string;
   phone: string;
   materialTypes: string[];
   projectMaterials?: IProjectMaterial[];
@@ -54,6 +53,11 @@ const projectMaterialSchema = new Schema<IProjectMaterial>({
     type: Number,
     required: true,
     min: 0
+  },
+  date: {
+    type: Date,
+    required: true,
+    default: Date.now
   }
 });
 
@@ -61,8 +65,6 @@ const supplierSchema = new Schema<ISupplier>({
   companyName: { type: String, required: true },
   contactPerson: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  // username: { type: String, required: true, unique: true },
-  // password: { type: String, required: true, select: false },
   phone: { type: String, required: true },
   materialTypes: [{ type: String, required: true }],
   projectMaterials: [projectMaterialSchema],
@@ -99,7 +101,6 @@ const supplierSchema = new Schema<ISupplier>({
 supplierSchema.index({
   companyName: 'text',
   email: 'text',
-  // username: 'text',  
   contactPerson: 'text'
 });
 

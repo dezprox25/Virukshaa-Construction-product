@@ -78,7 +78,9 @@ export async function POST(request: Request) {
         validatedProjectMaterials.push({
           projectId: pm.projectId,
           materialType: pm.materialType,
-          quantity: pm.quantity
+          quantity: pm.quantity,
+          amount: typeof pm.amount === 'number' ? pm.amount : 0,
+          date: pm.date ? new Date(pm.date) : new Date()
         });
       }
     }

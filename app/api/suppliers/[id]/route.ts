@@ -52,7 +52,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const updateData: Partial<ISupplier> = {};
     const allowedFields: (keyof ISupplier)[] = [
       'companyName', 'contactPerson', 'email', 'phone', 
-      'materialTypes', 'projectMaterials', 'paymentType', 'address', 
+      'materialTypes', 'projectMaterials', 'address', 
       'supplyStartDate', 'avatar', 'totalPaid', 'dueAmount', 'lastPaymentDate', 'status'
     ];
 
@@ -60,17 +60,26 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     if (body.projectMaterials && Array.isArray(body.projectMaterials)) {
       // Validate project materials structure
       const isValidProjectMaterials = body.projectMaterials.every((pm: any) => 
-        pm.projectId && pm.materialType && typeof pm.quantity === 'number' && pm.quantity > 0
+        pm.projectId && 
+        pm.materialType && 
+        typeof pm.quantity === 'number' && 
+        pm.quantity > 0 &&
+        typeof pm.amount === 'number' &&
+        pm.amount >= 0
       );
       
       if (!isValidProjectMaterials) {
         return NextResponse.json(
-          { error: 'Invalid project materials format. Each item must have projectId, materialType, and quantity > 0' },
+          { error: 'Invalid project materials format. Each item must have projectId, materialType, quantity > 0, and amount >= 0' },
           { status: 400 }
         );
       }
       
-      updateData.projectMaterials = body.projectMaterials;
+      // Add date to each project material if not provided
+      updateData.projectMaterials = body.projectMaterials.map((pm: any) => ({
+        ...pm,
+        date: pm.date ? new Date(pm.date) : new Date()
+      }));
     } else if (body.projectMaterials === null || body.projectMaterials === undefined) {
       // If projectMaterials is explicitly set to null/undefined, clear it
       updateData.projectMaterials = [];

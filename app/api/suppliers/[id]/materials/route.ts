@@ -53,7 +53,7 @@ export async function POST(
 ) {
   try {
     const { id } = params;
-    const { projectId, materialType, quantity, amount } = await request.json();
+    const { projectId, materialType, quantity, amount, date } = await request.json();
     
     if (!Types.ObjectId.isValid(id)) {
       return NextResponse.json(
@@ -95,7 +95,7 @@ export async function POST(
     let updatedSupplier;
     
     if (existingMaterial) {
-      // Update existing material quantity and amount
+      // Update existing material quantity, amount, and date
       updatedSupplier = await Supplier.findOneAndUpdate(
         { 
           _id: id,
@@ -107,7 +107,8 @@ export async function POST(
             'projectMaterials.$.quantity': quantity
           },
           $set: {
-            'projectMaterials.$.amount': amount
+            'projectMaterials.$.amount': amount,
+            'projectMaterials.$.date': date ? new Date(date) : new Date()
           }
         },
         { new: true }
@@ -118,7 +119,8 @@ export async function POST(
         projectId,
         materialType,
         quantity: Number(quantity),
-        amount: Number(amount)
+        amount: Number(amount),
+        date: date ? new Date(date) : new Date()
       };
       
       updatedSupplier = await Supplier.findByIdAndUpdate(

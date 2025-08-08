@@ -37,17 +37,18 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "sonner"
-import { Plus, Edit, Trash2, Phone, Mail, MapPin, Search, Filter, CreditCard, Grid3X3, List, RefreshCw, Building2, CheckCircle, XCircle, Package, UserCheck, Calendar, IndianRupee, Edit3, Eye, MessageCircle } from 'lucide-react'
+import { Plus, Edit, Trash2, Phone, Mail, MapPin, Search, Filter, CreditCard, Grid3X3, List, RefreshCw, Building2, CheckCircle, XCircle, Package, UserCheck, Calendar, IndianRupee, Edit3, Eye, MessageCircle, Pencil } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { X } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 
 interface ProjectMaterial {
-  projectId: string
-  materialType: string
-  quantity: number
-  amount: number
+  _id?: string;
+  projectId: string;
+  materialType: string;
+  quantity: number;
+  amount: number;
 }
 
 interface BankDetail {
@@ -92,9 +93,12 @@ interface Transaction {
 }
 
 interface ProjectMaterialLocal {
-  materialType: string
-  quantity: number
-  amount: number
+  _id?: string;
+  projectId: string;
+  materialType: string;
+  quantity: number;
+  amount: number;
+  date?: string; // Add this line
 }
 
 const initialFormData = {
@@ -192,7 +196,9 @@ const SuppliersManagement: React.FC = () => {
             projectMaterialsObj[pm.projectId].push({
               materialType: pm.materialType,
               quantity: Number(pm.quantity) || 0,
-              amount: Number(pm.amount) || 0
+              amount: Number(pm.amount) || 0,
+              projectId: pm.projectId,
+              date: pm.date   
             })
           })
         }
@@ -354,7 +360,9 @@ const SuppliersManagement: React.FC = () => {
         [projectId]: {
           materialType: "",
           quantity: 1,
-          amount: 0
+          amount: 0,
+          date: new Date().toISOString(),
+          projectId,
         }
       }));
     }
@@ -372,199 +380,116 @@ const SuppliersManagement: React.FC = () => {
   }
 
   const addMaterialToProject = async (projectId: string) => {
-    const input = projectMaterialInputs[projectId];
-    if (!input) {
-      toast.error("No input data found for this project");
+    const currentInput = projectMaterialInputs[projectId] || {};
+    const { materialType, quantity, amount } = currentInput;
+    
+    if (!materialType || !quantity || Number(quantity) <= 0 || Number(amount) < 0) {
+      toast.error("Please fill all fields with valid values");
       return;
     }
-    const materialType = input.materialType;
-    const quantity = Number(input.quantity);
-    const amount = Number(input.amount);
-
-    // Enhanced validation with detailed error messages
-    if (!materialType) {
-      toast.error("Please select a material type");
-      return;
-    }
-    if (!quantity || quantity <= 0) {
-      toast.error("Please enter a valid quantity (greater than 0)");
-      return;
-    }
-    if (amount < 0) {
-      toast.error("Amount cannot be negative");
-      return;
-    }
+    
     if (!selectedSupplier?._id) {
       toast.error("No supplier selected");
       return;
     }
 
-    // Check if material already exists for this project
-    const existingMaterials = projectMaterials[projectId] || [];
-    if (existingMaterials.some(m => m.materialType === materialType)) {
-      toast.error("This material is already added to this project");
-      return;
-    }
-
-    console.log("Adding material to project:", {
+    // Create a new material entry with a unique ID and current timestamp
+    const newMaterial = {
+      _id: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, // More unique temporary ID
       projectId,
       materialType,
-      quantity,
-      amount,
-      supplierId: selectedSupplier._id
-    });
+      quantity: Number(quantity),
+      amount: Number(amount),
+      date: new Date().toISOString(),
+      isNew: true // Mark as new to distinguish from existing entries
 
+    };
+  
+    console.log("Adding new material entry:", newMaterial);
+    
+    // Create a copy of the material without the isNew flag for the server
+    const { isNew, ...materialForServer } = newMaterial;
+  
     setIsSaving(true);
     try {
+      // Update local state immediately for better UX
+      setProjectMaterials(prev => ({
+        ...prev,
+        [projectId]: [...(prev[projectId] || []), newMaterial]
+      }));
+  
+      // Update the selected supplier's project materials
+      if (selectedSupplier) {
+        const currentMaterials = Array.isArray(selectedSupplier.projectMaterials) 
+          ? selectedSupplier.projectMaterials 
+          : [];
+          
+        setSelectedSupplier({
+          ...selectedSupplier,
+          projectMaterials: [...currentMaterials, newMaterial]
+        });
+      }
+
+      // Send to server
       const response = await fetch(`/api/suppliers/${selectedSupplier._id}/materials`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId,
-          materialType,
-          quantity,
-          amount
-        })
+        body: JSON.stringify(materialForServer)
       });
-
+  
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to save material');
       }
 
       const result = await response.json();
-      console.log("API Response:", result);
-
-      // Update local state immediately with the new material
-      const newMaterial = {
-        materialType,
-        quantity,
-        amount
-      };
-
+      
+      // Update the material with the server-generated ID
       setProjectMaterials(prev => ({
         ...prev,
-        [projectId]: [...(prev[projectId] || []), newMaterial]
+        [projectId]: (prev[projectId] || []).map(m => 
+          m._id === newMaterial._id ? { ...m, _id: result._id } : m
+        )
       }));
 
-      // Update the selected supplier's project materials
+      // Update the selected supplier's project materials with the server ID
       if (selectedSupplier) {
-        const updatedProjectMaterials = [...(selectedSupplier.projectMaterials || [])];
-        updatedProjectMaterials.push({
-          projectId,
-          materialType,
-          quantity,
-          amount
-        });
-
+        const updatedProjectMaterials = (selectedSupplier.projectMaterials || []).map(m => 
+          m._id === newMaterial._id ? { ...m, _id: result._id } : m
+        );
+        
         setSelectedSupplier({
           ...selectedSupplier,
           projectMaterials: updatedProjectMaterials
         });
       }
-
+  
       // Reset the input for this project
       setProjectMaterialInputs(prev => ({
         ...prev,
         [projectId]: {
           materialType: "",
           quantity: 1,
-          amount: 0
+          amount: 0,
+          projectId: "",
+          date: ""
         }
       }));
-
-      toast.success(`Added ${materialType} to project (Qty: ${quantity}, Amount: $${amount})`);
+  
+      toast.success(`Added new ${materialType} entry (Qty: ${quantity}, Amount: ₹${amount})`);
     } catch (error) {
-      console.error('Error saving material:', error);
-      toast.error(`Failed to save material: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  const updateMaterialQuantityAndAmount = async (projectId: string, materialType: string, newQuantity: number, newAmount: number) => {
-    if (newQuantity <= 0) {
-      toast.error("Quantity must be greater than 0");
-      return;
-    }
-    if (newAmount < 0) {
-      toast.error("Amount cannot be negative");
-      return;
-    }
-    if (!selectedSupplier?._id) {
-      toast.error("No supplier selected");
-      return;
-    }
-
-    console.log("Updating material:", {
-      projectId,
-      materialType,
-      newQuantity,
-      newAmount,
-      supplierId: selectedSupplier._id
-    });
-
-    setIsSaving(true);
-    try {
-      // First remove the existing material
-      await fetch(`/api/suppliers/${selectedSupplier._id}/materials`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId,
-          materialType
-        })
-      });
-
-      // Then add it back with the new quantity and amount
-      const response = await fetch(`/api/suppliers/${selectedSupplier._id}/materials`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId,
-          materialType,
-          quantity: newQuantity,
-          amount: newAmount
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update material');
-      }
-
-      // Update local state immediately
+      console.error('Error adding material:', error);
+      toast.error(`Failed to add material: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Rollback local state on error
       setProjectMaterials(prev => ({
         ...prev,
-        [projectId]: (prev[projectId] || []).map(material =>
-          material.materialType === materialType
-            ? { ...material, quantity: newQuantity, amount: newAmount }
-            : material
-        )
+        [projectId]: (prev[projectId] || []).filter(m => m._id !== newMaterial._id)
       }));
-
-      // Update the selected supplier's project materials
-      if (selectedSupplier) {
-        const updatedProjectMaterials = (selectedSupplier.projectMaterials || []).map(pm =>
-          pm.projectId === projectId && pm.materialType === materialType
-            ? { ...pm, quantity: newQuantity, amount: newAmount }
-            : pm
-        );
-
-        setSelectedSupplier({
-          ...selectedSupplier,
-          projectMaterials: updatedProjectMaterials
-        });
-      }
-
-      toast.success(`Updated ${materialType} (Qty: ${newQuantity}, Amount: $${newAmount})`);
-    } catch (error) {
-      console.error('Error updating material:', error);
-      toast.error(`Failed to update material: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSaving(false);
     }
-  }
+  };
 
   const removeMaterialFromProject = async (projectId: string, materialType: string) => {
     if (!selectedSupplier?._id) {
@@ -709,12 +634,14 @@ const SuppliersManagement: React.FC = () => {
         setProjectMaterials(groupedMaterials);
 
         // Initialize input states for existing projects
-        const inputStates: Record<string, { materialType: string; quantity: number; amount: number }> = {};
+        const inputStates: Record<string, { materialType: string; quantity: number; amount: number; projectId: string; date: string }> = {};
         Object.keys(groupedMaterials).forEach(projectId => {
           inputStates[projectId] = {
             materialType: "",
             quantity: 1,
-            amount: 0
+            amount: 0,
+            projectId,
+            date: new Date().toISOString(),
           };
         });
         setProjectMaterialInputs(inputStates);
@@ -1499,20 +1426,14 @@ const SuppliersManagement: React.FC = () => {
                       <Button
                         type="button"
                         onClick={() => {
-                          // Remove the required validation check
-                          // onClick={() => {
-                          //   if (!currentBankDetail?.bankName || !currentBankDetail.accountNumber || !currentBankDetail.accountHolderName) {
-                          //     toast.error('Please fill in all required fields');
-                          //     return;
-                          //   }
-                          
-                          // Only validate if user has entered some data
                           if (currentBankDetail?.bankName || currentBankDetail?.accountNumber || currentBankDetail?.accountHolderName) {
                             if (!currentBankDetail?.bankName || !currentBankDetail.accountNumber || !currentBankDetail.accountHolderName) {
                               toast.error('Please fill in Bank Name, Account Number, and Account Holder Name if adding bank details');
                               return;
                             }
                           }
+                          
+                          if (!currentBankDetail) return; // Guard clause in case currentBankDetail is null
                           
                           const updatedDetails = [...(formData.bankDetails || [])];
                           const existingIndex = updatedDetails.findIndex(
@@ -1909,13 +1830,11 @@ const SuppliersManagement: React.FC = () => {
                                         <SelectValue placeholder="Select material" />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        {selectedSupplier.materialTypes
-                                          .filter((material) => !materials.some((m) => m.materialType === material))
-                                          .map((material) => (
-                                            <SelectItem key={material} value={material}>
-                                              {material}
-                                            </SelectItem>
-                                          ))}
+                                        {selectedSupplier.materialTypes.map((material) => (
+                                          <SelectItem key={`${material}-${Date.now()}`} value={material}>
+                                            {material}
+                                          </SelectItem>
+                                        ))}
                                       </SelectContent>
                                     </Select>
                                   </div>
@@ -1957,52 +1876,40 @@ const SuppliersManagement: React.FC = () => {
 
                               {/* Material List */}
                               <div className="space-y-2">
-                                {materials.map((material, index) => (
+                                {materials.map((material) => (
                                   <div
-                                    key={index}
+                                    key={material._id}
                                     className="flex flex-wrap sm:flex-nowrap justify-between items-center bg-white p-3 rounded border"
                                   >
                                     <div className="flex items-center gap-2 mb-2 sm:mb-0">
                                       <Package className="w-4 h-4 text-blue-600" />
-                                      <span className="font-medium text-sm">{material.materialType}</span>
+                                      <div>
+                                        <div className="font-medium text-sm">{material.materialType}</div>
+                                        <div className="text-xs text-gray-500">
+                                          {new Date(material.date || new Date()).toLocaleString('en-IN', {
+                                            day: '2-digit',
+                                            month: 'short',
+                                            year: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                            hour12: true
+                                          })}
+                                        </div>
+                                      </div>
                                     </div>
-                                    <div className="flex gap-3 items-center">
-                                      <Input
-                                        type="number"
-                                        min="1"
-                                        value={material.quantity}
-                                        onChange={(e) =>
-                                          updateMaterialQuantityAndAmount(
-                                            projectId,
-                                            material.materialType,
-                                            Number(e.target.value),
-                                            material.amount
-                                          )
-                                        }
-                                        className="w-16 text-center h-8"
-                                      />
-                                      <Input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={material.amount}
-                                        onChange={(e) =>
-                                          updateMaterialQuantityAndAmount(
-                                            projectId,
-                                            material.materialType,
-                                            material.quantity,
-                                            Number(e.target.value)
-                                          )
-                                        }
-                                        className="w-20 text-center h-8"
-                                      />
+                                    <div className="flex items-center gap-2">
+                                      <div className="text-sm text-gray-600">
+                                        <span className="font-medium">Qty:</span> {material.quantity}
+                                        <span className="mx-2">|</span>
+                                        <span className="font-medium">Amount:</span> ₹{material.amount.toFixed(2)}
+                                      </div>
                                       <Button
                                         variant="ghost"
                                         size="icon"
                                         className="text-red-600 hover:bg-red-50"
-                                        onClick={() => removeMaterialFromProject(projectId, material.materialType)}
+                                        onClick={() => material._id && removeMaterialFromProject(projectId, material._id)}
                                       >
-                                        <X className="w-4 h-4" />
+                                        <Trash2 className="w-4 h-4" />
                                       </Button>
                                     </div>
                                   </div>
