@@ -37,12 +37,12 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "sonner"
-import { Plus, Edit, Trash2, Phone, Mail, Calendar, Search, Filter, Users, IndianRupee, Grid3X3, List, CheckCircle, XCircle, Clock, RefreshCw, MapPin, ClipboardList, Eye, UserPlus, CalendarPlus, FileText, Folder, Hash, Calculator, HelpCircle } from 'lucide-react'
+import { Plus, Edit, Trash2, Phone, Mail, Calendar, Search, Filter, Users, IndianRupee, Grid3X3, List, CheckCircle, XCircle, Clock, RefreshCw, MapPin, ClipboardList, Eye, UserPlus, CalendarPlus, FileText, Folder, Hash, Calculator, HelpCircle, Briefcase } from 'lucide-react'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 // Define attendance status type
-type AttendanceStatus = "Present" | "Absent" | null
+type AttendanceStatus = "Present" | "Absent" | "On Duty" | null
 
 // Define Project interface
 interface IProject {
@@ -141,9 +141,10 @@ const initialTaskFormData: TaskFormData = {
   file: undefined,
 }
 
-// Updated attendance options to include "No Status"
+// Attendance status options
 const attendanceOptions = [
   { value: "Present" as const, label: "Present", icon: CheckCircle, color: "bg-green-100 text-green-800" },
+  { value: "On Duty" as const, label: "On Duty", icon: Clock, color: "bg-blue-100 text-blue-800" },
   { value: "Absent" as const, label: "Absent", icon: XCircle, color: "bg-red-100 text-red-800" },
 ]
 
@@ -161,6 +162,7 @@ function CombinedAttendanceView({
   const [loading, setLoading] = useState(true)
   const [selectedMonth, setSelectedMonth] = useState(initialMonth || new Date().toISOString().slice(0, 7))
   const [presentDays, setPresentDays] = useState(0)
+  const [onDutyDays, setOnDutyDays] = useState(0)
   const [paidLeaveDays, setPaidLeaveDays] = useState(0)
   const [unpaidLeaveDays, setUnpaidLeaveDays] = useState(0)
   const [pendingLeaveDays, setPendingLeaveDays] = useState(0)
@@ -194,13 +196,14 @@ function CombinedAttendanceView({
         let unpaidLeaveCount = 0
         let pendingLeaveCount = 0
         let totalWorkingDays = 0
+        let onDutyCount = 0
 
         const [currentYear, currentMonth] = selectedMonth.split('-').map(Number)
         const daysInMonth = new Date(currentYear, currentMonth, 0).getDate()
 
         // Process attendance records
         if (Array.isArray(attendanceData)) {
-          // First pass: Process all attendance records to count present/absent days
+          // First pass: Process all attendance records to count present/on duty/absent days
           attendanceData.forEach((record) => {
             if (!record.date) return;
             
@@ -213,10 +216,13 @@ function CombinedAttendanceView({
             // Store the status in the map
             map[dateKey] = record.status || 'Absent';
             
-            // Count present/absent days
+            // Count present/on duty/absent days
             if (record.status === "Present") {
               presentCount++;
               console.log("✅ Counted as Present");
+            } else if (record.status === "On Duty") {
+              onDutyCount++;
+              console.log("🔵 Counted as On Duty (Paid)");
             } else if (record.status === "Absent") {
               if (record.isLeaveApproved === true) {
                 // FIXED: Check for both isPaid and isLeavePaid for backward compatibility
@@ -259,13 +265,14 @@ function CombinedAttendanceView({
         }
 
         setPresentDays(presentCount)
+        setOnDutyDays(onDutyCount)
         setPaidLeaveDays(paidLeaveCount)
         setUnpaidLeaveDays(unpaidLeaveCount)
         setPendingLeaveDays(pendingLeaveCount)
         setTotalMonthDays(totalWorkingDays)
 
-        // Calculate attendance rate based on (present days + paid leave) / total working days
-        const effectivePresentDays = presentCount + paidLeaveCount
+        // Calculate attendance rate based on (present days + on duty days + paid leave) / total working days
+        const effectivePresentDays = presentCount + onDutyCount + paidLeaveCount
         setAttendanceRate(totalWorkingDays > 0 ? Math.round((effectivePresentDays / totalWorkingDays) * 100) : 0)
 
         setAttendanceMap(map)
@@ -485,6 +492,10 @@ function CombinedAttendanceView({
                       <span className="font-medium">{presentDays} days</span>
                     </div>
                     <div className="flex justify-between">
+                      <span className="text-muted-foreground">On Duty (Paid):</span>
+                      <span className="font-medium text-blue-600">+{onDutyDays} days</span>
+                    </div>
+                    <div className="flex justify-between">
                       <span className="text-muted-foreground">Paid Leave:</span>
                       <span className="font-medium text-green-600">+{paidLeaveDays} days</span>
                     </div>
@@ -495,7 +506,7 @@ function CombinedAttendanceView({
                     {pendingLeaveDays > 0 && (
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Pending Approval:</span>
-                        <span className="font-medium text-blue-600">{pendingLeaveDays} days</span>
+                        <span className="font-medium text-purple-600">{pendingLeaveDays} days</span>
                       </div>
                     )}
                     <div className="flex justify-between">
@@ -517,7 +528,7 @@ function CombinedAttendanceView({
                   <div className="text-xs text-muted-foreground text-center pt-2 border-t">
                     <div>Calculation: </div>
                     <div>
-                      ₹{dailySalary} × ({presentDays} present + {paidLeaveDays} paid leave) = ₹
+                      ₹{dailySalary} × ({presentDays} present + {onDutyDays} on duty + {paidLeaveDays} paid leave) = ₹
                       {totalSalary.toLocaleString()}
                     </div>
                     {unpaidLeaveDays > 0 && (
@@ -563,10 +574,13 @@ function CombinedAttendanceView({
                       } else if (day.status === "Present") {
                         cellClass += " bg-green-100 text-green-800 font-medium border-green-200"
                         tooltipContent = "Present"
+                      } else if (day.status === "On Duty") {
+                        cellClass += " bg-blue-100 text-blue-800 font-medium border-blue-200"
+                        tooltipContent = "On Duty (Paid)"
                       } else if (day.status === "Absent" && day.leaveInfo) {
                         // Handle leave status with appropriate colors
                         if (day.leaveInfo.status === "paid") {
-                          cellClass += " bg-blue-100 text-blue-800 font-medium border-blue-200"
+                          cellClass += " bg-purple-100 text-purple-800 font-medium border-purple-200"
                           tooltipContent = "Paid Leave"
                         } else if (day.leaveInfo.status === "unpaid") {
                           cellClass += " bg-amber-100 text-amber-800 font-medium border-amber-200"
@@ -599,8 +613,16 @@ function CombinedAttendanceView({
                       return day.isCurrentMonth && tooltipContent ? (
                         <Tooltip key={index}>
                           <TooltipTrigger asChild>{cellContent}</TooltipTrigger>
-                          <TooltipContent>
-                            <p>{tooltipContent}</p>
+                          <TooltipContent className="max-w-xs p-3 space-y-1">
+                            <div className="font-medium">
+                              {tooltipContent.split('\n')[0]}
+                            </div>
+                            {day.leaveInfo?.reason && (
+                              <div className="text-sm text-muted-foreground pt-1 border-t mt-1">
+                                <p className="font-medium">Reason:</p>
+                                <p className="whitespace-pre-wrap">{day.leaveInfo.reason}</p>
+                              </div>
+                            )}
                           </TooltipContent>
                         </Tooltip>
                       ) : (
@@ -1211,8 +1233,9 @@ export default function SupervisorsManagement() {
   // Calculate statistics
   const totalSupervisors = supervisors.length
   const presentToday = supervisors.filter((sup) => sup.attendance?.status === "Present").length
+  const onDutyToday = supervisors.filter((sup) => sup.attendance?.status === "On Duty").length
   const absentToday = supervisors.filter((sup) => sup.attendance?.status === "Absent").length
-  const noStatusToday = totalSupervisors - presentToday - absentToday
+  const noStatusToday = supervisors.filter((sup) => !sup.attendance?.status).length
   const attendanceRate = totalSupervisors > 0 ? Math.round((presentToday / totalSupervisors) * 100) : 0
 
   // FIXED: Update attendance function with consistent field naming
@@ -1434,7 +1457,7 @@ export default function SupervisorsManagement() {
 }
 
   // Handle attendance change
-  const handleAttendanceChange = async (supervisorId: string, status: "Present" | "Absent") => {
+  const handleAttendanceChange = async (supervisorId: string, status: AttendanceStatus) => {
     console.log("🎯 Handling attendance change:", { supervisorId, status })
     try {
       const today = new Date()
@@ -1446,9 +1469,9 @@ export default function SupervisorsManagement() {
         throw new Error("Supervisor not found")
       }
 
-      // If marking as present, update immediately
-      if (status === "Present") {
-        await updateAttendance(supervisorId, "Present", dateStr)
+      // If marking as present or on duty, update immediately
+      if (status === "Present" || status === "On Duty") {
+        await updateAttendance(supervisorId, status, dateStr)
         return
       }
       
@@ -1542,8 +1565,8 @@ export default function SupervisorsManagement() {
                     <Select
                       value={supervisor.attendance?.status || ""}
                       onValueChange={(value: string) => {
-                        if (value === "Present" || value === "Absent") {
-                          handleAttendanceChange(supervisor._id, value);
+                        if (value === "Present" || value === "Absent" || value === "On Duty") {
+                          handleAttendanceChange(supervisor._id, value as AttendanceStatus);
                         }
                       }}
                     >
@@ -1551,6 +1574,7 @@ export default function SupervisorsManagement() {
                         className={cn(
                           "h-7 w-32",
                           supervisor.attendance?.status === "Present" && "bg-green-100 border-green-200",
+                          supervisor.attendance?.status === "On Duty" && "bg-blue-100 border-blue-200",
                           supervisor.attendance?.status === "Absent" && "bg-red-100 border-red-200",
                           !supervisor.attendance?.status && "bg-gray-50 border-gray-200",
                         )}
@@ -1708,6 +1732,7 @@ export default function SupervisorsManagement() {
                           className={cn(
                             "h-7 w-32",
                             supervisor.attendance?.status === "Present" && "bg-green-100 border-green-200",
+                            supervisor.attendance?.status === "On Duty" && "bg-blue-100 border-blue-200",
                             supervisor.attendance?.status === "Absent" && "bg-red-100 border-red-200",
                             !supervisor.attendance?.status && "bg-gray-50 border-gray-200",
                           )}
@@ -1801,7 +1826,7 @@ export default function SupervisorsManagement() {
       {renderLeaveApprovalModal()}
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Supervisors</CardTitle>
@@ -1820,6 +1845,16 @@ export default function SupervisorsManagement() {
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{presentToday}</div>
             <p className="text-xs text-muted-foreground">Marked present</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">On Duty</CardTitle>
+            <Briefcase className="h-4 w-4 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">{onDutyToday}</div>
+            <p className="text-xs text-muted-foreground">On duty today</p>
           </CardContent>
         </Card>
         <Card>
@@ -2126,10 +2161,10 @@ export default function SupervisorsManagement() {
               </SheetHeader>
 
               <Tabs defaultValue="overview" className="mt-6 flex flex-col h-[calc(100%-100px)]">
-                <TabsList className="grid w-full grid-cols-3 mb-4">
+                <TabsList className="grid w-full grid-cols-2 mb-4">
                   <TabsTrigger value="overview">Overview</TabsTrigger>
                   <TabsTrigger value="tasks">Tasks</TabsTrigger>
-                  <TabsTrigger value="employees">Team</TabsTrigger>
+                  {/* <TabsTrigger value="employees">Team</TabsTrigger> */}
                 </TabsList>
 
                 <TabsContent value="overview" className="flex-1 overflow-y-auto pr-2 space-y-6">
@@ -2402,7 +2437,7 @@ export default function SupervisorsManagement() {
                   </div>
                 </TabsContent>
 
-                <TabsContent value="employees" className="flex-1 overflow-y-auto pr-2 space-y-4">
+                {/* <TabsContent value="employees" className="flex-1 overflow-y-auto pr-2 space-y-4">
                   <div className="flex justify-between items-center">
                     <h3 className="text-lg font-semibold">Team Members</h3>
                     <Button size="sm" onClick={() => setIsEmployeeAssignOpen(true)}>
@@ -2451,7 +2486,7 @@ export default function SupervisorsManagement() {
                       </div>
                     )}
                   </div>
-                </TabsContent>
+                </TabsContent> */}
               </Tabs>
             </div>
           )}

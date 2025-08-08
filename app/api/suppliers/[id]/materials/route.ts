@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { Types } from 'mongoose'
+import mongoose from 'mongoose'
 import connectToDB from "@/lib/db"
 import Supplier from "@/models/SupplierModel"
 
@@ -18,7 +18,7 @@ export async function GET(
   try {
     const { id } = params;
     
-    if (!Types.ObjectId.isValid(id)) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json(
         { message: 'Invalid supplier ID' },
         { status: 400 }
@@ -55,7 +55,7 @@ export async function POST(
     const { id } = params;
     const { projectId, materialType, quantity, amount, date } = await request.json();
     
-    if (!Types.ObjectId.isValid(id)) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json(
         { message: 'Invalid supplier ID' },
         { status: 400 }
@@ -158,7 +158,7 @@ export async function DELETE(
     const { id } = params;
     const { projectId, materialType } = await request.json();
     
-    if (!Types.ObjectId.isValid(id)) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json(
         { message: 'Invalid supplier ID' },
         { status: 400 }

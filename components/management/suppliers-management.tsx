@@ -382,55 +382,74 @@ const SuppliersManagement: React.FC = () => {
   const addMaterialToProject = async (projectId: string) => {
     const currentInput = projectMaterialInputs[projectId] || {};
     const { materialType, quantity, amount } = currentInput;
-    
-    if (!materialType || !quantity || Number(quantity) <= 0 || Number(amount) < 0) {
+  
+    // Validate input values
+    if (!materialType || quantity === "" || amount === "" || Number(quantity) <= 0 || Number(amount) < 0) {
       toast.error("Please fill all fields with valid values");
       return;
     }
-    
+  
     if (!selectedSupplier?._id) {
       toast.error("No supplier selected");
       return;
     }
-
-    // Create a new material entry with a unique ID and current timestamp
+  
+    // Generate a unique ID for the new material entry
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const timestamp = new Date().toISOString();
+    
+    // Create the new material entry with all required fields
     const newMaterial = {
-      _id: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, // More unique temporary ID
+      _id: tempId,
       projectId,
       materialType,
       quantity: Number(quantity),
       amount: Number(amount),
-      date: new Date().toISOString(),
-      isNew: true // Mark as new to distinguish from existing entries
-
+      date: timestamp,
+      createdAt: timestamp,
+      updatedAt: timestamp
     };
   
-    console.log("Adding new material entry:", newMaterial);
+    console.log("Creating new material entry:", newMaterial);
     
-    // Create a copy of the material without the isNew flag for the server
-    const { isNew, ...materialForServer } = newMaterial;
+    // Prepare the material data for the server (without temporary fields)
+    const { _id, ...materialForServer } = newMaterial;
   
     setIsSaving(true);
     try {
-      // Update local state immediately for better UX
+      // 1. Update local project materials state
       setProjectMaterials(prev => ({
         ...prev,
         [projectId]: [...(prev[projectId] || []), newMaterial]
       }));
   
-      // Update the selected supplier's project materials
+      // 2. Update supplier's materials in local state
       if (selectedSupplier) {
-        const currentMaterials = Array.isArray(selectedSupplier.projectMaterials) 
-          ? selectedSupplier.projectMaterials 
-          : [];
-          
-        setSelectedSupplier({
-          ...selectedSupplier,
-          projectMaterials: [...currentMaterials, newMaterial]
+        setSelectedSupplier(prevSupplier => {
+          if (!prevSupplier) return null;
+          const currentMaterials = Array.isArray(prevSupplier.projectMaterials) 
+            ? prevSupplier.projectMaterials 
+            : [];
+          return {
+            ...prevSupplier,
+            projectMaterials: [
+              ...currentMaterials,
+              {
+                _id: tempId,
+                projectId,
+                materialType,
+                quantity: Number(quantity),
+                amount: Number(amount),
+                date: timestamp,
+                createdAt: timestamp,
+                updatedAt: timestamp
+              }
+            ]
+          };
         });
       }
-
-      // Send to server
+  
+      // 3. Send new material to server
       const response = await fetch(`/api/suppliers/${selectedSupplier._id}/materials`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -441,30 +460,43 @@ const SuppliersManagement: React.FC = () => {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to save material');
       }
-
+  
       const result = await response.json();
-      
-      // Update the material with the server-generated ID
+      console.log('Server response for new material:', result);
+  
+      // 4. Update local state with server-generated ID
       setProjectMaterials(prev => ({
         ...prev,
         [projectId]: (prev[projectId] || []).map(m => 
-          m._id === newMaterial._id ? { ...m, _id: result._id } : m
+          m._id === tempId ? { ...m, _id: result._id } : m
         )
       }));
-
-      // Update the selected supplier's project materials with the server ID
+  
+      // 5. Update selected supplier's materials with server ID
       if (selectedSupplier) {
-        const updatedProjectMaterials = (selectedSupplier.projectMaterials || []).map(m => 
-          m._id === newMaterial._id ? { ...m, _id: result._id } : m
-        );
-        
-        setSelectedSupplier({
-          ...selectedSupplier,
-          projectMaterials: updatedProjectMaterials
+        setSelectedSupplier(prevSupplier => {
+          if (!prevSupplier) return null;
+          const currentMaterials = Array.isArray(prevSupplier.projectMaterials) 
+            ? [...prevSupplier.projectMaterials] 
+            : [];
+          
+          // Find and update the material with the server-generated ID
+          const materialIndex = currentMaterials.findIndex(m => m._id === tempId);
+          if (materialIndex !== -1) {
+            currentMaterials[materialIndex] = {
+              ...currentMaterials[materialIndex],
+              _id: result._id
+            };
+          }
+          
+          return {
+            ...prevSupplier,
+            projectMaterials: currentMaterials
+          };
         });
       }
   
-      // Reset the input for this project
+      // 6. Reset the input form
       setProjectMaterialInputs(prev => ({
         ...prev,
         [projectId]: {
@@ -480,17 +512,25 @@ const SuppliersManagement: React.FC = () => {
     } catch (error) {
       console.error('Error adding material:', error);
       toast.error(`Failed to add material: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      
-      // Rollback local state on error
+  
+      // Rollback material from project
       setProjectMaterials(prev => ({
         ...prev,
         [projectId]: (prev[projectId] || []).filter(m => m._id !== newMaterial._id)
       }));
+  
+      // Rollback material from supplier
+      if (selectedSupplier) {
+        setSelectedSupplier({
+          ...selectedSupplier,
+          projectMaterials: (selectedSupplier.projectMaterials || []).filter(m => m._id !== newMaterial._id)
+        });
+      }
     } finally {
       setIsSaving(false);
     }
   };
-
+  
   const removeMaterialFromProject = async (projectId: string, materialType: string) => {
     if (!selectedSupplier?._id) {
       toast.error("No supplier selected");
@@ -1304,6 +1344,11 @@ const SuppliersManagement: React.FC = () => {
                     <DialogTitle>
                       {currentBankDetail?.accountNumber ? 'Edit Bank Account' : 'Add Bank Account'}
                     </DialogTitle>
+                    <DialogDescription>
+                      {currentBankDetail?.accountNumber 
+                        ? 'Update the bank account details below.' 
+                        : 'Enter the bank account details for this supplier.'}
+                    </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
@@ -1744,8 +1789,8 @@ const SuppliersManagement: React.FC = () => {
                     <CardContent>
                       {selectedSupplier.materialTypes.length > 0 ? (
                         <div className="flex flex-wrap gap-2">
-                          {selectedSupplier.materialTypes.map((material, index) => (
-                            <Badge key={index} variant="outline" className="flex items-center gap-1">
+                          {selectedSupplier.materialTypes?.map((material) => (
+                            <Badge key={`${material}-${selectedSupplier._id}`} variant="outline" className="flex items-center gap-1">
                               <Package className="w-3 h-3" />
                               {material}
                             </Badge>
@@ -1830,8 +1875,8 @@ const SuppliersManagement: React.FC = () => {
                                         <SelectValue placeholder="Select material" />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        {selectedSupplier.materialTypes.map((material) => (
-                                          <SelectItem key={`${material}-${Date.now()}`} value={material}>
+                                        {selectedSupplier.materialTypes?.map((material) => (
+                                          <SelectItem key={`${material}-${projectId}`} value={material}>
                                             {material}
                                           </SelectItem>
                                         ))}
@@ -1876,7 +1921,7 @@ const SuppliersManagement: React.FC = () => {
 
                               {/* Material List */}
                               <div className="space-y-2">
-                                {materials.map((material) => (
+                                {(materials || []).map((material) => (
                                   <div
                                     key={material._id}
                                     className="flex flex-wrap sm:flex-nowrap justify-between items-center bg-white p-3 rounded border"
@@ -1886,14 +1931,7 @@ const SuppliersManagement: React.FC = () => {
                                       <div>
                                         <div className="font-medium text-sm">{material.materialType}</div>
                                         <div className="text-xs text-gray-500">
-                                          {new Date(material.date || new Date()).toLocaleString('en-IN', {
-                                            day: '2-digit',
-                                            month: 'short',
-                                            year: 'numeric',
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                            hour12: true
-                                          })}
+                                          {format(new Date(material.date || new Date()), 'dd MMM yyyy, hh:mm a')}
                                         </div>
                                       </div>
                                     </div>
@@ -1918,7 +1956,7 @@ const SuppliersManagement: React.FC = () => {
 
                               {/* Totals */}
                               <div className="text-sm font-medium text-blue-800 bg-blue-50 p-3 rounded border mt-4">
-                                Total: {materials.length} materials – ₹{materials.reduce((sum, m) => sum + m.amount, 0).toFixed(2)}
+                                Total: {(materials || []).length} materials – ₹{(materials || []).reduce((sum, m) => sum + (m.amount || 0), 0).toFixed(2)}
                               </div>
                             </CardContent>
                           </Card>

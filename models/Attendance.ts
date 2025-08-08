@@ -4,7 +4,7 @@ export interface IAttendance extends Document {
   supervisorId?: mongoose.Schema.Types.ObjectId;
   employeeId?: mongoose.Schema.Types.ObjectId;
   date: Date;
-  status: "Present" | "Absent";
+  status: "Present" | "Absent" | "On Duty";
   leaveReason?: string;
   isLeaveApproved?: boolean;
   isLeavePaid?: boolean;
@@ -30,7 +30,7 @@ const AttendanceSchema: Schema = new Schema(
     },
     status: {
       type: String,
-      enum: ["Present", "Absent"],
+      enum: ["Present", "Absent", "On Duty"],
       required: true,
     },
     leaveReason: {
