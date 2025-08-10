@@ -1931,7 +1931,7 @@ const SuppliersManagement: React.FC = () => {
                                       <div>
                                         <div className="font-medium text-sm">{material.materialType}</div>
                                         <div className="text-xs text-gray-500">
-                                          {format(new Date(material.date || new Date()), 'dd MMM yyyy, hh:mm a')}
+                                          {format(new Date(material.date || new Date()), 'dd MMM yyyy')}
                                         </div>
                                       </div>
                                     </div>

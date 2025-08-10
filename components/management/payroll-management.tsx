@@ -33,9 +33,12 @@ type User = {
     quantity: number
     pricePerUnit: number
     totalAmount: number
+    amount: number
     paidAmount?: number
     dueAmount?: number
+    createdAt?: string
   }>
+  selectedProjectId?: string
   [key: string]: any
 }
 
@@ -49,6 +52,32 @@ const PayrollManagement = () => {
   const [editForm, setEditForm] = useState<User | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [projects, setProjects] = useState<{_id: string, name: string}[]>([])
+  const [supplierMaterials, setSupplierMaterials] = useState<Record<string, any[]>>({})
+  // Aggregate of payroll records keyed by supplier id
+  const [payrollBySupplier, setPayrollBySupplier] = useState<Record<string, { totalPaid: number; lastPaymentDate?: string }>>({})
+
+  // Normalize various possible ID formats (string, ObjectId, {$oid}, {_id}) to a string
+  const normalizeId = (id: any): string => {
+    try {
+      if (!id) return ''
+      if (typeof id === 'string') return id
+      if (typeof id === 'number') return String(id)
+      if (typeof id === 'object') {
+        // Common MongoDB serializations
+        if ((id as any).$oid) return String((id as any).$oid)
+        if ((id as any)._id) return normalizeId((id as any)._id)
+        if (typeof (id as any).toHexString === 'function') return (id as any).toHexString()
+        if (typeof (id as any).toString === 'function') {
+          const s = (id as any).toString()
+          if (s && s !== '[object Object]') return s
+        }
+      }
+      return String(id)
+    } catch {
+      return ''
+    }
+  }
 
   // Helper function to fetch data with error handling
   const fetchWithErrorHandling = async (url: string) => {
@@ -68,6 +97,255 @@ const PayrollManagement = () => {
     }
   }
 
+  // Handle project selection for supplier materials
+  const handleProjectSelection = async (userId: string, projectId: string) => {
+    console.log('Project selected:', projectId, 'for user:', userId)
+    
+    // Update the user's selected project in the users state
+    setUsers(prevUsers => 
+      prevUsers.map(user => 
+        user._id === userId 
+          ? { ...user, selectedProjectId: projectId }
+          : user
+      )
+    )
+    
+    // Also update editForm if it exists and is for this user
+    if (editForm && editForm._id === userId) {
+      setEditForm({
+        ...editForm,
+        selectedProjectId: projectId
+      })
+    }
+    
+    // Fetch materials for this project and supplier
+    if (projectId) {
+      await fetchSupplierMaterials(userId, projectId)
+    }
+  }
+
+  // Get materials for a specific project
+  const getProjectMaterials = (userId: string, projectId: string) => {
+    const user = users.find(u => u._id === userId)
+    console.log('Getting materials for user:', userId, 'project:', projectId)
+    console.log('User data:', user)
+    console.log('User project materials:', user?.projectMaterials)
+    
+    if (!user || !user.projectMaterials) {
+      console.log('No user or project materials found')
+      return []
+    }
+    
+    const filtered = user.projectMaterials.filter(material => normalizeId(material.projectId) === normalizeId(projectId))
+    console.log('Filtered materials for project:', filtered)
+    return filtered
+  }
+
+  // Load materials for all suppliers when component mounts
+  const loadAllSupplierMaterials = async () => {
+    const suppliers = users.filter(user => user.role === 'supplier')
+    console.log('Loading materials for suppliers:', suppliers.length)
+    
+    for (const supplier of suppliers) {
+      console.log('Processing supplier:', supplier.name)
+      console.log('Current supplier materials:', supplier.projectMaterials?.length || 0)
+      
+      // Always fetch fresh materials from API for each supplier
+      await fetchSupplierMaterials(supplier._id)
+      
+      // Small delay to avoid overwhelming the API
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+    
+    console.log('Finished loading materials for all suppliers')
+  }
+
+  // Update material field values
+  const updateMaterialField = (userId: string, projectId: string, materialIndex: number, field: string, value: number) => {
+    const user = users.find(u => u._id === userId)
+    if (!user || !user.projectMaterials) return
+    
+    const projectMaterials = user.projectMaterials.filter(m => m.projectId === projectId)
+    if (!projectMaterials[materialIndex]) return
+    
+    // Update the material in the user's data
+    setUsers(prevUsers => 
+      prevUsers.map(u => {
+        if (u._id === userId) {
+          const updatedMaterials = [...(u.projectMaterials || [])]
+          const globalIndex = updatedMaterials.findIndex(m => 
+            m.projectId === projectId && 
+            updatedMaterials.filter(mat => mat.projectId === projectId).indexOf(m) === materialIndex
+          )
+          
+          if (globalIndex !== -1) {
+            updatedMaterials[globalIndex] = {
+              ...updatedMaterials[globalIndex],
+              [field]: value
+            }
+          }
+          
+          return {
+            ...u,
+            projectMaterials: updatedMaterials
+          }
+        }
+        return u
+      })
+    )
+    
+    // Also update editForm if it's the current user being edited
+    if (editForm && editForm._id === userId) {
+      const updatedMaterials = [...(editForm.projectMaterials || [])]
+      const globalIndex = updatedMaterials.findIndex(m => 
+        m.projectId === projectId && 
+        updatedMaterials.filter(mat => mat.projectId === projectId).indexOf(m) === materialIndex
+      )
+      
+      if (globalIndex !== -1) {
+        updatedMaterials[globalIndex] = {
+          ...updatedMaterials[globalIndex],
+          [field]: value
+        }
+        
+        setEditForm({
+          ...editForm,
+          projectMaterials: updatedMaterials
+        })
+      }
+    }
+  }
+
+  // Fetch supplier materials from supplier-management data
+  const fetchSupplierMaterials = async (userId: string, projectId?: string) => {
+    console.log('🔍 Fetching materials for user:', userId, 'project:', projectId)
+    try {
+      // Fetch ALL supplier materials from the API (no projectId filter in API)
+      const apiUrl = `/api/suppliers/${userId}/materials`
+      console.log('📡 API URL:', apiUrl)
+      const response = await fetch(apiUrl)
+      console.log('📊 Materials API response status:', response.status)
+      
+      if (response.ok) {
+        const allMaterials = await response.json()
+        console.log('✅ Fetched all materials from API:', allMaterials)
+        console.log('📋 Materials type:', typeof allMaterials, 'Length:', Array.isArray(allMaterials) ? allMaterials.length : 'Not array')
+        
+        // Transform and store all materials
+        const transformedMaterials = Array.isArray(allMaterials) ? allMaterials.map((material: any) => {
+          console.log('🔄 Transforming material:', material)
+          return {
+            _id: material._id || `${userId}-${material.materialType}-${Date.now()}`,
+            materialType: material.materialType || 'Unknown',
+            projectId: normalizeId(material.projectId) || 'default',
+            amount: Number(material.amount) || 0,
+            quantity: Number(material.quantity) || 0,
+            pricePerUnit: material.amount && material.quantity ? (Number(material.amount) / Number(material.quantity)) : 0,
+            totalAmount: Number(material.amount) || 0,
+            paidAmount: Number(material.paidAmount) || 0,
+            dueAmount: Number(material.amount) - Number(material.paidAmount || 0),
+            createdAt: material.date || material.createdAt
+          }
+        }) : []
+        
+        console.log('✨ Transformed materials:', transformedMaterials)
+        console.log('📊 Total transformed materials:', transformedMaterials.length)
+        
+        // Calculate total supply value from materials
+        const totalSupplyValue = transformedMaterials.reduce((sum, material) => sum + (material.amount || 0), 0)
+        console.log('💰 Calculated total supply value:', totalSupplyValue)
+        
+        // Update the user's projectMaterials in local state with ALL materials
+        setUsers(prevUsers => 
+          prevUsers.map(user => {
+            if (user._id === userId) {
+              console.log('🔄 Updating user materials for:', user.name)
+              console.log('📊 Old materials count:', user.projectMaterials?.length || 0)
+              console.log('📊 New materials count:', transformedMaterials.length)
+              return {
+                ...user,
+                projectMaterials: transformedMaterials,
+                totalSupplyValue: totalSupplyValue > 0 ? totalSupplyValue : user.totalSupplyValue
+              }
+            }
+            return user
+          })
+        )
+        
+        // If a specific project was requested, store filtered materials in cache
+        if (projectId) {
+          const projectMaterials = transformedMaterials.filter(m => normalizeId(m.projectId) === normalizeId(projectId))
+          setSupplierMaterials(prev => ({
+            ...prev,
+            [`${userId}-${projectId}`]: projectMaterials
+          }))
+          console.log(`📦 Cached ${projectMaterials.length} materials for project ${projectId}`)
+        }
+        
+      } else {
+        console.log('❌ API failed with status:', response.status)
+        const errorText = await response.text()
+        console.log('❌ API error:', errorText)
+        
+        // Fallback to existing data if API fails
+        const user = users.find(u => u._id === userId)
+        if (user && user.projectMaterials) {
+          console.log('🔄 Using existing user materials as fallback')
+          if (projectId) {
+            const projectMaterials = user.projectMaterials.filter(m => m.projectId === projectId)
+            setSupplierMaterials(prev => ({
+              ...prev,
+              [`${userId}-${projectId}`]: projectMaterials
+            }))
+          }
+        }
+      }
+    } catch (error) {
+      console.error('💥 Error fetching supplier materials:', error)
+      // Fallback to existing data
+      const user = users.find(u => u._id === userId)
+      if (user && user.projectMaterials && projectId) {
+        const projectMaterials = user.projectMaterials.filter(m => m.projectId === projectId)
+        console.log('🔄 Error fallback materials:', projectMaterials)
+        setSupplierMaterials(prev => ({
+          ...prev,
+          [`${userId}-${projectId}`]: projectMaterials
+        }))
+      }
+    }
+  }
+
+  // Fetch projects for dropdown
+  const fetchProjects = async () => {
+    try {
+      console.log('Fetching projects from /api/projects...')
+      const response = await fetch('/api/projects')
+      console.log('Response status:', response.status)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const projectsData = await response.json()
+      console.log('Raw projects data:', projectsData)
+      console.log('Projects array length:', projectsData?.length)
+      
+      // Transform projects to ensure they have the right structure
+      const transformedProjects = Array.isArray(projectsData) 
+        ? projectsData.map(project => ({
+            _id: project._id || project.id,
+            name: project.title || project.name || 'Unnamed Project'
+          }))
+        : []
+      
+      console.log('Transformed projects:', transformedProjects)
+      setProjects(transformedProjects)
+    } catch (error) {
+      console.error('Error fetching projects:', error)
+      setProjects([])
+    }
+  }
+
   // Helper function to calculate due amount based on role
   const calculateDueAmount = (user: User): number => {
     switch (user.role) {
@@ -77,8 +355,15 @@ const PayrollManagement = () => {
       case "client":
         return Math.max(0, (user.projectTotalAmount || 0) - (user.totalPaid || 0))
       case "supplier":
+        // If a specific project is selected, calculate based on that project only
+        if (user.selectedProjectId && user.projectMaterials) {
+          const projectMaterials = user.projectMaterials.filter(m => m.projectId === user.selectedProjectId)
+          const projectTotal = projectMaterials.reduce((sum, material) => sum + (material.amount || material.totalAmount || 0), 0)
+          return Math.max(0, projectTotal - (user.totalPaid || 0))
+        }
+        // Otherwise calculate based on all materials or total supply value
         if (user.projectMaterials && user.projectMaterials.length > 0) {
-          const totalMaterialValue = user.projectMaterials.reduce((sum, material) => sum + material.totalAmount, 0)
+          const totalMaterialValue = user.projectMaterials.reduce((sum, material) => sum + (material.amount || material.totalAmount || 0), 0)
           const totalMaterialPaid = user.projectMaterials.reduce((sum, material) => sum + (material.paidAmount || 0), 0)
           return Math.max(0, totalMaterialValue - totalMaterialPaid)
         }
@@ -152,38 +437,63 @@ const PayrollManagement = () => {
         }
         break
       case "supplier":
-        // Enhanced supplier data transformation with material details
-        const projectMaterials = user.projectMaterials || []
-        let totalSupplyValue = 0
-        let totalSupplierPaid = 0
-
-        // Calculate totals from project materials
-        if (Array.isArray(projectMaterials)) {
-          projectMaterials.forEach((material: any) => {
-            const materialTotal = (Number(material.quantity) || 0) * (Number(material.pricePerUnit) || 0)
-            const materialPaid = Number(material.paidAmount) || 0
-            totalSupplyValue += materialTotal
-            totalSupplierPaid += materialPaid
-          })
-        }
-
+        // Enhanced supplier data transformation with better material handling
+        console.log('🏭 Transforming supplier data for:', user.companyName || user.name)
+        console.log('📦 Raw supplier data:', {
+          companyName: user.companyName,
+          materials: user.materials,
+          projectMaterials: user.projectMaterials,
+          totalSupplyValue: user.totalSupplyValue,
+          totalPaid: user.totalPaid
+        })
+        
+        // Handle both 'materials' and 'projectMaterials' fields from API
+        const rawMaterials = user.projectMaterials || user.materials || []
+        console.log('📋 Raw materials array:', rawMaterials, 'Length:', Array.isArray(rawMaterials) ? rawMaterials.length : 'Not array')
+        
+        const supplierMaterials = Array.isArray(rawMaterials) ? rawMaterials.map((material: any) => {
+          console.log('🔄 Processing material:', material)
+          return {
+            _id: material._id || `${user._id}-${material.materialType}-${Date.now()}`,
+            materialType: material.materialType || material.name || 'Unknown',
+            projectId: normalizeId(material.projectId) || 'default',
+            amount: Number(material.amount) || Number(material.totalAmount) || 0,
+            quantity: Number(material.quantity) || 0,
+            pricePerUnit: material.amount && material.quantity ? (Number(material.amount) / Number(material.quantity)) : Number(material.pricePerUnit) || 0,
+            totalAmount: Number(material.amount) || Number(material.totalAmount) || 0,
+            paidAmount: Number(material.paidAmount) || 0,
+            dueAmount: Number(material.amount || material.totalAmount || 0) - Number(material.paidAmount || 0),
+            createdAt: material.date || material.createdAt
+          }
+        }) : []
+        
+        console.log('✨ Transformed supplier materials:', supplierMaterials)
+        console.log('📊 Materials count:', supplierMaterials.length)
+        
+        // Calculate total supply value from materials if not provided
+        const calculatedSupplyValue = supplierMaterials.reduce((sum, material) => 
+          sum + (material.amount || material.totalAmount || 0), 0
+        )
+        
+        console.log('💰 Calculated supply value:', calculatedSupplyValue)
+        console.log('💰 User provided supply value:', user.totalSupplyValue)
+        
         transformedUser = {
           ...baseUser,
-          name: user.companyName || user.name || "Unknown Supplier",
-          totalSupplyValue: totalSupplyValue || Number(user.totalSupplyValue) || 0,
-          projectMaterials: projectMaterials.map((material: any) => ({
-            projectId: material.projectId || '',
-            projectName: material.projectName || '',
-            materialType: material.materialType || 'Unknown Material',
-            quantity: Number(material.quantity) || 0,
-            pricePerUnit: Number(material.pricePerUnit) || 0,
-            totalAmount: (Number(material.quantity) || 0) * (Number(material.pricePerUnit) || 0),
-            paidAmount: Number(material.paidAmount) || 0,
-            dueAmount: ((Number(material.quantity) || 0) * (Number(material.pricePerUnit) || 0)) - (Number(material.paidAmount) || 0)
-          })),
-          totalPaid: totalSupplierPaid || Number(user.totalPaid) || 0,
+          name: user.companyName || user.name || 'Unknown Supplier',
+          totalSupplyValue: Number(user.totalSupplyValue || user.totalAmount || user.contractValue || calculatedSupplyValue || 0),
+          projectMaterials: supplierMaterials,
+          totalPaid: Number(user.totalPaid) || 0,
           dueAmount: 0, // Will be calculated below
+          selectedProjectId: user.selectedProjectId || null
         }
+        
+        console.log('🏭 Final transformed supplier:', {
+          name: transformedUser.name,
+          totalSupplyValue: transformedUser.totalSupplyValue,
+          materialsCount: transformedUser.projectMaterials?.length || 0,
+          totalPaid: transformedUser.totalPaid
+        })
         break
       default:
         transformedUser = {
@@ -242,7 +552,22 @@ const PayrollManagement = () => {
           console.warn("No data received from APIs")
           toast.warning("No data found. Please check your API endpoints.")
         } else {
-          setUsers(allUsers)
+          // Merge in any known payroll aggregates for suppliers (fallback when supplier API lacks totals)
+          const merged = allUsers.map(u => {
+            if (u.role === 'supplier') {
+              const agg = payrollBySupplier[u._id]
+              if (agg) {
+                const lastDate = agg.lastPaymentDate || u.lastPaymentDate
+                return {
+                  ...u,
+                  totalPaid: Math.max(Number(u.totalPaid || 0), Number(agg.totalPaid || 0)),
+                  lastPaymentDate: lastDate
+                }
+              }
+            }
+            return u
+          })
+          setUsers(merged)
           toast.success(`Loaded ${allUsers.length} records (${employees.length} employees)`)
         }
       } catch (error) {
@@ -254,7 +579,101 @@ const PayrollManagement = () => {
     }
 
     fetchAllData()
+    fetchProjects()
   }, [])
+
+  // Fetch payroll entries and build supplier aggregates so supplier section shows paid amounts even if materials are missing
+  useEffect(() => {
+    const loadPayroll = async () => {
+      try {
+        const res = await fetch('/api/payroll')
+        if (!res.ok) return
+        const records = await res.json()
+        const supplierRecords = Array.isArray(records) ? records.filter((r: any) => (r.userRole || r.user_role || '').toString().toLowerCase().includes('supplier')) : []
+        const agg: Record<string, { totalPaid: number; lastPaymentDate?: string }> = {}
+        const latestMaterialsBySupplier: Record<string, { materials: any[]; totalSupplyValue: number; dueAmount: number }> = {}
+        for (const rec of supplierRecords) {
+          const userId = (rec.user && (rec.user._id || rec.user.id)) || rec.user || rec.userId
+          const key = userId?.toString?.() || String(userId || '')
+          if (!key) continue
+          const paid = Number(rec.amount || rec.totalPaid || 0)
+          const date = rec.paymentDate || rec.createdAt
+          if (!agg[key]) agg[key] = { totalPaid: 0, lastPaymentDate: date }
+          agg[key].totalPaid += paid
+          // keep latest date
+          if (date && (!agg[key].lastPaymentDate || new Date(date) > new Date(agg[key].lastPaymentDate))) {
+            agg[key].lastPaymentDate = date
+          }
+
+          // Track latest supplier materials snapshot if available on this record
+          const mats: any[] = rec.supplierMaterials || rec.materials || []
+          if (Array.isArray(mats) && mats.length > 0) {
+            const recTime = new Date(date || rec.updatedAt || rec.createdAt || Date.now()).getTime()
+            const existing = (latestMaterialsBySupplier as any)[key]?.__ts || 0
+            if (recTime >= existing) {
+              latestMaterialsBySupplier[key] = {
+                // normalize for UI expectations
+                materials: mats.map((m: any) => ({
+                  _id: m._id || undefined,
+                  projectId: (m.projectId && (m.projectId._id || m.projectId.id || m.projectId)) || m.project || 'default',
+                  projectName: m.projectName || m.project?.name,
+                  materialType: m.materialType || m.name || 'Unknown',
+                  quantity: Number(m.quantity || 0),
+                  pricePerUnit: Number(m.pricePerUnit || (m.totalAmount || m.amount || 0) / (m.quantity || 1)),
+                  totalAmount: Number(m.totalAmount || m.amount || 0),
+                  amount: Number(m.totalAmount || m.amount || 0),
+                  paidAmount: Number(m.paidAmount || 0),
+                  dueAmount: Number(m.dueAmount || (m.totalAmount || m.amount || 0) - Number(m.paidAmount || 0)),
+                  createdAt: m.supplyDate || m.date || m.createdAt,
+                })),
+                // compute total from materials if not provided on the record
+                totalSupplyValue: Number(rec.totalSupplyValue || mats.reduce((s: number, m: any) => s + Number(m.totalAmount || m.amount || 0), 0) || 0),
+                // temporary due; we'll recompute after aggregating totalPaid across all records
+                dueAmount: Number(rec.dueAmount || 0),
+                __ts: recTime,
+              } as any
+            }
+          }
+        }
+        setPayrollBySupplier(agg)
+        // Also merge immediately into users state if already loaded
+        if (users.length > 0) {
+          setUsers(prev => prev.map(u => {
+            if (u.role === 'supplier' && agg[u._id]) {
+              const a = agg[u._id]
+              const latest = latestMaterialsBySupplier[u._id]
+              const mergedMaterials = latest?.materials || u.projectMaterials || []
+              const mergedSupplyValue = latest?.totalSupplyValue ?? (mergedMaterials.length ? mergedMaterials.reduce((s: number, m: any) => s + Number(m.amount || m.totalAmount || 0), 0) : (u.totalSupplyValue ?? 0))
+              // Recompute due based on aggregated paid vs total supply value
+              const mergedDue = Math.max(0, (mergedSupplyValue || 0) - Number(a.totalPaid || 0))
+              return {
+                ...u,
+                projectMaterials: mergedMaterials,
+                totalSupplyValue: mergedSupplyValue,
+                dueAmount: mergedDue,
+                totalPaid: Math.max(Number(u.totalPaid || 0), Number(a.totalPaid || 0)),
+                lastPaymentDate: a.lastPaymentDate || u.lastPaymentDate
+              }
+            }
+            return u
+          }))
+        }
+      } catch (e) {
+        console.warn('Failed to load payroll aggregates', e)
+      }
+    }
+    loadPayroll()
+  }, [users.length])
+
+  // Load supplier materials after users are loaded
+  useEffect(() => {
+    if (users.length > 0) {
+      console.log('Users loaded, starting to load supplier materials...')
+      console.log('Total users:', users.length)
+      console.log('Suppliers found:', users.filter(u => u.role === 'supplier').length)
+      loadAllSupplierMaterials()
+    }
+  }, [users.length])
 
   // Update filtered users when search term or role filter changes
   useEffect(() => {
@@ -373,13 +792,41 @@ const PayrollManagement = () => {
       // Log the payment transaction only if a payment was made
       if (paymentAmount > 0) {
         try {
-          const payrollData = {
+          // For suppliers, include a materials snapshot and totals so the payroll feed can power the UI even
+          // when the suppliers API lacks materials/totalSupplyValue.
+          let payrollData: any = {
             user: userId,
             userRole: editForm.role,
             amount: paymentAmount,
             paymentDate: new Date(),
             status: "paid",
             notes: `Payment of ₹${paymentAmount} recorded for ${editForm.role} ${editForm.name}.`,
+          }
+          if (editForm.role === 'supplier') {
+            const allMaterials = Array.isArray(editForm.projectMaterials) ? editForm.projectMaterials : []
+            const materialsForScope = editForm.selectedProjectId
+              ? allMaterials.filter(m => m.projectId === editForm.selectedProjectId)
+              : allMaterials
+            const computedTotalSupply = materialsForScope.reduce((s, m) => s + Number(m.amount || m.totalAmount || 0), 0)
+            payrollData = {
+              ...payrollData,
+              supplierMaterials: materialsForScope.map(m => ({
+                _id: m._id,
+                projectId: m.projectId,
+                projectName: m.projectName,
+                materialType: m.materialType,
+                quantity: Number(m.quantity || 0),
+                pricePerUnit: Number(m.pricePerUnit || 0),
+                totalAmount: Number(m.totalAmount || m.amount || 0),
+                amount: Number(m.totalAmount || m.amount || 0),
+                paidAmount: Number(m.paidAmount || 0),
+                dueAmount: Number(m.dueAmount || (m.totalAmount || m.amount || 0) - Number(m.paidAmount || 0)),
+                createdAt: m.createdAt,
+              })),
+              totalSupplyValue: Number(editForm.totalSupplyValue || computedTotalSupply || 0),
+              // dueAmount will be recomputed on the server but send a helpful hint
+              dueAmount: Math.max(0, Number(editForm.totalSupplyValue || computedTotalSupply || 0) - Number(editForm.totalPaid || 0)),
+            }
           }
           console.log("Logging payroll transaction:", payrollData)
           await fetch("/api/payroll", {
@@ -440,21 +887,38 @@ const PayrollManagement = () => {
           )
           break
         case "supplier":
-          // For suppliers, we handle material-level payments
+          // For suppliers, handle project-specific vs total calculations
           if (field === "totalPaid") {
             const newTotalPaid = numericValue
-            const currentTotalValue = newForm.totalSupplyValue || 0
             newForm.totalPaid = newTotalPaid
-            newForm.dueAmount = Math.max(0, currentTotalValue - newTotalPaid)
+            
+            // If a specific project is selected, calculate due based on that project
+            if (newForm.selectedProjectId && newForm.projectMaterials) {
+              const projectMaterials = newForm.projectMaterials.filter(m => m.projectId === newForm.selectedProjectId)
+              const projectTotalValue = projectMaterials.reduce((sum, m) => sum + (m.amount || m.totalAmount || 0), 0)
+              newForm.dueAmount = Math.max(0, projectTotalValue - newTotalPaid)
+              
+              console.log(
+                `Supplier project calculation: projectValue=${projectTotalValue}, paid=${newTotalPaid}, due=${newForm.dueAmount}`,
+              )
+            } else {
+              // Calculate based on total supply value
+              const currentTotalValue = newForm.totalSupplyValue || 0
+              newForm.dueAmount = Math.max(0, currentTotalValue - newTotalPaid)
+              
+              console.log(
+                `Supplier total calculation: totalValue=${currentTotalValue}, paid=${newTotalPaid}, due=${newForm.dueAmount}`,
+              )
+            }
 
             // Update individual material paid amounts proportionally if needed
             if (newForm.projectMaterials && newForm.projectMaterials.length > 0) {
-              const totalMaterialValue = newForm.projectMaterials.reduce((sum, m) => sum + m.totalAmount, 0)
+              const totalMaterialValue = newForm.projectMaterials.reduce((sum, m) => sum + (m.amount || m.totalAmount || 0), 0)
               if (totalMaterialValue > 0) {
                 newForm.projectMaterials = newForm.projectMaterials.map(material => ({
                   ...material,
-                  paidAmount: (material.totalAmount / totalMaterialValue) * newTotalPaid,
-                  dueAmount: material.totalAmount - ((material.totalAmount / totalMaterialValue) * newTotalPaid)
+                  paidAmount: ((material.amount || material.totalAmount || 0) / totalMaterialValue) * newTotalPaid,
+                  dueAmount: (material.amount || material.totalAmount || 0) - (((material.amount || material.totalAmount || 0) / totalMaterialValue) * newTotalPaid)
                 }))
               }
             }
@@ -462,10 +926,6 @@ const PayrollManagement = () => {
             newForm.totalSupplyValue = numericValue
             newForm.dueAmount = Math.max(0, numericValue - (newForm.totalPaid || 0))
           }
-
-          console.log(
-            `Supplier calculation: totalValue=${newForm.totalSupplyValue}, paid=${newForm.totalPaid}, due=${newForm.dueAmount}`,
-          )
           break
         default:
           // For any other roles, just update the field
@@ -618,7 +1078,7 @@ const PayrollManagement = () => {
           totalAmount += user.projectTotalAmount || 0
           break
         case "supplier":
-          totalAmount += user.totalSupplyValue || 0
+          totalAmount += (user.totalSupplyValue || (user.projectMaterials?.reduce((sum: number, m: any) => sum + (m.amount || m.totalAmount || 0), 0) || 0))
           break
       }
       totalDue += user.dueAmount || 0
@@ -674,7 +1134,7 @@ const PayrollManagement = () => {
       case "client":
         return user.projectTotalAmount || 0
       case "supplier":
-        return user.totalSupplyValue || 0
+        return (user.totalSupplyValue || (user.projectMaterials?.reduce((sum: number, m: any) => sum + (m.amount || m.totalAmount || 0), 0) || 0))
       default:
         return 0
     }
@@ -782,8 +1242,9 @@ const PayrollManagement = () => {
                 <TableHead>Email</TableHead>
                 {selectedRole === "supplier" ? (
                   <>
+                    <TableHead>Project</TableHead>
                     <TableHead>Materials</TableHead>
-                    <TableHead className="text-right">Total Supply Value</TableHead>
+                    <TableHead className="text-right">Supply Value</TableHead>
                   </>
                 ) : (
                   <TableHead className="text-right">{getAmountFieldName(selectedRole)}</TableHead>
@@ -811,42 +1272,138 @@ const PayrollManagement = () => {
                     <TableCell>{user.email}</TableCell>
                     {selectedRole === "supplier" ? (
                       <>
+                        {/* Project Column */}
                         <TableCell>
-                          {user.projectMaterials && user.projectMaterials.length > 0 ? (
-                            <div className="space-y-1 max-w-xs">
-                              {user.projectMaterials.slice(0, 2).map((material, idx) => (
-                                <div key={idx} className="text-xs border-l-2 border-blue-200 pl-2">
-                                  <div className="font-medium text-blue-900">{material.materialType}</div>
-                                  <div className="text-muted-foreground hidden">
-                                    Qty: {material.quantity} × ₹{material.pricePerUnit?.toFixed(2) || '0.00'}
-                                  </div>
-                                  <div className="text-green-700 font-medium hidden">
-                                    Total: ₹{material.totalAmount?.toFixed(2) || '0.00'}
-                                  </div>
-                                </div>
+                          <div className="space-y-2">
+                            <select
+                              className="border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full"
+                              value={user.selectedProjectId || ""}
+                              onChange={e => handleProjectSelection(user._id, e.target.value)}
+                            >
+                              <option value="">All Projects</option>
+                              {projects && projects.map(project => (
+                                <option key={project._id} value={project._id}>{project.name}</option>
                               ))}
-                              {user.projectMaterials.length > 2 && (
-                                <div className="text-xs text-muted-foreground font-medium">
-                                  +{user.projectMaterials.length - 2} more materials
+                            </select>
+                            
+                            {/* Show project info */}
+                            {user.selectedProjectId ? (
+                              <div className="text-sm font-medium text-black bg-blue-50 px-2 py-1 rounded border">
+                                📍 {projects.find(p => p._id === user.selectedProjectId)?.name}
+                              </div>
+                            ) : (
+                              user.projectMaterials && user.projectMaterials.length > 0 && (
+                                <div className="text-xs text-gray-500">
+                                  {[...new Set(user.projectMaterials.map(m => m.projectId))].length} project{[...new Set(user.projectMaterials.map(m => m.projectId))].length !== 1 ? 's' : ''} available
                                 </div>
-                              )}
-                            </div>
+                              )
+                            )}
+                          </div>
+                        </TableCell>
+
+                        {/* Materials Column */}
+                        <TableCell>
+                          {editingId === user._id && editForm ? (
+                            /* Edit Mode - Show editable materials for selected project */
+                            user.selectedProjectId ? (
+                              <div className="space-y-2 max-h-60 overflow-y-auto">
+                                {getProjectMaterials(user._id, user.selectedProjectId).map((material, idx) => (
+                                  <div key={idx} className="border border-gray-200 rounded p-2 bg-gray-50">
+                                    <div className="font-medium text-sm mb-1">{material.materialType}</div>
+                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                      <div>
+                                        <label className="text-gray-600">Qty:</label>
+                                        <input
+                                          type="number"
+                                          className="w-full border rounded px-1 py-0.5 mt-0.5"
+                                          value={material.quantity || ""}
+                                          onChange={e => user.selectedProjectId && updateMaterialField(user._id, user.selectedProjectId, idx, 'quantity', Number(e.target.value))}
+                                          min="0"
+                                          step="0.01"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="text-gray-600">Amount:</label>
+                                        <input
+                                          type="number"
+                                          className="w-full border rounded px-1 py-0.5 mt-0.5"
+                                          value={material.amount || ""}
+                                          onChange={e => user.selectedProjectId && updateMaterialField(user._id, user.selectedProjectId, idx, 'amount', Number(e.target.value))}
+                                          min="0"
+                                          step="0.01"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                                {getProjectMaterials(user._id, user.selectedProjectId).length === 0 && (
+                                  <div className="text-center py-2 text-gray-500 text-sm">
+                                    No materials for selected project
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-center py-2 text-gray-500 text-sm">
+                                Select a project to edit materials
+                              </div>
+                            )
                           ) : (
-                            <span className="text-muted-foreground text-sm italic">No materials assigned</span>
+                            /* Default View - Show materials based on selected project or all materials */
+                            user.selectedProjectId ? (
+                              <div className="space-y-1">
+                                {getProjectMaterials(user._id, user.selectedProjectId).map((material, idx) => (
+                                  <div key={idx} className="text-sm">
+                                    <div className="font-medium text-gray-800">{material.materialType}</div>
+                                    <div className="text-xs text-gray-500">
+                                      Qty: {material.quantity} | ₹{(material.amount || material.totalAmount || 0).toFixed(2)}
+                                    </div>
+                                  </div>
+                                ))}
+                                {getProjectMaterials(user._id, user.selectedProjectId).length === 0 && (
+                                  <div className="text-sm text-gray-500 italic">No materials for this project</div>
+                                )}
+                              </div>
+                            ) : (
+                              user.projectMaterials && user.projectMaterials.length > 0 ? (
+                                <div className="space-y-1">
+                                  {user.projectMaterials.slice(0, 4).map((material, idx) => (
+                                    <div key={idx} className="text-sm">
+                                      <div className="font-medium text-gray-800">{material.materialType}</div>
+                                      <div className="text-xs text-gray-500">
+                                        Qty: {material.quantity} | ₹{(material.amount || material.totalAmount || 0).toFixed(2)}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {user.projectMaterials.length > 4 && (
+                                    <div className="text-xs text-gray-500">
+                                      +{user.projectMaterials.length - 4} more materials
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="text-sm text-gray-500 italic">No materials</div>
+                              )
+                            )
                           )}
                         </TableCell>
-                        <TableCell className="text-right">
-                          {editingId === user._id && editForm ? (
-                            <span className="text-muted-foreground">
-                              ₹{(editForm.totalSupplyValue || 0).toFixed(2)}
-                            </span>
-                          ) : (
-                            formatCurrency(user.totalSupplyValue || 0)
-                          )}
 
-                          <div className="text-green-700 font-medium hidden">
-                            Total: ₹{user.totalSupplyValue?.toFixed(2) || '0.00'}
-                          </div>
+                        {/* Supply Value Column */}
+                        <TableCell className="text-right">
+                          {user.selectedProjectId ? (
+                            <div className="text-sm font-medium text-blue-700">
+                              ₹{getProjectMaterials(user._id, user.selectedProjectId)
+                                .reduce((sum: number, m: any) => sum + (m.amount || 0), 0).toFixed(2)}
+                              <div className="text-xs text-gray-500">Selected Project</div>
+                            </div>
+                          ) : (
+                            <div className="text-sm font-medium">
+                              {(() => {
+                                const supply = (user.totalSupplyValue || (user.projectMaterials?.reduce((sum: number, m: any) => sum + (m.amount || m.totalAmount || 0), 0) || 0))
+                                return formatCurrency(supply)
+                              })()}
+                              <div className="text-xs text-gray-500">All Projects</div>
+                            </div>
+                          )}
                         </TableCell>
                       </>
                     ) : (
@@ -887,10 +1444,26 @@ const PayrollManagement = () => {
                     <TableCell className="text-right">
                       {editingId === user._id && editForm ? (
                         <span className="text-muted-foreground">{formatCurrency(editForm.dueAmount || 0)}</span>
-                      ) : user.dueAmount > 0 ? (
-                        <span className="text-red-600">{formatCurrency(user.dueAmount)}</span>
                       ) : (
-                        <span className="text-green-600">Paid</span>
+                        // For suppliers with selected projects, calculate project-specific due amount
+                        selectedRole === "supplier" && user.selectedProjectId ? (
+                          (() => {
+                            const projectMaterials = getProjectMaterials(user._id, user.selectedProjectId)
+                            const projectTotal = projectMaterials.reduce((sum, m) => sum + (m.amount || m.totalAmount || 0), 0)
+                            const projectDue = Math.max(0, projectTotal - (user.totalPaid || 0))
+                            return projectDue > 0 ? (
+                              <span className="text-red-600">{formatCurrency(projectDue)}</span>
+                            ) : (
+                              <span className="text-green-600">Paid</span>
+                            )
+                          })()
+                        ) : (
+                          user.dueAmount > 0 ? (
+                            <span className="text-red-600">{formatCurrency(user.dueAmount)}</span>
+                          ) : (
+                            <span className="text-green-600">Paid</span>
+                          )
+                        )
                       )}
                     </TableCell>
                     <TableCell>

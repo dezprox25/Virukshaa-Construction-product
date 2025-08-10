@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import connectToDB from '@/lib/db';
-import Payroll from '@/models/Payroll';
+import Payroll from '@/models/PayrollModel';
 
 export async function GET(
   request: Request,
@@ -10,7 +10,7 @@ export async function GET(
     await connectToDB();
     
     const payroll = await Payroll.findById(params.id)
-      .populate('userId', 'name email phone')
+      .populate('user', 'name email phone')
       .lean();
 
     if (!payroll) {
@@ -39,32 +39,33 @@ export async function PATCH(
     await connectToDB();
 
     // If payment is being processed
-    if (updates.payment) {
-      const updatedPayroll = await Payroll.findByIdAndUpdate(
-        params.id,
-        {
-          $inc: {
-            totalPaid: updates.payment.amount,
-            dueAmount: -updates.payment.amount
-          },
-          $set: {
-            lastPaymentDate: new Date(),
-            'paymentHistory.$[].status': 'completed' // Update all pending payments to completed
-          },
-          $push: {
-            paymentHistory: {
-              amount: updates.payment.amount,
-              date: new Date(),
-              paymentMethod: updates.payment.paymentMethod || 'bank_transfer',
-              reference: updates.payment.reference || `PAY-${Date.now()}`,
-              status: 'completed'
-            }
-          }
-        },
-        { new: true }
-      );
+    if (updates.payment && typeof updates.payment.amount === 'number') {
+      const paymentAmount = Number(updates.payment.amount) || 0;
 
-      return NextResponse.json(updatedPayroll);
+      // Load the existing record to compute clamped dueAmount correctly
+      const existing = await Payroll.findById(params.id);
+      if (!existing) {
+        return NextResponse.json(
+          { error: 'Payroll record not found' },
+          { status: 404 }
+        );
+      }
+
+      const currentTotalPaid = Number((existing as any).totalPaid || 0);
+      const currentDue = Number((existing as any).dueAmount || 0);
+      const newTotalPaid = currentTotalPaid + paymentAmount;
+      const newDue = Math.max(0, currentDue - paymentAmount);
+
+      existing.set({
+        totalPaid: newTotalPaid,
+        dueAmount: newDue,
+        paymentDate: new Date(),
+        status: 'paid',
+        ...(updates.notes ? { notes: updates.notes } : {})
+      });
+
+      const saved = await existing.save();
+      return NextResponse.json(saved);
     }
 
     // Regular update

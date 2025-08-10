@@ -76,6 +76,7 @@ export async function GET(req: NextRequest) {
     const endDate = searchParams.get("endDate");
     const employeeId = searchParams.get("employeeId");
     const supervisorId = searchParams.get("supervisorId");
+    const supervisorIds = searchParams.get("supervisorIds");
     const includeLeave = searchParams.get("includeLeave") === 'true';
 
     let filter: any = {};
@@ -100,6 +101,12 @@ export async function GET(req: NextRequest) {
       filter.employeeId = employeeId;
     } else if (supervisorId) {
       filter.supervisorId = supervisorId;
+    } else if (supervisorIds) {
+      // Handle multiple supervisor IDs
+      const ids = supervisorIds.split(',');
+      if (ids.length > 0) {
+        filter.supervisorId = { $in: ids };
+      }
     }
 
     // If includeLeave is true, only return leave records

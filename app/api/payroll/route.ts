@@ -209,7 +209,19 @@ export async function POST(request: Request) {
     const body = await request.json();
     console.log('Request body:', JSON.stringify(body, null, 2));
     
-    const { user, userRole, amount, paymentDate, status, notes } = body;
+    const { 
+      user, 
+      userRole, 
+      amount, 
+      paymentDate, 
+      status, 
+      notes,
+      // Supplier-specific fields
+      totalSupplyValue,
+      totalPaid,
+      dueAmount,
+      supplierMaterials
+    } = body;
 
     // Basic validation
     if (!user || !userRole || amount === undefined) {
@@ -250,7 +262,8 @@ export async function POST(request: Request) {
     await connectToDB();
     console.log('Database connected, creating payroll entry...');
 
-    const payrollData = {
+    // For suppliers, we need to fetch their material details and create comprehensive payroll records
+    let payrollData: any = {
       user,  
       userRole: normalizedUserRole,
       amount: Number(amount),
@@ -258,6 +271,72 @@ export async function POST(request: Request) {
       status: status || 'paid',
       notes: notes || '',
     };
+
+    // If this is a supplier payment, add supplier-specific material details
+    if (normalizedUserRole === 'Supplier') {
+      console.log('Processing supplier payment with material details...');
+      
+      // If supplier materials are provided in the request, use them
+      if (supplierMaterials && Array.isArray(supplierMaterials)) {
+        payrollData.supplierMaterials = supplierMaterials;
+        payrollData.totalSupplyValue = Number(totalSupplyValue) || 0;
+        payrollData.totalPaid = Number(totalPaid) || 0;
+        payrollData.dueAmount = Number(dueAmount) || 0;
+      } else {
+        // Fetch supplier details from the supplier collection to get material information
+        try {
+          const Supplier = mongoose.models.Supplier || require('@/models/SupplierModel').default;
+          const supplier = await Supplier.findById(user).populate('projectMaterials');
+          
+          if (supplier && supplier.projectMaterials) {
+            console.log('Found supplier with materials:', supplier.companyName, supplier.projectMaterials.length, 'materials');
+            
+            // Transform supplier materials into payroll supplier materials format
+            const transformedMaterials = supplier.projectMaterials.map((material: any) => ({
+              projectId: material.projectId,
+              materialType: material.materialType,
+              quantity: material.quantity || 0,
+              pricePerUnit: material.amount ? (material.amount / (material.quantity || 1)) : 0,
+              totalAmount: material.amount || 0,
+              date: material.date || material.createdAt,
+              paidAmount: 0, // Initially unpaid
+              dueAmount: material.amount || 0,
+              status: 'pending'
+            }));
+            
+            const totalSupplyVal = transformedMaterials.reduce((sum: number, mat: any) => sum + mat.totalAmount, 0);
+            const currentPaid = Number(amount); // The payment being made now
+            const totalDue = totalSupplyVal - currentPaid;
+            
+            payrollData.supplierMaterials = transformedMaterials;
+            payrollData.totalSupplyValue = totalSupplyVal;
+            payrollData.totalPaid = currentPaid;
+            payrollData.dueAmount = Math.max(0, totalDue);
+            
+            console.log('Supplier payroll data:', {
+              materialsCount: transformedMaterials.length,
+              totalSupplyValue: totalSupplyVal,
+              totalPaid: currentPaid,
+              dueAmount: totalDue
+            });
+          } else {
+            console.log('No supplier found or no materials for supplier:', user);
+            // Set default values for supplier without materials
+            payrollData.supplierMaterials = [];
+            payrollData.totalSupplyValue = Number(amount);
+            payrollData.totalPaid = Number(amount);
+            payrollData.dueAmount = 0;
+          }
+        } catch (supplierFetchError) {
+          console.error('Error fetching supplier details:', supplierFetchError);
+          // Set default values if supplier fetch fails
+          payrollData.supplierMaterials = [];
+          payrollData.totalSupplyValue = Number(amount);
+          payrollData.totalPaid = Number(amount);
+          payrollData.dueAmount = 0;
+        }
+      }
+    }
 
     console.log('Creating payroll entry with data:', JSON.stringify(payrollData, null, 2));
     const newPayrollEntry = await Payroll.create(payrollData);

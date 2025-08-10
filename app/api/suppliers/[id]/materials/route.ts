@@ -85,52 +85,20 @@ export async function POST(
 
     await connectToDB();
     
-    // Check if material type is already assigned to this project for this supplier
-    const existingMaterial = await Supplier.findOne({
-      _id: id,
-      'projectMaterials.projectId': projectId,
-      'projectMaterials.materialType': materialType
-    });
+    // Always add a new material entry, even if the same materialType exists for the project
+    const newMaterial = {
+      projectId,
+      materialType,
+      quantity: Number(quantity),
+      amount: Number(amount),
+      date: date ? new Date(date) : new Date()
+    };
     
-    let updatedSupplier;
-    
-    if (existingMaterial) {
-      // Update existing material quantity, amount, and date
-      updatedSupplier = await Supplier.findOneAndUpdate(
-        { 
-          _id: id,
-          'projectMaterials.projectId': projectId,
-          'projectMaterials.materialType': materialType
-        },
-        { 
-          $inc: { 
-            'projectMaterials.$.quantity': quantity
-          },
-          $set: {
-            'projectMaterials.$.amount': amount,
-            'projectMaterials.$.date': date ? new Date(date) : new Date()
-          }
-        },
-        { new: true }
-      );
-    } else {
-      // Add new material
-      const newMaterial = {
-        projectId,
-        materialType,
-        quantity: Number(quantity),
-        amount: Number(amount),
-        date: date ? new Date(date) : new Date()
-      };
-      
-      updatedSupplier = await Supplier.findByIdAndUpdate(
-        id,
-        { $push: { projectMaterials: newMaterial } },
-        { new: true }
-      );
-      
-      console.log('Added new material:', newMaterial);
-    }
+    const updatedSupplier = await Supplier.findByIdAndUpdate(
+      id,
+      { $push: { projectMaterials: newMaterial } },
+      { new: true }
+    );
     
     if (!updatedSupplier) {
       return NextResponse.json(
