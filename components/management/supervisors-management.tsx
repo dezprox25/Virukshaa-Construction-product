@@ -145,6 +145,27 @@ type AttendanceRecord = {
   leaveReason?: string
 }
 
+// Helper to normalize status from API
+function normalizeAttendanceStatus(value: any, presentFlag?: boolean): AttendanceStatus {
+  if (typeof value === "string") {
+    const v = value.trim().toLowerCase().replace(/[_-]/g, " ")
+    if (v === "present" || v === "p") return "Present"
+    if (v === "on duty" || v === "onduty" || v === "on duty (paid)" || v === "od") return "On Duty"
+    if (v === "absent" || v === "a") return "Absent"
+  }
+  if (presentFlag === true) return "Present"
+  return null
+}
+
+function isIsoWithinDay(iso?: string, startIso?: string, endIso?: string): boolean {
+  if (!iso || !startIso || !endIso) return false
+  const t = Date.parse(iso)
+  const s = Date.parse(startIso)
+  const e = Date.parse(endIso)
+  if (Number.isNaN(t) || Number.isNaN(s) || Number.isNaN(e)) return false
+  return t >= s && t <= e
+}
+
 // Combined Attendance and Salary View
 function CombinedAttendanceView({
   supervisorId,
@@ -689,27 +710,34 @@ export default function SupervisorsPage() {
       if (!res.ok) throw new Error("Failed to fetch supervisors")
       const list: Supervisor[] = await res.json()
 
-      // 2) Build today's UTC date (YYYY-MM-DD)
+      // 2) Build today's UTC date (YYYY-MM-DD) and an ISO range for the full day
       const now = new Date()
       const utcDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
       const dateStr = utcDate.toISOString().split("T")[0]
+      const startOfDayIso = `${dateStr}T00:00:00.000Z`
+      const endOfDayIso = `${dateStr}T23:59:59.999Z`
 
-      // 3) Try batch attendance fetch; fall back to per-supervisor fetch if needed
+      // 3) Try batch attendance fetch (by date range); fall back to per-supervisor fetch if needed
       let attendanceRecords: AttendanceRecord[] = []
       const supervisorIds = list.map((s) => s._id).join(",")
 
       try {
         const attRes = await fetch(
-          `/api/attendance?date=${dateStr}&supervisorIds=${encodeURIComponent(supervisorIds)}`,
-          {
-            cache: "no-store",
-            headers: { Accept: "application/json" },
-          }
+          `/api/attendance?startDate=${encodeURIComponent(startOfDayIso)}&endDate=${encodeURIComponent(endOfDayIso)}&supervisorIds=${encodeURIComponent(
+            supervisorIds
+          )}`,
+          { cache: "no-store", headers: { Accept: "application/json" } }
         )
         if (attRes.ok) {
           const data = await attRes.json()
-          // Some APIs might return null/undefined or non-array on unsupported param; normalize
-          attendanceRecords = Array.isArray(data) ? data : []
+          // Normalize possible shapes: array or { data: [...] }
+          const arr = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
+          // If the API returns multiple days, keep only today's (accept exact date or timestamp within the day)
+          attendanceRecords = arr.filter((r: any) => {
+            const d = (r?.date || "") as string
+            if (d.startsWith(dateStr)) return true
+            return isIsoWithinDay(r?.checkIn, startOfDayIso, endOfDayIso) || isIsoWithinDay(r?.updatedAt, startOfDayIso, endOfDayIso)
+          })
         } else {
           // Force fallback
           throw new Error("Batch attendance not supported")
@@ -719,62 +747,132 @@ export default function SupervisorsPage() {
         const results = await Promise.all(
           list.map(async (s) => {
             try {
-              const r = await fetch(`/api/attendance?date=${dateStr}&supervisorId=${s._id}`, {
-                cache: "no-store",
-                headers: { Accept: "application/json" },
-              })
+              const r = await fetch(
+                `/api/attendance?startDate=${encodeURIComponent(startOfDayIso)}&endDate=${encodeURIComponent(endOfDayIso)}&supervisorId=${s._id}`,
+                { cache: "no-store", headers: { Accept: "application/json" } }
+              )
               if (!r.ok) return null
               const json = await r.json()
-              // API may return a single record or an array; normalize
-              if (Array.isArray(json)) {
-                return json[0] ?? null
-              }
-              return json ?? null
+              // Normalize shapes: array, { data: [...] }, or single object
+              const arr = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : [json]
+              // Find today's record for this supervisor
+              const match = arr.find((rec: any) => {
+                const supOk = (rec?.supervisorId || rec?.supervisor?._id || rec?.supervisor) == s._id
+                if (!supOk) return false
+                const d = (rec?.date || "") as string
+                if (d.startsWith(dateStr)) return true
+                return isIsoWithinDay(rec?.checkIn, startOfDayIso, endOfDayIso) || isIsoWithinDay(rec?.updatedAt, startOfDayIso, endOfDayIso)
+              })
+              return match || null
             } catch {
               return null
             }
           })
         )
         attendanceRecords = results.filter(Boolean) as AttendanceRecord[]
+        // If still empty, try legacy per-supervisor API shape with ?date=YYYY-MM-DD
+        if (attendanceRecords.length === 0) {
+          const legacyResults = await Promise.all(
+            list.map(async (s) => {
+              try {
+                const r = await fetch(`/api/attendance?date=${dateStr}&supervisorId=${s._id}`, {
+                  cache: "no-store",
+                  headers: { Accept: "application/json" },
+                })
+                if (!r.ok) return null
+                const json = await r.json()
+                const arr = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : [json]
+                // prefer exact date match, fallback to timestamps within the day
+                const match = arr.find((rec: any) => {
+                  const d = (rec?.date || "") as string
+                  if (d === dateStr || d.startsWith(dateStr)) return true
+                  return isIsoWithinDay(rec?.checkIn, startOfDayIso, endOfDayIso) || isIsoWithinDay(rec?.updatedAt, startOfDayIso, endOfDayIso)
+                })
+                return match || null
+              } catch {
+                return null
+              }
+            })
+          )
+          attendanceRecords = legacyResults.filter(Boolean) as AttendanceRecord[]
+        }
+        // If still empty, try fetching all by date only and filter locally
+        if (attendanceRecords.length === 0) {
+          try {
+            const r = await fetch(`/api/attendance?date=${dateStr}`, { cache: "no-store", headers: { Accept: "application/json" } })
+            if (r.ok) {
+              const json = await r.json()
+              const arr = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : []
+              const byId = new Map<string, any>()
+              arr.forEach((rec: any) => {
+                const supId = rec?.supervisorId || rec?.supervisor?._id || rec?.supervisor || rec?.employeeId || rec?.supervisor_id || rec?.staffId
+                if (!supId) return
+                const d = (rec?.date || "") as string
+                if (d === dateStr || d.startsWith(dateStr)) {
+                  byId.set(String(supId), rec)
+                }
+              })
+              attendanceRecords = list
+                .map((s) => byId.get(String(s._id)) as AttendanceRecord | undefined)
+                .filter(Boolean) as AttendanceRecord[]
+            }
+          } catch {
+            // ignore
+          }
+        }
       }
 
-      // 4) Merge supervisors with attendance map
+      // 4) Merge supervisors with attendance map (normalize supervisor id field)
       const attMap = new Map<string, AttendanceRecord>()
-      attendanceRecords.forEach((rec) => {
-        if (rec?.supervisorId) attMap.set(rec.supervisorId, rec)
+      attendanceRecords.forEach((rec: any) => {
+        const supId =
+          rec?.supervisorId || rec?.supervisor?._id || rec?.supervisor || rec?.employeeId || rec?.supervisor_id || rec?.staffId
+        if (supId) attMap.set(String(supId), rec as AttendanceRecord)
       })
 
       const merged = list.map((supervisor) => {
         const attendance = attMap.get(supervisor._id)
-        const attendanceData = attendance
-          ? {
-              present: attendance.status === "Present",
+
+        if (attendance) {
+          const statusNorm = normalizeAttendanceStatus((attendance as any).status, (attendance as any).present)
+          return {
+            ...supervisor,
+            attendance: {
+              present: statusNorm === "Present",
               checkIn: attendance.checkIn || "",
               checkOut: attendance.checkOut || "",
-              status: attendance.status as AttendanceStatus,
+              status: statusNorm,
               _attendanceId: attendance._id,
               isLeaveApproved: attendance.isLeaveApproved,
-              isLeavePaid: attendance.isLeavePaid,
-              leaveReason: attendance.leaveReason,
-            }
-          : {
-              present: false,
-              status: null as AttendanceStatus,
-              _attendanceId: undefined,
-              checkIn: "",
-              checkOut: "",
-              isLeaveApproved: undefined,
-              isLeavePaid: undefined,
-              leaveReason: "",
-            }
+              isLeavePaid: attendance.isLeavePaid ?? (attendance as any).isPaid,
+              leaveReason: attendance.leaveReason || "",
+            },
+          }
+        }
 
         return {
           ...supervisor,
-          attendance: attendanceData,
+          attendance: {
+            present: false,
+            status: null as AttendanceStatus,
+            _attendanceId: undefined,
+            checkIn: "",
+            checkOut: "",
+            isLeaveApproved: undefined,
+            isLeavePaid: undefined,
+            leaveReason: "",
+          },
         }
       })
 
       setSupervisors(merged)
+      // minimal debug to help diagnose if still empty
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[supervisors] merged with attendance:', {
+          total: list.length,
+          withAttendance: merged.filter((m) => m.attendance?.status).length,
+        })
+      }
     } catch (e) {
       console.error("Error in fetchSupervisors:", e)
       toast.error(`Failed to load supervisors: ${e instanceof Error ? e.message : "Unknown error"}`)
@@ -852,14 +950,51 @@ export default function SupervisorsPage() {
           throw new Error(errorText || "Failed to update attendance")
         }
 
-        const saved: AttendanceRecord = await res.json()
+        // Safely parse JSON; some APIs may return 204/empty body
+        let saved: AttendanceRecord
+        try {
+          const text = await res.text()
+          saved = text ? (JSON.parse(text) as AttendanceRecord) : ({
+            _id: supervisor.attendance?._attendanceId || "",
+            supervisorId,
+            date: dateStr,
+            status: (status || "Absent") as any,
+          } as AttendanceRecord)
+        } catch {
+          saved = ({
+            _id: supervisor.attendance?._attendanceId || "",
+            supervisorId,
+            date: dateStr,
+            status: (status || "Absent") as any,
+          } as AttendanceRecord)
+        }
 
         // Dismiss loading toast and show success notification
         toast.dismiss(loadingToast)
         toast.success(`Attendance updated for ${supervisor.name}`)
 
-        // Always refresh from database to ensure UI shows current state
-        // This ensures both grid and list views display the actual database state
+        // Optimistic UI update so the selection shows immediately
+        setSupervisors((prev) =>
+          prev.map((s) => {
+            if (s._id !== supervisorId) return s
+            const normalizedStatus = normalizeAttendanceStatus(status, status === "Present")
+            return {
+              ...s,
+              attendance: {
+                present: normalizedStatus === "Present",
+                status: normalizedStatus,
+                _attendanceId: saved?._id || s.attendance?._attendanceId,
+                checkIn: saved?.checkIn || s.attendance?.checkIn || "",
+                checkOut: saved?.checkOut || s.attendance?.checkOut || "",
+                isLeaveApproved: saved?.isLeaveApproved ?? s.attendance?.isLeaveApproved,
+                isLeavePaid: (saved as any)?.isLeavePaid ?? (saved as any)?.isPaid ?? s.attendance?.isLeavePaid,
+                leaveReason: saved?.leaveReason ?? s.attendance?.leaveReason ?? "",
+              },
+            }
+          })
+        )
+
+        // Also refresh from database to ensure UI shows current backend state
         await fetchSupervisors()
         return true
       } catch (e: any) {
@@ -964,41 +1099,68 @@ export default function SupervisorsPage() {
         toast.error("Please select a supervisor first")
         return
       }
+      // Basic validation like edit flow
+      if (!taskFormData.title || !taskFormData.startDate || !taskFormData.endDate || !taskFormData.projectId) {
+        toast.error("Please fill in all required fields")
+        return
+      }
       try {
-        const fd = new FormData()
+        const hasFile = Boolean(taskFormData.file)
 
-        Object.entries(taskFormData).forEach(([key, value]) => {
-          if (key === "file" || key === "startDate" || key === "endDate") return
-          if (value !== undefined && value !== null) {
-            fd.append(key, String(value))
-          }
-        })
-
-        if (taskFormData.startDate) {
+        let response: Response
+        if (hasFile) {
+          // Use multipart only when uploading a file
+          const fd = new FormData()
+          // Include scalar fields
+          Object.entries(taskFormData).forEach(([key, value]) => {
+            if (key === "file" || key === "startDate" || key === "endDate") return
+            if (value !== undefined && value !== null) {
+              fd.append(key, String(value))
+            }
+          })
+          // Required dates
           fd.append("startDate", taskFormData.startDate.toISOString())
-        }
-        if (taskFormData.endDate) {
           fd.append("endDate", taskFormData.endDate.toISOString())
-        }
-        if (taskFormData.file) {
-          fd.append("document", taskFormData.file)
+          // File
+          if (taskFormData.file) {
+            fd.append("document", taskFormData.file)
+          }
+          // Link to supervisor
+          fd.append("supervisorId", selectedSupervisor._id)
+
+          response = await fetch("/api/tasks", { method: "POST", body: fd })
+        } else {
+          // JSON payload when not uploading a file
+          const payload = {
+            title: taskFormData.title,
+            description: taskFormData.description,
+            startDate: taskFormData.startDate.toISOString(),
+            endDate: taskFormData.endDate.toISOString(),
+            projectId: taskFormData.projectId,
+            documentType: taskFormData.documentType,
+            documentUrl: taskFormData.documentUrl,
+            supervisorId: selectedSupervisor._id,
+          }
+          response = await fetch("/api/tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          })
         }
 
-        const response = await fetch("/api/tasks", {
-          method: "POST",
-          body: fd,
-        })
         if (!response.ok) {
-          throw new Error("Failed to create task")
+          const errText = await response.text().catch(() => "")
+          throw new Error(errText || "Failed to create task")
         }
-        await response.json()
+        // Some APIs return created task; ignore content if empty
+        try { await response.json() } catch {}
         toast.success("Task created successfully")
         await fetchSupervisorTasks(selectedSupervisor._id)
         setTaskFormData(initialTaskFormData)
         setIsTaskFormOpen(false)
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error creating task:", error)
-        toast.error("Failed to create task")
+        toast.error(`Failed to create task${error?.message ? `: ${error.message}` : ""}`)
       }
     },
     [fetchSupervisorTasks, selectedSupervisor, taskFormData]
@@ -1390,7 +1552,22 @@ export default function SupervisorsPage() {
                           )}
                         >
                           <div className="flex items-center gap-1">
-                            <SelectValue placeholder="Set Status" />
+                            {supervisor.attendance?.status ? (
+                              <>
+                                {supervisor.attendance.status === "Present" && (
+                                  <CheckCircle className="w-3 h-3 text-green-600" />
+                                )}
+                                {supervisor.attendance.status === "On Duty" && (
+                                  <Briefcase className="w-3 h-3 text-blue-600" />
+                                )}
+                                {supervisor.attendance.status === "Absent" && (
+                                  <XCircle className="w-3 h-3 text-red-600" />
+                                )}
+                                <span className="text-sm font-medium">{supervisor.attendance.status}</span>
+                              </>
+                            ) : (
+                              <SelectValue placeholder="Set Status" />
+                            )}
                           </div>
                         </SelectTrigger>
                         <SelectContent>
