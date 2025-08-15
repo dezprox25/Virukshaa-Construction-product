@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import mongoose from "mongoose";
 import dbConnect from "@/lib/db";
 import Task from "@/models/Task";
+import Project from "@/models/ProjectModel";
+import mongoose from "mongoose";
 
 // GET /api/tasks?supervisorId=...
 export async function GET(req: NextRequest) {
@@ -13,6 +14,13 @@ export async function GET(req: NextRequest) {
     if (!supervisorId) {
       return NextResponse.json(
         { message: "supervisorId is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!mongoose.isValidObjectId(supervisorId)) {
+      return NextResponse.json(
+        { message: "Invalid supervisorId" },
         { status: 400 }
       );
     }
@@ -35,7 +43,31 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   await dbConnect();
   try {
-    const body = await req.json();
+    const contentType = req.headers.get('content-type') || ''
+    let payload: any = {}
+    if (contentType.includes('multipart/form-data')) {
+      const form = await req.formData()
+      const getStr = (k: string) => {
+        const v = form.get(k)
+        return typeof v === 'string' ? v : undefined
+      }
+      payload = {
+        title: getStr('title'),
+        description: getStr('description'),
+        startDate: getStr('startDate'),
+        endDate: getStr('endDate'),
+        documentUrl: getStr('documentUrl'),
+        documentType: getStr('documentType'),
+        projectId: getStr('projectId'),
+        projectTitle: getStr('projectTitle'),
+        supervisorId: getStr('supervisorId'),
+        status: getStr('status') || 'Pending',
+        // Note: if needed in future, handle File: form.get('document') as File
+      }
+    } else {
+      payload = await req.json()
+    }
+
     const { 
       title, 
       description, 
@@ -47,7 +79,7 @@ export async function POST(req: NextRequest) {
       projectTitle,
       supervisorId,
       status = 'Pending' 
-    } = body;
+    } = payload;
 
     if (!title || !supervisorId) {
       return NextResponse.json(
@@ -56,12 +88,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // If projectTitle is not provided but projectId is, we should fetch it
+    if (!mongoose.isValidObjectId(supervisorId)) {
+      return NextResponse.json(
+        { message: "Invalid supervisorId" },
+        { status: 400 }
+      );
+    }
+
+    if (projectId && projectId !== '' && !mongoose.isValidObjectId(projectId)) {
+      return NextResponse.json(
+        { message: "Invalid projectId" },
+        { status: 400 }
+      );
+    }
+
+    // If projectTitle is not provided but projectId is, fetch it safely
     let finalProjectTitle = projectTitle;
     if (projectId && !projectTitle) {
-      const project = await mongoose.model('Project').findById(projectId).select('title');
-      if (project) {
-        finalProjectTitle = project.title;
+      try {
+        const project = await Project.findById(projectId).select('title');
+        if (project) {
+          finalProjectTitle = project.title as string;
+        }
+      } catch (_) {
+        // ignore lookup errors; allow task creation without project title
       }
     }
 
@@ -72,7 +122,7 @@ export async function POST(req: NextRequest) {
       endDate,
       documentUrl,
       documentType,
-      projectId,
+      projectId: projectId || undefined,
       projectTitle: finalProjectTitle,
       assignedTo: supervisorId, // Store as assignedTo in the database
       status
@@ -81,10 +131,18 @@ export async function POST(req: NextRequest) {
     await newTask.save();
 
     return NextResponse.json(newTask, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error creating task:", error);
+    // Handle validation errors from Mongoose explicitly
+    if (error?.name === 'ValidationError') {
+      const details = Object.values(error.errors || {}).map((e: any) => e.message)
+      return NextResponse.json(
+        { message: "Validation Error", details },
+        { status: 400 }
+      );
+    }
     return NextResponse.json(
-      { message: "Internal Server Error" }, 
+      { message: "Internal Server Error", error: error?.message || String(error) }, 
       { status: 500 }
     );
   }

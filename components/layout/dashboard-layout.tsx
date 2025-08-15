@@ -46,6 +46,9 @@ export default function DashboardLayout({
 }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [adminProfile, setAdminProfile] = useState<{adminName: string; email: string} | null>(null)
+  const [profileName, setProfileName] = useState<string>("")
+  const [profileEmail, setProfileEmail] = useState<string>("")
+  const [profileData, setProfileData] = useState<Record<string, any> | null>(null)
   const [lastUpdated, setLastUpdated] = useState<number>(Date.now())
   const router = useRouter()
 
@@ -111,9 +114,69 @@ export default function DashboardLayout({
     }
   }, [])
 
+  // Fetch logged-in user's profile (supervisor/client) for dropdown details
+  useEffect(() => {
+    const fetchRoleProfile = async () => {
+      try {
+        const role = typeof window !== 'undefined' ? localStorage.getItem('userRole') : null
+        const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
+        const emailLS = typeof window !== 'undefined' ? localStorage.getItem('userEmail') : ''
+        if (!role) return
+
+        // Admin already handled by adminProfile fetch
+        if (role === 'admin') {
+          setProfileName(adminProfile?.adminName || 'Admin')
+          setProfileEmail(adminProfile?.email || emailLS || '')
+          setProfileData(adminProfile ? { role: 'admin', ...adminProfile } : { role: 'admin', email: emailLS })
+          return
+        }
+
+        if (!userId) {
+          setProfileName(role.charAt(0).toUpperCase() + role.slice(1))
+          setProfileEmail(emailLS || '')
+          setProfileData({ role, email: emailLS || '' })
+          return
+        }
+
+        let url = ''
+        if (role === 'supervisor') url = `/api/supervisors/${userId}`
+        else if (role === 'client') url = `/api/clients/${userId}`
+        else {
+          setProfileName(role.charAt(0).toUpperCase() + role.slice(1))
+          setProfileEmail(emailLS || '')
+          return
+        }
+
+        const res = await fetch(url)
+        if (!res.ok) throw new Error('Failed to fetch profile')
+        const data = await res.json()
+
+        // Try common name/email fields with safe fallbacks
+        const name = data?.name || data?.fullName || data?.clientName || data?.username || role
+        const email = data?.email || emailLS || ''
+        setProfileName(name)
+        setProfileEmail(email)
+        // Exclude sensitive fields
+        const { password, __v, ...safe } = data || {}
+        setProfileData({ role, ...safe })
+      } catch (e) {
+        // Fallback to localStorage values
+        const role = typeof window !== 'undefined' ? localStorage.getItem('userRole') || 'User' : 'User'
+        const emailLS = typeof window !== 'undefined' ? localStorage.getItem('userEmail') || '' : ''
+        setProfileName(role.charAt(0).toUpperCase() + role.slice(1))
+        setProfileEmail(emailLS)
+        setProfileData({ role, email: emailLS })
+      }
+    }
+
+    fetchRoleProfile()
+  }, [userRole, adminProfile])
+
   const handleLogout = () => {
     localStorage.removeItem("userRole")
     localStorage.removeItem("userEmail")
+    localStorage.removeItem("userId")
+    localStorage.removeItem("userName")
     router.push("/")
   }
 
@@ -256,13 +319,39 @@ export default function DashboardLayout({
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none">
-                      {adminProfile?.adminName || userRole.charAt(0).toUpperCase() + userRole.slice(1)}
+                      {profileName || adminProfile?.adminName || userRole.charAt(0).toUpperCase() + userRole.slice(1)}
                     </p>
                     <p className="text-xs leading-none text-muted-foreground">
-                      {adminProfile?.email || localStorage.getItem("userEmail") || "user@example.com"}
+                      {profileEmail || adminProfile?.email || localStorage.getItem("userEmail") || "user@example.com"}
                     </p>
                   </div>
                 </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {profileData && (
+                  <div className="px-3 py-2 max-h-56 overflow-auto space-y-2">
+                    {Object.entries(profileData)
+                      .filter(([key]) => !['password', '__v', '_id', 'id', 'totalPaid', 'dueAmount', 'salary', 'createdAt', 'updatedAt','status'].includes(key))
+                      .map(([key, value]) => {
+                        const label = key.replace(/([A-Z])/g, ' $1').trim()
+                        let display: string = ''
+                        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+                          display = String(value)
+                        } else if (Array.isArray(value)) {
+                          display = `${value.length} item${value.length === 1 ? '' : 's'}`
+                        } else if (value && typeof value === 'object') {
+                          display = '—'
+                        } else {
+                          display = ''
+                        }
+                        return (
+                          <div key={key} className="grid grid-cols-1 gap-1 border-b pb-2 last:border-none">
+                            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</span>
+                            <span className="text-[13px] font-medium truncate">{display}</span>
+                          </div>
+                        )
+                      })}
+                  </div>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />

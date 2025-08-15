@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -15,12 +15,21 @@ import ProjectsManagement from "@/components/management/supervisor-projects"
 import DailyLogsManagement from "@/components/management/daily-logs"
 import AttendanceManagement from "@/components/management/attendance-management"
 import MaterialsManagement from "@/components/management/materials-management"
-import EmployeeManagement from "@/components/management/employees-management"
+import EmployeeManagement from "@/components/management/supervisor-employee"
 
 export default function SupervisorDashboard() {
   const [activeSection, setActiveSection] = useState("dashboard")
   const [dailyLog, setDailyLog] = useState("")
   const [materialUsed, setMaterialUsed] = useState("")
+  const [loadingTasks, setLoadingTasks] = useState(false)
+  const [tasksError, setTasksError] = useState<string | null>(null)
+  const [tasks, setTasks] = useState<Array<{
+    _id: string
+    title: string
+    status: "Pending" | "In Progress" | "Completed"
+    priority: "Low" | "Medium" | "High"
+    projectTitle?: string
+  }>>([])
 
   const todayStats = [
     { title: "Workers Present", value: "28/32", icon: Users, color: "text-green-600" },
@@ -29,12 +38,41 @@ export default function SupervisorDashboard() {
     { title: "Safety Issues", value: "2", icon: AlertTriangle, color: "text-red-600" },
   ]
 
-  const currentTasks = [
-    { task: "Foundation Pouring - Block A", status: "In Progress", priority: "High" },
-    { task: "Steel Framework Installation", status: "Pending", priority: "Medium" },
-    { task: "Electrical Wiring - Floor 2", status: "Completed", priority: "Low" },
-    { task: "Plumbing Installation", status: "In Progress", priority: "High" },
-  ]
+  // Load tasks assigned to this supervisor
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        setLoadingTasks(true)
+        setTasksError(null)
+        const supervisorId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
+        const role = typeof window !== 'undefined' ? localStorage.getItem('userRole') : null
+        if (!supervisorId || role !== 'supervisor') {
+          setTasks([])
+          return
+        }
+        const res = await fetch(`/api/tasks?supervisorId=${encodeURIComponent(supervisorId)}`)
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error(err.message || 'Failed to load tasks')
+        }
+        const data = await res.json()
+        const mapped = (data || []).map((t: any) => ({
+          _id: t._id,
+          title: t.title,
+          status: t.status,
+          priority: t.priority,
+          projectTitle: t.projectTitle || t.projectId?.title,
+        }))
+        setTasks(mapped)
+      } catch (e: any) {
+        setTasksError(e?.message || 'Failed to load tasks')
+      } finally {
+        setLoadingTasks(false)
+      }
+    }
+
+    fetchTasks()
+  }, [])
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -67,8 +105,6 @@ export default function SupervisorDashboard() {
       case "task":
         return <ProjectsManagement />
       case "employee":
-        return <DailyLogsManagement />
-      case "team":
         return <EmployeeManagement />
       case "attendance":
         return <AttendanceManagement />
@@ -170,22 +206,37 @@ export default function SupervisorDashboard() {
                 <CardDescription>Current task assignments and status</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {currentTasks.map((task, index) => (
-                    <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex-1">
-                        <h4 className="font-medium mb-2">{task.task}</h4>
-                        <div className="flex items-center gap-2">
-                          <Badge className={getStatusColor(task.status)}>{task.status}</Badge>
-                          <Badge className={getPriorityColor(task.priority)}>{task.priority}</Badge>
+                {loadingTasks && (
+                  <p className="text-sm text-muted-foreground">Loading tasks...</p>
+                )}
+                {tasksError && (
+                  <p className="text-sm text-red-600">{tasksError}</p>
+                )}
+                {!loadingTasks && !tasksError && (
+                  <div className="space-y-4">
+                    {tasks.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No tasks assigned.</p>
+                    ) : (
+                      tasks.map((task) => (
+                        <div key={task._id} className="flex items-center justify-between p-4 border rounded-lg">
+                          <div className="flex-1">
+                            <h4 className="font-medium mb-1">{task.title}</h4>
+                            {task.projectTitle && (
+                              <p className="text-xs text-muted-foreground mb-2">Project: {task.projectTitle}</p>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <Badge className={getStatusColor(task.status)}>{task.status}</Badge>
+                              <Badge className={getPriorityColor(task.priority)}>{task.priority}</Badge>
+                            </div>
+                          </div>
+                          <Button variant="outline" size="sm" onClick={() => setActiveSection("task")}>
+                            Update
+                          </Button>
                         </div>
-                      </div>
-                      <Button variant="outline" size="sm">
-                        Update
-                      </Button>
-                    </div>
-                  ))}
-                </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 

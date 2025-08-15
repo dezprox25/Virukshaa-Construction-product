@@ -78,17 +78,7 @@ export default function LoginPage() {
       if (!selectedRole) {
         throw new Error('Please select a role');
       }
-
-      if (selectedRole !== 'admin') {
-        const validRoles = ['superadmin', 'supervisor', 'client'];
-        const userRole = validRoles.includes(selectedRole) ? selectedRole : 'client';
-
-        localStorage.setItem("userRole", userRole);
-        localStorage.setItem("userEmail", email);
-        router.push("/dashboard");
-        return;
-      }
-
+      // Always authenticate against the API for all roles so passwords are validated
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
@@ -106,6 +96,10 @@ export default function LoginPage() {
       localStorage.setItem("userRole", selectedRole);
       localStorage.setItem("userEmail", data.user.email);
       localStorage.setItem("userName", data.user.name || 'User');
+      // Persist backend user id for role-scoped data (e.g., supervisor tasks)
+      if (data.user && data.user._id) {
+        localStorage.setItem("userId", data.user._id);
+      }
       router.push("/dashboard");
     } catch (error) {
       console.error('Login error:', error);

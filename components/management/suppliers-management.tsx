@@ -36,7 +36,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { toast } from "sonner"
+import { toast, Toaster } from "sonner"
 import { Plus, Edit, Trash2, Phone, Mail, MapPin, Search, Filter, CreditCard, Grid3X3, List, RefreshCw, Building2, CheckCircle, XCircle, Package, UserCheck, Calendar, IndianRupee, Edit3, Eye, MessageCircle, Pencil } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -140,7 +140,7 @@ const SuppliersManagement: React.FC = () => {
   const [projectMaterialInputs, setProjectMaterialInputs] = useState<Record<string, ProjectMaterialLocal>>({});
   const [projectMaterials, setProjectMaterials] = useState<Record<string, ProjectMaterialLocal[]>>({});
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  
+
   const [materialOptions, setMaterialOptions] = useState([
     { value: "Cement", label: "Cement" },
     { value: "Sand", label: "Sand" },
@@ -151,7 +151,7 @@ const SuppliersManagement: React.FC = () => {
     { value: "Wood / Timber", label: "Wood / Timber" },
     { value: "Paint", label: "Paint" },
   ]);
-  
+
   const [materialInputValue, setMaterialInputValue] = useState("");
   const [loading, setLoading] = useState(true);
   const [editingBankDetails, setEditingBankDetails] = useState<BankDetail[]>([]);
@@ -162,16 +162,16 @@ const SuppliersManagement: React.FC = () => {
 
   const filteredSuppliers = useMemo(() => {
     return suppliers.filter((supplier: Supplier) => {
-      const matchesSearch = !searchTerm || 
+      const matchesSearch = !searchTerm ||
         supplier.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         supplier.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
         supplier.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
         supplier.phone.includes(searchTerm);
-        
-      const matchesStatus = statusFilter === 'all' || 
+
+      const matchesStatus = statusFilter === 'all' ||
         (statusFilter === 'active' && supplier.status === 'Active') ||
         (statusFilter === 'inactive' && supplier.status === 'Inactive');
-        
+
       return matchesSearch && matchesStatus;
     });
   }, [suppliers, searchTerm, statusFilter]);
@@ -198,7 +198,7 @@ const SuppliersManagement: React.FC = () => {
               quantity: Number(pm.quantity) || 0,
               amount: Number(pm.amount) || 0,
               projectId: pm.projectId,
-              date: pm.date   
+              date: pm.date
             })
           })
         }
@@ -290,7 +290,7 @@ const SuppliersManagement: React.FC = () => {
       }
       const savedSupplier = await response.json()
       toast.success(`Supplier ${editingSupplier ? "updated" : "created"} successfully`)
-      
+
       // Update the suppliers list
       if (editingSupplier) {
         setSuppliers(suppliers.map(s => s._id === savedSupplier._id ? savedSupplier : s))
@@ -378,26 +378,29 @@ const SuppliersManagement: React.FC = () => {
       }
     }));
   }
-
   const addMaterialToProject = async (projectId: string) => {
     const currentInput = projectMaterialInputs[projectId] || {};
-    const { materialType, quantity, amount } = currentInput;
-  
+    const { materialType, quantity, amount } = currentInput as {
+      materialType?: string;
+      quantity?: number;
+      amount?: number;
+    };
+
     // Validate input values
-    if (!materialType || quantity === "" || amount === "" || Number(quantity) <= 0 || Number(amount) < 0) {
+    if (!materialType || quantity == null || amount == null || Number(quantity) <= 0 || Number(amount) < 0) {
       toast.error("Please fill all fields with valid values");
       return;
     }
-  
+
     if (!selectedSupplier?._id) {
       toast.error("No supplier selected");
       return;
     }
-  
+
     // Generate a unique ID for the new material entry
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const timestamp = new Date().toISOString();
-    
+
     // Create the new material entry with all required fields
     const newMaterial = {
       _id: tempId,
@@ -409,12 +412,12 @@ const SuppliersManagement: React.FC = () => {
       createdAt: timestamp,
       updatedAt: timestamp
     };
-  
+
     console.log("Creating new material entry:", newMaterial);
-    
+
     // Prepare the material data for the server (without temporary fields)
     const { _id, ...materialForServer } = newMaterial;
-  
+
     setIsSaving(true);
     try {
       // 1. Update local project materials state
@@ -422,13 +425,13 @@ const SuppliersManagement: React.FC = () => {
         ...prev,
         [projectId]: [...(prev[projectId] || []), newMaterial]
       }));
-  
+
       // 2. Update supplier's materials in local state
       if (selectedSupplier) {
         setSelectedSupplier(prevSupplier => {
           if (!prevSupplier) return null;
-          const currentMaterials = Array.isArray(prevSupplier.projectMaterials) 
-            ? prevSupplier.projectMaterials 
+          const currentMaterials = Array.isArray(prevSupplier.projectMaterials)
+            ? prevSupplier.projectMaterials
             : [];
           return {
             ...prevSupplier,
@@ -448,38 +451,38 @@ const SuppliersManagement: React.FC = () => {
           };
         });
       }
-  
+
       // 3. Send new material to server
       const response = await fetch(`/api/suppliers/${selectedSupplier._id}/materials`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(materialForServer)
       });
-  
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to save material');
       }
-  
+
       const result = await response.json();
       console.log('Server response for new material:', result);
-  
+
       // 4. Update local state with server-generated ID
       setProjectMaterials(prev => ({
         ...prev,
-        [projectId]: (prev[projectId] || []).map(m => 
+        [projectId]: (prev[projectId] || []).map(m =>
           m._id === tempId ? { ...m, _id: result._id } : m
         )
       }));
-  
+
       // 5. Update selected supplier's materials with server ID
       if (selectedSupplier) {
         setSelectedSupplier(prevSupplier => {
           if (!prevSupplier) return null;
-          const currentMaterials = Array.isArray(prevSupplier.projectMaterials) 
-            ? [...prevSupplier.projectMaterials] 
+          const currentMaterials = Array.isArray(prevSupplier.projectMaterials)
+            ? [...prevSupplier.projectMaterials]
             : [];
-          
+
           // Find and update the material with the server-generated ID
           const materialIndex = currentMaterials.findIndex(m => m._id === tempId);
           if (materialIndex !== -1) {
@@ -488,14 +491,14 @@ const SuppliersManagement: React.FC = () => {
               _id: result._id
             };
           }
-          
+
           return {
             ...prevSupplier,
             projectMaterials: currentMaterials
           };
         });
       }
-  
+
       // 6. Reset the input form
       setProjectMaterialInputs(prev => ({
         ...prev,
@@ -507,18 +510,18 @@ const SuppliersManagement: React.FC = () => {
           date: ""
         }
       }));
-  
+
       toast.success(`Added new ${materialType} entry (Qty: ${quantity}, Amount: ₹${amount})`);
     } catch (error) {
       console.error('Error adding material:', error);
       toast.error(`Failed to add material: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  
+
       // Rollback material from project
       setProjectMaterials(prev => ({
         ...prev,
         [projectId]: (prev[projectId] || []).filter(m => m._id !== newMaterial._id)
       }));
-  
+
       // Rollback material from supplier
       if (selectedSupplier) {
         setSelectedSupplier({
@@ -530,7 +533,7 @@ const SuppliersManagement: React.FC = () => {
       setIsSaving(false);
     }
   };
-  
+
   const removeMaterialFromProject = async (projectId: string, materialType: string) => {
     if (!selectedSupplier?._id) {
       toast.error("No supplier selected");
@@ -747,9 +750,11 @@ const SuppliersManagement: React.FC = () => {
   const activeSuppliers = suppliers.filter((supplier) => supplier.status === "Active").length
   const inactiveSuppliers = suppliers.filter((supplier) => supplier.status === "Inactive").length
 
+  // Early loading state
   if (loading && suppliers.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
+        <Toaster richColors />
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-2 text-muted-foreground">Loading suppliers...</p>
@@ -760,7 +765,7 @@ const SuppliersManagement: React.FC = () => {
 
   const renderSupplierCard = (supplier: Supplier) => {
     const primaryBankAccount = supplier.bankDetails?.find(acc => acc.isPrimary) || supplier.bankDetails?.[0];
-    
+
     return (
       <Card key={supplier._id} className="hover:shadow-md transition-shadow">
         <CardHeader className="pb-3">
@@ -844,138 +849,138 @@ const SuppliersManagement: React.FC = () => {
   };
 
   const renderGridView = () => (
-  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-    {filteredSuppliers.map((supplier) => (
-      <Card
-        key={supplier._id}
-        className="hover:shadow-lg transition-all duration-200 cursor-pointer hover:scale-[1.02]"
-        onClick={() => handleSupplierClick(supplier)}
-      >
-        <CardContent className="p-6">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <Avatar className="h-12 w-12">
-                <AvatarImage
-                  src={supplier.avatar || `https://avatar.vercel.sh/${supplier.email}.png`}
-                  alt={supplier.companyName}
-                />
-                <AvatarFallback>
-                  {supplier.companyName
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <h3 className="font-semibold text-lg">{supplier.companyName}</h3>
-                <p className="text-sm text-muted-foreground">{supplier.contactPerson}</p>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {filteredSuppliers.map((supplier) => (
+        <Card
+          key={supplier._id}
+          className="hover:shadow-lg transition-all duration-200 cursor-pointer hover:scale-[1.02]"
+          onClick={() => handleSupplierClick(supplier)}
+        >
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-12 w-12">
+                  <AvatarImage
+                    src={supplier.avatar || `https://avatar.vercel.sh/${supplier.email}.png`}
+                    alt={supplier.companyName}
+                  />
+                  <AvatarFallback>
+                    {supplier.companyName
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <h3 className="font-semibold text-lg">{supplier.companyName}</h3>
+                  <p className="text-sm text-muted-foreground">{supplier.contactPerson}</p>
+                </div>
               </div>
+              <Badge className={getStatusColor(supplier.status)}>{supplier.status}</Badge>
             </div>
-            <Badge className={getStatusColor(supplier.status)}>{supplier.status}</Badge>
-          </div>
-          <div className="space-y-2 mb-4">
-            <div className="flex items-center gap-2 text-sm">
-              <Mail className="w-4 h-4 text-muted-foreground" />
-              <span>{supplier.email}</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <Phone className="w-4 h-4 text-muted-foreground" />
-              <span>{supplier.phone}</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <MapPin className="w-4 h-4 text-muted-foreground" />
-              <span>{supplier.address}</span>
-            </div>
-            {supplier.supplyStartDate && (
+            <div className="space-y-2 mb-4">
+              <div className="flex items-center gap-2 text-sm">
+                <Mail className="w-4 h-4 text-muted-foreground" />
+                <span>{supplier.email}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Phone className="w-4 h-4 text-muted-foreground" />
+                <span>{supplier.phone}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <MapPin className="w-4 h-4 text-muted-foreground" />
+                <span>{supplier.address}</span>
+              </div>
+              {supplier.supplyStartDate && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Calendar className="w-4 h-4 text-muted-foreground" />
+                  <span>Supply Started: {format(new Date(supplier.supplyStartDate), "MMM yyyy")}</span>
+                </div>
+              )}
+              {supplier.bankDetails && supplier.bankDetails.length > 0 && (
+                <div className="flex items-center gap-2 text-sm">
+                  <CreditCard className="w-4 h-4 text-muted-foreground" />
+                  <span>
+                    {supplier.bankDetails.find(acc => acc.isPrimary)?.bankName || supplier.bankDetails[0]?.bankName || 'Bank Account'}
+                    {supplier.bankDetails.find(acc => acc.isPrimary) && ' (Primary)'}
+                  </span>
+                </div>
+              )}
               <div className="flex items-center gap-2 text-sm">
                 <Calendar className="w-4 h-4 text-muted-foreground" />
-                <span>Supply Started: {format(new Date(supplier.supplyStartDate), "MMM yyyy")}</span>
-              </div>
-            )}
-            {supplier.bankDetails && supplier.bankDetails.length > 0 && (
-              <div className="flex items-center gap-2 text-sm">
-                <CreditCard className="w-4 h-4 text-muted-foreground" />
-                <span>
-                  {supplier.bankDetails.find(acc => acc.isPrimary)?.bankName || supplier.bankDetails[0]?.bankName || 'Bank Account'} 
-                  {supplier.bankDetails.find(acc => acc.isPrimary) && ' (Primary)'}
-                </span>
-              </div>
-            )}
-            <div className="flex items-center gap-2 text-sm">
-              <Calendar className="w-4 h-4 text-muted-foreground" />
-              <span>Registered: {format(new Date(supplier.createdAt), "MMM yyyy")}</span>
-            </div>
-          </div>
-          {supplier.materialTypes && supplier.materialTypes.length > 0 && (
-            <div className="mb-4">
-              <p className="text-sm font-medium mb-2">Materials:</p>
-              <div className="flex flex-wrap gap-1">
-                {supplier.materialTypes.slice(0, 3).map((material, index) => (
-                  <Badge key={index} variant="outline" className="text-xs">
-                    {material}
-                  </Badge>
-                ))}
-                {supplier.materialTypes.length > 3 && (
-                  <Badge variant="outline" className="text-xs">
-                    +{supplier.materialTypes.length - 3} more
-                  </Badge>
-                )}
+                <span>Registered: {format(new Date(supplier.createdAt), "MMM yyyy")}</span>
               </div>
             </div>
-          )}
-          <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1 bg-transparent"
-              onClick={() => openEditDialog(supplier)}
-            >
-              <Edit className="w-4 h-4 mr-2" />
-              Edit
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-green-600 hover:text-green-700 border-green-500 hover:bg-green-50 bg-transparent"
-              onClick={() => window.open(`https://wa.me/${supplier.phone.replace(/[^0-9]/g, "")}`, "_blank")}
-            >
-              <MessageCircle className="w-4 h-4" />
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => {
-                setSelectedSupplier(supplier);
-                setIsDetailSheetOpen(true);
-              }}
-            >
-              <Eye className="w-4 h-4" />
-            </Button>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive" size="sm">
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete Supplier</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Are you sure you want to delete {supplier.companyName}? This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => handleDelete(supplier._id)}>Delete</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
-        </CardContent>
-      </Card>
-    ))}
-  </div>
-)
+            {supplier.materialTypes && supplier.materialTypes.length > 0 && (
+              <div className="mb-4">
+                <p className="text-sm font-medium mb-2">Materials:</p>
+                <div className="flex flex-wrap gap-1">
+                  {supplier.materialTypes.slice(0, 3).map((material, index) => (
+                    <Badge key={index} variant="outline" className="text-xs">
+                      {material}
+                    </Badge>
+                  ))}
+                  {supplier.materialTypes.length > 3 && (
+                    <Badge variant="outline" className="text-xs">
+                      +{supplier.materialTypes.length - 3} more
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            )}
+            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 bg-transparent"
+                onClick={() => openEditDialog(supplier)}
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                Edit
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-green-600 hover:text-green-700 border-green-500 hover:bg-green-50 bg-transparent"
+                onClick={() => window.open(`https://wa.me/${supplier.phone.replace(/[^0-9]/g, "")}`, "_blank")}
+              >
+                <MessageCircle className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedSupplier(supplier);
+                  setIsDetailSheetOpen(true);
+                }}
+              >
+                <Eye className="w-4 h-4" />
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="sm">
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Supplier</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete {supplier.companyName}? This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => handleDelete(supplier._id)}>Delete</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  )
 
   const renderListView = () => (
     <Card>
@@ -1080,6 +1085,7 @@ const SuppliersManagement: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <Toaster richColors />
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
@@ -1286,7 +1292,7 @@ const SuppliersManagement: React.FC = () => {
                     <Plus className="w-4 h-4 mr-2" /> Add Bank Account
                   </Button>
                 </div>
-                
+
                 {formData.bankDetails?.length ? (
                   <div className="space-y-2">
                     {formData.bankDetails.map((detail, index) => (
@@ -1336,7 +1342,7 @@ const SuppliersManagement: React.FC = () => {
                   </div>
                 )}
               </div>
-              
+
               {/* Bank Details Dialog */}
               <Dialog open={isBankDetailsOpen} onOpenChange={setIsBankDetailsOpen}>
                 <DialogContent>
@@ -1345,8 +1351,8 @@ const SuppliersManagement: React.FC = () => {
                       {currentBankDetail?.accountNumber ? 'Edit Bank Account' : 'Add Bank Account'}
                     </DialogTitle>
                     <DialogDescription>
-                      {currentBankDetail?.accountNumber 
-                        ? 'Update the bank account details below.' 
+                      {currentBankDetail?.accountNumber
+                        ? 'Update the bank account details below.'
                         : 'Enter the bank account details for this supplier.'}
                     </DialogDescription>
                   </DialogHeader>
@@ -1375,7 +1381,7 @@ const SuppliersManagement: React.FC = () => {
                         />
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Account Holder Name</Label>
@@ -1408,7 +1414,7 @@ const SuppliersManagement: React.FC = () => {
                         </Select>
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>IFSC Code</Label>
@@ -1433,7 +1439,7 @@ const SuppliersManagement: React.FC = () => {
                         />
                       </div>
                     </div>
-                    
+
                     <div className="space-y-2">
                       <Label>UPI ID</Label>
                       <Input
@@ -1445,7 +1451,7 @@ const SuppliersManagement: React.FC = () => {
                         placeholder="e.g., name@bank"
                       />
                     </div>
-                    
+
                     <div className="flex items-center space-x-2">
                       <Checkbox
                         id="isPrimary"
@@ -1459,7 +1465,7 @@ const SuppliersManagement: React.FC = () => {
                         Set as primary account
                       </Label>
                     </div>
-                    
+
                     <div className="flex justify-end gap-2 pt-4">
                       <Button
                         type="button"
@@ -1477,24 +1483,24 @@ const SuppliersManagement: React.FC = () => {
                               return;
                             }
                           }
-                          
+
                           if (!currentBankDetail) return; // Guard clause in case currentBankDetail is null
-                          
+
                           const updatedDetails = [...(formData.bankDetails || [])];
                           const existingIndex = updatedDetails.findIndex(
                             d => d.accountNumber === currentBankDetail.accountNumber
                           );
-                          
+
                           if (currentBankDetail.isPrimary) {
                             updatedDetails.forEach(d => { d.isPrimary = false; });
                           }
-                          
+
                           if (existingIndex >= 0) {
                             updatedDetails[existingIndex] = { ...currentBankDetail };
                           } else {
                             updatedDetails.push({ ...currentBankDetail });
                           }
-                          
+
                           handleFormChange('bankDetails', updatedDetails);
                           setIsBankDetailsOpen(false);
                           setCurrentBankDetail(null);
@@ -1506,7 +1512,7 @@ const SuppliersManagement: React.FC = () => {
                   </div>
                 </DialogContent>
               </Dialog>
-              
+
               <div className="space-y-2">
                 <Label>Supply Start Date (Optional)</Label>
                 <Popover>
@@ -1699,6 +1705,7 @@ const SuppliersManagement: React.FC = () => {
                 <TabsList className="grid w-full grid-cols-2 mb-4">
                   <TabsTrigger value="overview">Overview</TabsTrigger>
                   <TabsTrigger value="sites">Sites</TabsTrigger>
+
                 </TabsList>
                 <TabsContent value="overview" className="flex-1 overflow-y-auto pr-2 space-y-6">
                   {/* Quick Stats */}
@@ -1974,6 +1981,7 @@ const SuppliersManagement: React.FC = () => {
                     </CardContent>
                   </Card>
                 </TabsContent>
+            
               </Tabs>
             </div>
           )}

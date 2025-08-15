@@ -18,7 +18,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Briefcase, Calendar, CalendarPlus, Calculator, CheckCircle, ClipboardList, Clock, Edit, Eye, Filter, Folder, Grid3X3, Hash, HelpCircle, IndianRupee, List, Mail, MapPin, MessageCircle, Phone, Plus, RefreshCw, Search, Trash2, Users, XCircle, FileText,Lock } from 'lucide-react'
+import { Briefcase, Calendar, CalendarPlus, Calculator, CheckCircle, ClipboardList, Clock, Edit, Eye, Filter, Folder, Grid3X3, Hash, HelpCircle, IndianRupee, List, Mail, MapPin, MessageCircle, Phone, Plus, RefreshCw, Search, Trash2, Users, XCircle, FileText,Lock, UserMinus } from 'lucide-react'
 import { SupervisorLeaveApprovalModal } from "@/components/management/SupervisorLeaveApprovalModal"
 import { AcroFormPasswordField } from "jspdf"
 
@@ -584,6 +584,8 @@ export default function SupervisorsPage() {
   const [availableEmployees, setAvailableEmployees] = useState<Employee[]>([])
   const [loadingEmployees, setLoadingEmployees] = useState(false)
   const [isEmployeeAssignOpen, setIsEmployeeAssignOpen] = useState(false)
+  const [supervisorEmployees, setSupervisorEmployees] = useState<Employee[]>([])
+  const [detailTab, setDetailTab] = useState<'overview' | 'tasks' | 'team'>('overview')
 
   // Leave modal state
   const [showLeaveApproval, setShowLeaveApproval] = useState(false)
@@ -603,6 +605,90 @@ export default function SupervisorsPage() {
       return matchesSearch && matchesStatus
     })
   }, [supervisors, searchTerm, statusFilter])
+
+  // Fetch assigned employees for a supervisor
+  const fetchAssignedEmployees = useCallback(async (supervisorId: string) => {
+    try {
+      const res = await fetch(`/api/supervisors/${supervisorId}/employees`)
+      if (!res.ok) throw new Error('Failed to fetch assigned employees')
+      const data: Employee[] = await res.json()
+      setSupervisorEmployees(data)
+    } catch (e: any) {
+      console.error(e)
+      toast.error(e?.message || 'Failed to load team members')
+    }
+  }, [])
+
+  // Fetch available (unassigned) employees to assign
+  const fetchAvailableEmployees = useCallback(async (supervisorId: string) => {
+    try {
+      setLoadingEmployees(true)
+      const res = await fetch(`/api/employees?availableForSupervisor=${encodeURIComponent(supervisorId)}`)
+      if (!res.ok) throw new Error('Failed to fetch available employees')
+      const data: Employee[] = await res.json()
+      setAvailableEmployees(data)
+    } catch (e: any) {
+      console.error(e)
+      toast.error(e?.message || 'Failed to load available employees')
+    } finally {
+      setLoadingEmployees(false)
+    }
+  }, [])
+
+  const openEmployeeAssign = useCallback(() => {
+    if (!selectedSupervisor) return
+    fetchAvailableEmployees(selectedSupervisor._id)
+    setIsEmployeeAssignOpen(true)
+  }, [selectedSupervisor, fetchAvailableEmployees])
+
+  const handleEmployeeAssign = useCallback(async (employeeId: string) => {
+    if (!selectedSupervisor) return
+    try {
+      const res = await fetch(`/api/supervisors/${selectedSupervisor._id}/employees`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employeeId }),
+      })
+      if (!res.ok) throw new Error('Failed to assign employee')
+      toast.success('Employee assigned')
+      setIsEmployeeAssignOpen(false)
+      // refresh lists
+      fetchAssignedEmployees(selectedSupervisor._id)
+    } catch (e: any) {
+      console.error(e)
+      toast.error(e?.message || 'Could not assign employee')
+    }
+  }, [selectedSupervisor, fetchAssignedEmployees])
+
+  const handleEmployeeUnassign = useCallback(async (employeeId: string) => {
+    if (!selectedSupervisor) return
+    try {
+      const res = await fetch(`/api/supervisors/${selectedSupervisor._id}/employees/${employeeId}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) throw new Error('Failed to unassign employee')
+      toast.success('Employee unassigned')
+      // refresh list
+      fetchAssignedEmployees(selectedSupervisor._id)
+    } catch (e: any) {
+      console.error(e)
+      toast.error(e?.message || 'Could not unassign employee')
+    }
+  }, [selectedSupervisor, fetchAssignedEmployees])
+
+  // When opening detail panel or switching to Team tab, load employees
+  useEffect(() => {
+    if (selectedSupervisor && isDetailPanelOpen && detailTab === 'team') {
+      fetchAssignedEmployees(selectedSupervisor._id)
+    }
+  }, [selectedSupervisor, isDetailPanelOpen, detailTab, fetchAssignedEmployees])
+
+  // Prefetch available employees when a supervisor is selected (to speed up assign flow)
+  useEffect(() => {
+    if (selectedSupervisor) {
+      fetchAvailableEmployees(selectedSupervisor._id)
+    }
+  }, [selectedSupervisor, fetchAvailableEmployees])
 
   // Stats
   const totalSupervisors = supervisors.length
@@ -651,18 +737,18 @@ export default function SupervisorsPage() {
     }
   }, [])
 
-  const fetchAvailableEmployees = useCallback(async () => {
-    setLoadingEmployees(true)
-    try {
-      const res = await fetch("/api/employees")
-      const data: Employee[] = await res.json()
-      setAvailableEmployees(Array.isArray(data) ? data : [])
-    } catch {
-      toast.error("Failed to load employees")
-    } finally {
-      setLoadingEmployees(false)
-    }
-  }, [])
+  // const fetchAvailableEmployees = useCallback(async () => {
+  //   setLoadingEmployees(true)
+  //   try {
+  //     const res = await fetch("/api/employees")
+  //     const data: Employee[] = await res.json()
+  //     setAvailableEmployees(Array.isArray(data) ? data : [])
+  //   } catch {
+  //     toast.error("Failed to load employees")
+  //   } finally {
+  //     setLoadingEmployees(false)
+  //   }
+  // }, [])
 
   const fetchSupervisorTasks = useCallback(async (supervisorId: string) => {
     setIsLoadingTasks(true)
@@ -934,9 +1020,8 @@ export default function SupervisorsPage() {
 
   useEffect(() => {
     fetchSupervisors()
-    fetchAvailableEmployees()
     fetchProjects()
-  }, [fetchProjects, fetchAvailableEmployees, fetchSupervisors])
+  }, [fetchProjects, fetchSupervisors])
 
   // Attendance updates
   const updateAttendance = useCallback(
@@ -1330,15 +1415,15 @@ export default function SupervisorsPage() {
   }, [])
 
   // Employees assign
-  const handleEmployeeAssign = useCallback(
-    async (employeeId: string) => {
-      if (!selectedSupervisor?._id) return
-      // No-op for demo
-      toast.success("Employee assigned successfully")
-      setIsEmployeeAssignOpen(false)
-    },
-    [selectedSupervisor]
-  )
+  // const handleEmployeeAssign = useCallback(
+  //   async (employeeId: string) => {
+  //     if (!selectedSupervisor?._id) return
+  //     // No-op for demo
+  //     toast.success("Employee assigned successfully")
+  //     setIsEmployeeAssignOpen(false)
+  //   },
+  //   [selectedSupervisor]
+  // )
 
   // Open/close
   const openSupervisorDetail = useCallback(
@@ -2038,10 +2123,11 @@ export default function SupervisorsPage() {
                 </div>
               </SheetHeader>
 
-              <Tabs defaultValue="overview" className="mt-6 flex flex-col h-[calc(100%-100px)]">
-                <TabsList className="grid w-full grid-cols-2 mb-4">
+              <Tabs defaultValue="overview" value={detailTab} onValueChange={(v) => setDetailTab(v as any)} className="mt-6 flex flex-col h-[calc(100%-100px)]">
+                <TabsList className="grid w-full grid-cols-3 mb-4">
                   <TabsTrigger value="overview">Overview</TabsTrigger>
                   <TabsTrigger value="tasks">Tasks</TabsTrigger>
+                  <TabsTrigger value="team">Team Members</TabsTrigger>
 
                 </TabsList>
 
@@ -2238,6 +2324,53 @@ export default function SupervisorsPage() {
                         <Button variant="outline" size="sm" onClick={openTaskForm} className="mt-2 bg-transparent">
                           <CalendarPlus className="w-4 h-4 mr-2" />
                           Add First Task
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+                <TabsContent value="team" className="flex-1 overflow-y-auto pr-2 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-lg font-semibold">Team Members</h3>
+                    <Button size="sm" onClick={openEmployeeAssign}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Assign Employee
+                    </Button>
+                  </div>
+                  <div className="space-y-3">
+                    {supervisorEmployees.length > 0 ? (
+                      supervisorEmployees.map((emp) => (
+                        <Card key={emp._id} className="hover:shadow-md transition-shadow">
+                          <CardContent className="p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <Avatar className="h-8 w-8">
+                                <AvatarImage src={emp.avatar || "/placeholder.svg?height=32&width=32&query=avatar"} alt={emp.name} />
+                                <AvatarFallback>
+                                  {emp.name
+                                    .split(" ")
+                                    .map((n) => n[0])
+                                    .join("")}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <h4 className="font-medium">{emp.name}</h4>
+                                <p className="text-sm text-muted-foreground">{emp.position}</p>
+                              </div>
+                            </div>
+                            <Button variant="destructive" size="sm" onClick={() => handleEmployeeUnassign(emp._id)}>
+                              <UserMinus className="w-3 h-3 mr-2" />
+                              Unassign
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      ))
+                    ) : (
+                      <div className="text-center py-8">
+                        <Users className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                        <p className="text-muted-foreground">No team members yet</p>
+                        <Button variant="outline" size="sm" onClick={openEmployeeAssign} className="mt-2 bg-transparent">
+                          <Plus className="w-4 h-4 mr-2" />
+                          Assign First Employee
                         </Button>
                       </div>
                     )}

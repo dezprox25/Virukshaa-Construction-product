@@ -34,7 +34,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { toast } from "sonner"
+import { toast, Toaster } from "sonner"
 import {
   Plus,
   Edit,
@@ -114,6 +114,10 @@ export default function EmployeesManagement() {
   const setShiftCount = (id: string, val: number) =>
     setShiftsToday((prev) => ({ ...prev, [id]: Math.max(0, Math.min(3, Math.floor(val))) }))
   const calcTodaysPay = (emp: Employee) => getShiftCount(emp._id) * (emp.salary || 0)
+
+  // INR currency formatter
+  const formatINR = (val: number) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(val || 0)
 
   const getTodayDateStr = () => {
     const today = new Date()
@@ -391,6 +395,7 @@ export default function EmployeesManagement() {
   if (loading && employees.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
+        <Toaster richColors />
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-2 text-muted-foreground">Loading employees...</p>
@@ -470,12 +475,12 @@ export default function EmployeesManagement() {
               <div className="flex items-center gap-2 text-sm">
                 <DollarSign className="w-4 h-4 text-muted-foreground" />
                 <span>
-                  {employee.workType === "Daily" ? "Per Shift: " : "Salary: "}${employee.salary.toLocaleString()}
+                  {employee.workType === "Daily" ? "Per Shift: " : "Salary: "}{formatINR(employee.salary)}
                 </span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <IndianRupee className="w-4 h-4 text-muted-foreground" />
-                <span>Today's Pay: ${calcTodaysPay(employee).toLocaleString()}</span>
+                <span>Today's Pay: {formatINR(calcTodaysPay(employee))}</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <Calendar className="w-4 h-4 text-muted-foreground" />
@@ -594,7 +599,7 @@ export default function EmployeesManagement() {
                 </TableCell>
                 <TableCell>{employee.workType}</TableCell>
                 <TableCell>
-                  {employee.workType === "Daily" ? "Per Shift: " : ""}${employee.salary.toLocaleString()}
+                  {employee.workType === "Daily" ? "Per Shift: " : ""}{formatINR(employee.salary)}
                 </TableCell>
                 {/* Status column removed */}
                 <TableCell onClick={(e) => e.stopPropagation()}>
@@ -617,7 +622,7 @@ export default function EmployeesManagement() {
                     </SelectContent>
                   </Select>
                 </TableCell>
-                <TableCell>${calcTodaysPay(employee).toLocaleString()}</TableCell>
+                <TableCell>{formatINR(calcTodaysPay(employee))}</TableCell>
                 <TableCell>
                   <div className="text-sm">
                     <div>{employee.phone}</div>
@@ -670,6 +675,7 @@ export default function EmployeesManagement() {
 
   return (
     <div className="space-y-6">
+      <Toaster richColors />
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
@@ -699,7 +705,7 @@ export default function EmployeesManagement() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              ${totalSalaryToday.toLocaleString()}
+              {formatINR(totalSalaryToday)}
             </div>
             <p className="text-xs text-muted-foreground">Sum of shifts * per-shift</p>
           </CardContent>
