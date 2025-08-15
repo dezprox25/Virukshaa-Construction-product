@@ -18,8 +18,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Briefcase, Calendar, CalendarPlus, Calculator, CheckCircle, ClipboardList, Clock, Edit, Eye, Filter, Folder, Grid3X3, Hash, HelpCircle, IndianRupee, List, Mail, MapPin, MessageCircle, Phone, Plus, RefreshCw, Search, Trash2, Users, XCircle, FileText } from 'lucide-react'
+import { Briefcase, Calendar, CalendarPlus, Calculator, CheckCircle, ClipboardList, Clock, Edit, Eye, Filter, Folder, Grid3X3, Hash, HelpCircle, IndianRupee, List, Mail, MapPin, MessageCircle, Phone, Plus, RefreshCw, Search, Trash2, Users, XCircle, FileText,Lock } from 'lucide-react'
 import { SupervisorLeaveApprovalModal } from "@/components/management/SupervisorLeaveApprovalModal"
+import { AcroFormPasswordField } from "jspdf"
 
 // Types
 type AttendanceStatus = "Present" | "Absent" | "On Duty" | null
@@ -710,12 +711,17 @@ export default function SupervisorsPage() {
       if (!res.ok) throw new Error("Failed to fetch supervisors")
       const list: Supervisor[] = await res.json()
 
-      // 2) Build today's UTC date (YYYY-MM-DD) and an ISO range for the full day
+      // 2) Build today's LOCAL date (YYYY-MM-DD) and local day ISO range to avoid timezone mismatches
       const now = new Date()
-      const utcDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
-      const dateStr = utcDate.toISOString().split("T")[0]
-      const startOfDayIso = `${dateStr}T00:00:00.000Z`
-      const endOfDayIso = `${dateStr}T23:59:59.999Z`
+      const y = now.getFullYear()
+      const m = now.getMonth()
+      const d = now.getDate()
+      const localDateStr = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`
+      // Local day boundaries converted to UTC ISO
+      const startOfDay = new Date(y, m, d, 0, 0, 0, 0)
+      const endOfDay = new Date(y, m, d, 23, 59, 59, 999)
+      const startOfDayIso = startOfDay.toISOString()
+      const endOfDayIso = endOfDay.toISOString()
 
       // 3) Try batch attendance fetch (by date range); fall back to per-supervisor fetch if needed
       let attendanceRecords: AttendanceRecord[] = []
@@ -732,11 +738,18 @@ export default function SupervisorsPage() {
           const data = await attRes.json()
           // Normalize possible shapes: array or { data: [...] }
           const arr = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
-          // If the API returns multiple days, keep only today's (accept exact date or timestamp within the day)
+          // If the API returns multiple days, keep only today's (accept exact date or timestamp within the local day)
           attendanceRecords = arr.filter((r: any) => {
             const d = (r?.date || "") as string
-            if (d.startsWith(dateStr)) return true
-            return isIsoWithinDay(r?.checkIn, startOfDayIso, endOfDayIso) || isIsoWithinDay(r?.updatedAt, startOfDayIso, endOfDayIso)
+            const d2 = (r?.attendanceDate || r?.day || "") as string
+            if (d === localDateStr || d.startsWith(localDateStr)) return true
+            if (d2 === localDateStr || (typeof d2 === 'string' && d2.startsWith(localDateStr))) return true
+            return (
+              isIsoWithinDay(r?.checkIn, startOfDayIso, endOfDayIso) ||
+              isIsoWithinDay(r?.checkOut, startOfDayIso, endOfDayIso) ||
+              isIsoWithinDay(r?.updatedAt, startOfDayIso, endOfDayIso) ||
+              isIsoWithinDay(r?.createdAt, startOfDayIso, endOfDayIso)
+            )
           })
         } else {
           // Force fallback
@@ -755,15 +768,38 @@ export default function SupervisorsPage() {
               const json = await r.json()
               // Normalize shapes: array, { data: [...] }, or single object
               const arr = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : [json]
-              // Find today's record for this supervisor
+              // Find today's record for this supervisor (match local date or timestamps within local day)
               const match = arr.find((rec: any) => {
                 const supOk = (rec?.supervisorId || rec?.supervisor?._id || rec?.supervisor) == s._id
                 if (!supOk) return false
                 const d = (rec?.date || "") as string
-                if (d.startsWith(dateStr)) return true
-                return isIsoWithinDay(rec?.checkIn, startOfDayIso, endOfDayIso) || isIsoWithinDay(rec?.updatedAt, startOfDayIso, endOfDayIso)
+                const d2 = (rec?.attendanceDate || rec?.day || "") as string
+                if (d === localDateStr || d.startsWith(localDateStr)) return true
+                if (d2 === localDateStr || (typeof d2 === 'string' && d2.startsWith(localDateStr))) return true
+                return (
+                  isIsoWithinDay(rec?.checkIn, startOfDayIso, endOfDayIso) ||
+                  isIsoWithinDay(rec?.checkOut, startOfDayIso, endOfDayIso) ||
+                  isIsoWithinDay(rec?.updatedAt, startOfDayIso, endOfDayIso) ||
+                  isIsoWithinDay(rec?.createdAt, startOfDayIso, endOfDayIso)
+                )
               })
-              return match || null
+              if (match) return match
+              // Fallback: pick most recent record within the local day for this supervisor
+              const candidates = arr.filter((rec: any) => {
+                const supOk = (rec?.supervisorId || rec?.supervisor?._id || rec?.supervisor) == s._id
+                if (!supOk) return false
+                return (
+                  isIsoWithinDay(rec?.checkIn, startOfDayIso, endOfDayIso) ||
+                  isIsoWithinDay(rec?.checkOut, startOfDayIso, endOfDayIso) ||
+                  isIsoWithinDay(rec?.updatedAt, startOfDayIso, endOfDayIso) ||
+                  isIsoWithinDay(rec?.createdAt, startOfDayIso, endOfDayIso)
+                )
+              })
+              if (candidates.length > 0) {
+                candidates.sort((a: any, b: any) => Date.parse(b?.updatedAt || b?.createdAt || b?.checkIn || '') - Date.parse(a?.updatedAt || a?.createdAt || a?.checkIn || ''))
+                return candidates[0]
+              }
+              return null
             } catch {
               return null
             }
@@ -775,7 +811,7 @@ export default function SupervisorsPage() {
           const legacyResults = await Promise.all(
             list.map(async (s) => {
               try {
-                const r = await fetch(`/api/attendance?date=${dateStr}&supervisorId=${s._id}`, {
+                const r = await fetch(`/api/attendance?date=${localDateStr}&supervisorId=${s._id}`, {
                   cache: "no-store",
                   headers: { Accept: "application/json" },
                 })
@@ -785,8 +821,15 @@ export default function SupervisorsPage() {
                 // prefer exact date match, fallback to timestamps within the day
                 const match = arr.find((rec: any) => {
                   const d = (rec?.date || "") as string
-                  if (d === dateStr || d.startsWith(dateStr)) return true
-                  return isIsoWithinDay(rec?.checkIn, startOfDayIso, endOfDayIso) || isIsoWithinDay(rec?.updatedAt, startOfDayIso, endOfDayIso)
+                  const d2 = (rec?.attendanceDate || rec?.day || "") as string
+                  if (d === localDateStr || d.startsWith(localDateStr)) return true
+                  if (d2 === localDateStr || (typeof d2 === 'string' && d2.startsWith(localDateStr))) return true
+                  return (
+                    isIsoWithinDay(rec?.checkIn, startOfDayIso, endOfDayIso) ||
+                    isIsoWithinDay(rec?.checkOut, startOfDayIso, endOfDayIso) ||
+                    isIsoWithinDay(rec?.updatedAt, startOfDayIso, endOfDayIso) ||
+                    isIsoWithinDay(rec?.createdAt, startOfDayIso, endOfDayIso)
+                  )
                 })
                 return match || null
               } catch {
@@ -799,7 +842,7 @@ export default function SupervisorsPage() {
         // If still empty, try fetching all by date only and filter locally
         if (attendanceRecords.length === 0) {
           try {
-            const r = await fetch(`/api/attendance?date=${dateStr}`, { cache: "no-store", headers: { Accept: "application/json" } })
+            const r = await fetch(`/api/attendance?date=${localDateStr}`, { cache: "no-store", headers: { Accept: "application/json" } })
             if (r.ok) {
               const json = await r.json()
               const arr = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : []
@@ -808,7 +851,7 @@ export default function SupervisorsPage() {
                 const supId = rec?.supervisorId || rec?.supervisor?._id || rec?.supervisor || rec?.employeeId || rec?.supervisor_id || rec?.staffId
                 if (!supId) return
                 const d = (rec?.date || "") as string
-                if (d === dateStr || d.startsWith(dateStr)) {
+                if (d === localDateStr || d.startsWith(localDateStr)) {
                   byId.set(String(supId), rec)
                 }
               })
@@ -830,47 +873,55 @@ export default function SupervisorsPage() {
         if (supId) attMap.set(String(supId), rec as AttendanceRecord)
       })
 
-      const merged = list.map((supervisor) => {
-        const attendance = attMap.get(supervisor._id)
-
-        if (attendance) {
-          const statusNorm = normalizeAttendanceStatus((attendance as any).status, (attendance as any).present)
+      setSupervisors((prev) => {
+        const prevById = new Map(prev.map((p) => [p._id, p]))
+        return list.map((supervisor) => {
+          const attendance = attMap.get(supervisor._id)
+          if (attendance) {
+            const statusNorm = normalizeAttendanceStatus((attendance as any).status, (attendance as any).present)
+            return {
+              ...supervisor,
+              attendance: {
+                present: statusNorm === "Present",
+                checkIn: attendance.checkIn || "",
+                checkOut: attendance.checkOut || "",
+                status: statusNorm,
+                _attendanceId: attendance._id,
+                isLeaveApproved: attendance.isLeaveApproved,
+                isLeavePaid: attendance.isLeavePaid ?? (attendance as any).isPaid,
+                leaveReason: attendance.leaveReason || "",
+              },
+            }
+          }
+          // No server record for today: preserve any existing client-side attendance (optimistic) if present
+          const existing = prevById.get(supervisor._id)
+          if (existing?.attendance && existing.attendance.status) {
+            return {
+              ...supervisor,
+              attendance: existing.attendance,
+            }
+          }
           return {
             ...supervisor,
             attendance: {
-              present: statusNorm === "Present",
-              checkIn: attendance.checkIn || "",
-              checkOut: attendance.checkOut || "",
-              status: statusNorm,
-              _attendanceId: attendance._id,
-              isLeaveApproved: attendance.isLeaveApproved,
-              isLeavePaid: attendance.isLeavePaid ?? (attendance as any).isPaid,
-              leaveReason: attendance.leaveReason || "",
+              present: false,
+              status: null as AttendanceStatus,
+              _attendanceId: undefined,
+              checkIn: "",
+              checkOut: "",
+              isLeaveApproved: undefined,
+              isLeavePaid: undefined,
+              leaveReason: "",
             },
           }
-        }
-
-        return {
-          ...supervisor,
-          attendance: {
-            present: false,
-            status: null as AttendanceStatus,
-            _attendanceId: undefined,
-            checkIn: "",
-            checkOut: "",
-            isLeaveApproved: undefined,
-            isLeavePaid: undefined,
-            leaveReason: "",
-          },
-        }
+        })
       })
-
-      setSupervisors(merged)
       // minimal debug to help diagnose if still empty
       if (process.env.NODE_ENV !== 'production') {
+        const withAttendanceCount = list.filter((s) => attMap.has(s._id)).length
         console.debug('[supervisors] merged with attendance:', {
           total: list.length,
-          withAttendance: merged.filter((m) => m.attendance?.status).length,
+          withAttendance: withAttendanceCount,
         })
       }
     } catch (e) {
@@ -932,6 +983,27 @@ export default function SupervisorsPage() {
           body.isLeaveApproved = false
           body.isLeavePaid = false
         }
+
+        // Immediate optimistic UI update (before API) for snappier feedback
+        setSupervisors((prev) =>
+          prev.map((s) => {
+            if (s._id !== supervisorId) return s
+            const normalizedStatus = normalizeAttendanceStatus(status, status === "Present")
+            return {
+              ...s,
+              attendance: {
+                present: normalizedStatus === "Present",
+                status: normalizedStatus,
+                _attendanceId: s.attendance?._attendanceId,
+                checkIn: s.attendance?.checkIn || "",
+                checkOut: s.attendance?.checkOut || "",
+                isLeaveApproved: s.attendance?.isLeaveApproved,
+                isLeavePaid: s.attendance?.isLeavePaid,
+                leaveReason: s.attendance?.leaveReason || "",
+              },
+            }
+          })
+        )
 
         const res = await fetch("/api/attendance", {
           method: "POST",
@@ -1011,12 +1083,16 @@ export default function SupervisorsPage() {
 
   const handleAttendanceChange = useCallback(
     async (supervisorId: string, status: AttendanceStatus) => {
-      const today = new Date().toISOString().split("T")[0]
+      // Use LOCAL date string to match fetchSupervisors local-day logic
+      const now = new Date()
+      const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+        now.getDate()
+      ).padStart(2, "0")}`
       const sup = supervisors.find((s) => s._id === supervisorId)
       if (!sup) return
 
       if (status === "Present" || status === "On Duty") {
-        await updateAttendance(supervisorId, status, today)
+        await updateAttendance(supervisorId, status, localToday)
         return
       }
 
@@ -1034,7 +1110,7 @@ export default function SupervisorsPage() {
 
   const handleApproveLeave = useCallback(
     async (reason: string, isPaid: boolean, dates: Date[]) => {
-      if (!selectedSupervisorId) return false 
+      if (!selectedSupervisorId) return false
       setIsSubmittingLeave(true)
       try {
         const results = await Promise.all(
@@ -1153,7 +1229,7 @@ export default function SupervisorsPage() {
           throw new Error(errText || "Failed to create task")
         }
         // Some APIs return created task; ignore content if empty
-        try { await response.json() } catch {}
+        try { await response.json() } catch { }
         toast.success("Task created successfully")
         await fetchSupervisorTasks(selectedSupervisor._id)
         setTaskFormData(initialTaskFormData)
@@ -1390,7 +1466,7 @@ export default function SupervisorsPage() {
                   <h3 className="font-semibold text-lg">{supervisor.name}</h3>
                   <div className="mt-2" onClick={(e) => e.stopPropagation()}>
                     <Select
-                      value={supervisor.attendance?.status || ""}
+                      value={supervisor.attendance?.status ?? undefined}
                       onValueChange={(value) => {
                         if (value === "Present" || value === "Absent" || value === "On Duty") {
                           handleAttendanceChange(supervisor._id, value as AttendanceStatus)
@@ -1539,7 +1615,7 @@ export default function SupervisorsPage() {
                   <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-2">
                       <Select
-                        value={supervisor.attendance?.status || ""}
+                        value={supervisor.attendance?.status ?? undefined}
                         onValueChange={(value) => handleAttendanceChange(supervisor._id, value as AttendanceStatus)}
                       >
                         <SelectTrigger
@@ -1966,6 +2042,7 @@ export default function SupervisorsPage() {
                 <TabsList className="grid w-full grid-cols-2 mb-4">
                   <TabsTrigger value="overview">Overview</TabsTrigger>
                   <TabsTrigger value="tasks">Tasks</TabsTrigger>
+
                 </TabsList>
 
                 <TabsContent value="overview" className="flex-1 overflow-y-auto pr-2 space-y-6">
@@ -2056,6 +2133,13 @@ export default function SupervisorsPage() {
                           <div>
                             <p className="font-medium">Username</p>
                             <p className="text-sm text-muted-foreground">{selectedSupervisor.username}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Lock className="w-5 h-5 text-muted-foreground" />
+                          <div>
+                            <p>password</p>
+                            <p className="text-sm text-muted-foreground">{selectedSupervisor.password}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -2250,8 +2334,8 @@ export default function SupervisorsPage() {
                     taskFormData.documentType === "image"
                       ? "image/*"
                       : taskFormData.documentType === "pdf"
-                      ? ".pdf"
-                      : ".doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,.pdf"
+                        ? ".pdf"
+                        : ".doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,.pdf"
                   }
                   onChange={handleFileChange}
                 />

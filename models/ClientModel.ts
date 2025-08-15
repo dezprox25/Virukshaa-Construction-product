@@ -1,5 +1,4 @@
 import mongoose, { Document, Schema, Types } from 'mongoose';
-import bcrypt from 'bcryptjs';
 
 export interface IClient extends Document {
   name: string;
@@ -102,22 +101,10 @@ const clientSchema = new Schema<IClient>(
   }
 );
 
-// Hash password before saving
-clientSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
-
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error: any) {
-    next(error);
-  }
-});
-
 // Method to compare password for login
 clientSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
-  return await bcrypt.compare(candidatePassword, this.password);
+  // Plain string comparison (no hashing)
+  return candidatePassword === this.password;
 };
 
 // Create the model or return existing one to prevent recompilation errors

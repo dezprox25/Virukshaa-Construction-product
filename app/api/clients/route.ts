@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { Types } from "mongoose";
-import bcrypt from 'bcryptjs';
 import connectToDB from "@/lib/db";
 import Client, { IClient } from "@/models/ClientModel";
 
@@ -34,6 +33,7 @@ export async function GET() {
     await connectToDB();
     // Get all client fields
     const clients = await Client.find({})
+      .select('+password') // explicitly include password
       .sort({ name: 1 })
       .lean();
 
@@ -43,6 +43,7 @@ export async function GET() {
       name: client.name,
       username: client.username, // Include username in the response
       email: client.email,
+      password: client.password || '',
       phone: client.phone || '',
       company: client.company || '',
       address: client.address || '',
@@ -94,16 +95,40 @@ export async function POST(request: Request) {
       avatar
     } = data;
 
-    // Validate required fields
+    // Validate required fields (basic server-side checks)
     if (!username) {
       return NextResponse.json(
         { message: 'Username is required' },
         { status: 400 }
       );
     }
+    if (!name) {
+      return NextResponse.json(
+        { message: 'Name is required' },
+        { status: 400 }
+      );
+    }
+    if (!email) {
+      return NextResponse.json(
+        { message: 'Email is required' },
+        { status: 400 }
+      );
+    }
+    if (!phone) {
+      return NextResponse.json(
+        { message: 'Phone number is required' },
+        { status: 400 }
+      );
+    }
+    if (!address || !city || !state || !postalCode) {
+      return NextResponse.json(
+        { message: 'Address, city, state and postal code are required' },
+        { status: 400 }
+      );
+    }
 
-    // If password is not provided, use a default one
-    let hashedPassword = '';
+    // If password is not provided, use a default one (stored as plain string)
+    let finalPassword = '';
     if (password) {
       if (password.length < 6) {
         return NextResponse.json(
@@ -111,26 +136,29 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
-      const salt = await bcrypt.genSalt(10);
-      hashedPassword = await bcrypt.hash(password, salt);
+      finalPassword = password;
     } else {
       // Set a default password if not provided
-      const salt = await bcrypt.genSalt(10);
-      hashedPassword = await bcrypt.hash('password123', salt);
+      finalPassword = 'password123';
     }
 
     await connectToDB();
 
-    // Check if username or email already exists
-    const existingUser = await Client.findOne({
-      $or: [{ username }, { email }]
-    });
+    // Check if username, email, or phone already exists (use exists for clarity and TS safety)
+    const [usernameExists, emailExists, phoneExists] = await Promise.all([
+      Client.exists({ username }),
+      Client.exists({ email }),
+      Client.exists({ phone })
+    ]);
 
-    if (existingUser) {
-      return NextResponse.json(
-        { message: 'Username or email already exists' },
-        { status: 400 }
-      );
+    if (usernameExists) {
+      return NextResponse.json({ message: 'Username already exists' }, { status: 409 });
+    }
+    if (emailExists) {
+      return NextResponse.json({ message: 'Email already exists' }, { status: 409 });
+    }
+    if (phoneExists) {
+      return NextResponse.json({ message: 'Phone already exists' }, { status: 409 });
     }
 
     const client = new Client({
@@ -138,7 +166,7 @@ export async function POST(request: Request) {
       username,
       email,
       phone,
-      password: hashedPassword,
+      password: finalPassword,
       company: company || '',
       address,
       city,
@@ -154,7 +182,19 @@ export async function POST(request: Request) {
       lastPaymentDate: null
     });
 
-    await client.save();
+    try {
+      await client.save();
+    } catch (err: any) {
+      // Handle duplicate key errors (in case unique indexes exist)
+      if (err?.code === 11000) {
+        const key = Object.keys(err.keyPattern || {})[0] || 'field';
+        return NextResponse.json(
+          { message: `${key.charAt(0).toUpperCase() + key.slice(1)} already exists` },
+          { status: 409 }
+        );
+      }
+      throw err;
+    }
 
     return NextResponse.json(toClientResponse(client.toObject()), { status: 201 });
   } catch (error) {

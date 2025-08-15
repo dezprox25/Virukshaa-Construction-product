@@ -43,7 +43,6 @@ import {
   Mail,
   Calendar,
   Search,
-  Filter,
   Users,
   UserCheck,
   DollarSign,
@@ -78,8 +77,6 @@ interface Employee {
   status: "Active" | "On Leave" | "Inactive"
   joinDate: string
   endDate?: string
-  username: string
-  password: string
   address: string
   avatar?: string
   department?: string
@@ -98,7 +95,7 @@ interface Employee {
 export default function EmployeesManagement() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState("All")
+  // Removed employment status filter per request
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
   const [loading, setLoading] = useState(true)
@@ -110,6 +107,58 @@ export default function EmployeesManagement() {
   const [employeePerformance, setEmployeePerformance] = useState<any[]>([])
   const [employeeProjects, setEmployeeProjects] = useState<any[]>([])
   const [isLoadingPerformance, setIsLoadingPerformance] = useState(false)
+
+  // Shift tracking (local, per-day): 0-3 shifts per employee for calculations
+  const [shiftsToday, setShiftsToday] = useState<Record<string, number>>({})
+  const getShiftCount = (id: string) => Math.max(0, Math.min(3, shiftsToday[id] ?? 0))
+  const setShiftCount = (id: string, val: number) =>
+    setShiftsToday((prev) => ({ ...prev, [id]: Math.max(0, Math.min(3, Math.floor(val))) }))
+  const calcTodaysPay = (emp: Employee) => getShiftCount(emp._id) * (emp.salary || 0)
+
+  const getTodayDateStr = () => {
+    const today = new Date()
+    const yyyy = today.getFullYear()
+    const mm = String(today.getMonth() + 1).padStart(2, "0")
+    const dd = String(today.getDate()).padStart(2, "0")
+    return `${yyyy}-${mm}-${dd}`
+  }
+
+  const fetchEmployeeShifts = async () => {
+    try {
+      const dateStr = getTodayDateStr()
+      const res = await fetch(`/api/employee-shifts?date=${dateStr}`, { cache: "no-store" })
+      if (!res.ok) return
+      const docs: Array<{ employeeId: string; shifts: number }> = await res.json()
+      const map: Record<string, number> = {}
+      for (const d of docs) {
+        // d.employeeId may be object when populated; handle both
+        const id = typeof (d as any).employeeId === 'object' ? (d as any).employeeId._id : d.employeeId
+        map[id] = Math.max(0, Math.min(3, Math.floor((d as any).shifts ?? 0)))
+      }
+      setShiftsToday((prev) => ({ ...prev, ...map }))
+    } catch (e) {
+      console.error('Failed to fetch employee shifts', e)
+    }
+  }
+
+  const saveEmployeeShift = async (emp: Employee, count: number) => {
+    try {
+      const dateStr = getTodayDateStr()
+      await fetch('/api/employee-shifts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employeeId: emp._id,
+          date: dateStr,
+          shifts: Math.max(0, Math.min(3, Math.floor(count))),
+          perShiftSalary: emp.salary || 0,
+        }),
+      })
+    } catch (e) {
+      console.error('Failed to save shift', e)
+      toast.error('Failed to save shift count')
+    }
+  }
 
   // Form state
   const [formData, setFormData] = useState({
@@ -123,8 +172,6 @@ export default function EmployeesManagement() {
     joinDate: new Date(),
     endDate: undefined as Date | undefined,
     address: "",
-    username: "",
-    password: "",
   })
 
   const roles = [
@@ -144,51 +191,16 @@ export default function EmployeesManagement() {
 
   useEffect(() => {
     fetchEmployees()
+    fetchEmployeeShifts()
   }, [])
 
   const fetchEmployees = async () => {
     try {
       const response = await fetch("/api/employees", { cache: "no-store" })
       const employees = await response.json()
-      // Get today's date in YYYY-MM-DD
-      const today = new Date()
-      const yyyy = today.getFullYear()
-      const mm = String(today.getMonth() + 1).padStart(2, "0")
-      const dd = String(today.getDate()).padStart(2, "0")
-      const dateStr = `${yyyy}-${mm}-${dd}`
-
-      // Fetch today's attendance records
-      const attRes = await fetch(`/api/attendance?date=${dateStr}`)
-      const attendanceRecords = await attRes.json()
-
-      // Map employeeId => attendance info
-      const attendanceMap: Record<string, any> = {}
-      for (const att of attendanceRecords) {
-        if (att.employeeId && typeof att.employeeId === "object") {
-          attendanceMap[att.employeeId._id] = att
-        } else if (att.employeeId) {
-          attendanceMap[att.employeeId] = att
-        }
-      }
-
-      // Merge attendance into employees
-      const employeesWithAttendance = employees.map((employee: any) => {
-        const att = attendanceMap[employee._id]
-        return {
-          ...employee,
-          attendance: att
-            ? {
-                present: att.status === "Present",
-                checkIn: att.checkIn || "",
-                checkOut: att.checkOut || "",
-                status: att.status,
-                _attendanceId: att._id,
-              }
-            : undefined,
-        }
-      })
-
-      setEmployees(employeesWithAttendance)
+      setEmployees(employees)
+      // Load today's shifts after employees are loaded
+      await fetchEmployeeShifts()
     } catch (error) {
       console.error("Error fetching employees:", error)
       toast.error("Failed to load employees. Please try again.")
@@ -293,6 +305,14 @@ export default function EmployeesManagement() {
         setEditingEmployee(null)
         resetForm()
         toast.success(`${formData.name} has been ${editingEmployee ? "updated" : "added"} successfully.`)
+      } else {
+        let details: any = null
+        try {
+          details = await response.json()
+        } catch {}
+        const msg = details?.message || `Failed to ${editingEmployee ? 'update' : 'create'} employee (HTTP ${response.status})`
+        toast.error(msg)
+        console.error('Employee save failed:', { status: response.status, body: details })
       }
     } catch (error) {
       console.error("Error saving employee:", error)
@@ -302,48 +322,7 @@ export default function EmployeesManagement() {
     }
   }
 
-  const handleAttendanceChange = async (employeeId: string, newStatus: string) => {
-    try {
-      const today = new Date()
-      const yyyy = today.getFullYear()
-      const mm = String(today.getMonth() + 1).padStart(2, "0")
-      const dd = String(today.getDate()).padStart(2, "0")
-      const dateStr = `${yyyy}-${mm}-${dd}`
-
-      const response = await fetch("/api/attendance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employeeId,
-          date: dateStr,
-          status: newStatus,
-        }),
-      })
-
-      if (!response.ok) throw new Error("Failed to update attendance")
-
-      // Update local state
-      setEmployees((prev) =>
-        prev.map((emp) =>
-          emp._id === employeeId
-            ? {
-                ...emp,
-                attendance: {
-                  ...emp.attendance,
-                  present: newStatus === "Present",
-                  status: newStatus as "Present" | "Absent" | "Late" | "Half Day",
-                },
-              }
-            : emp,
-        ),
-      )
-
-      toast.success(`Attendance updated to ${newStatus}`)
-    } catch (error) {
-      console.error("Error updating attendance:", error)
-      toast.error("Failed to update attendance")
-    }
-  }
+  // No attendance updates for employees: using shift-based work instead
 
   const handleDelete = async (id: string) => {
     try {
@@ -373,8 +352,6 @@ export default function EmployeesManagement() {
       joinDate: new Date(),
       endDate: undefined,
       address: "",
-      username: "",
-      password: "",
     })
   }
 
@@ -391,56 +368,25 @@ export default function EmployeesManagement() {
       status: employee.status,
       joinDate: new Date(employee.joinDate),
       endDate: employee.endDate ? new Date(employee.endDate) : undefined,
-      username: employee.username,
-      password: employee.password,
     })
     setIsAddDialogOpen(true)
   }
 
   const filteredEmployees = employees.filter((employee) => {
-    const matchesSearch =
-      employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.role.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === "All" || employee.status === statusFilter
-    return matchesSearch && matchesStatus
+    const term = searchTerm.toLowerCase()
+    return (
+      employee.name.toLowerCase().includes(term) ||
+      employee.email.toLowerCase().includes(term) ||
+      employee.role.toLowerCase().includes(term)
+    )
   })
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Active":
-        return "bg-green-100 text-green-800"
-      case "On Leave":
-        return "bg-yellow-100 text-yellow-800"
-      case "Inactive":
-        return "bg-red-100 text-red-800"
-      default:
-        return "bg-gray-100 text-gray-800"
-    }
-  }
+  // Employment status badge removed; no color mapping needed
 
-  // Calculate statistics
+  // Calculate statistics (shift-based)
   const totalEmployees = employees.length
-  const presentToday = employees.filter((emp) => emp.attendance?.present).length
-  const absentToday = totalEmployees - presentToday
-  const attendanceRate = totalEmployees > 0 ? Math.round((presentToday / totalEmployees) * 100) : 0
-
-  const attendanceOptions = [
-    { value: "Present", label: "Present", icon: CheckCircle, color: "bg-green-100 text-green-800" },
-    { value: "Late", label: "Late", icon: Clock, color: "bg-yellow-100 text-yellow-800" },
-    { value: "Half Day", label: "Half Day", icon: Clock4, color: "bg-blue-100 text-blue-800" },
-    { value: "Absent", label: "Absent", icon: XCircle, color: "bg-red-100 text-red-800" },
-  ]
-
-  const getAttendanceIcon = (status: string) => {
-    const option = attendanceOptions.find((opt) => opt.value === status)
-    return option ? <option.icon className="w-3 h-3 mr-1" /> : null
-  }
-
-  const getAttendanceColor = (status: string) => {
-    const option = attendanceOptions.find((opt) => opt.value === status)
-    return option ? option.color : "bg-gray-100 text-gray-800"
-  }
+  const totalShiftsToday = employees.reduce((sum, e) => sum + getShiftCount(e._id), 0)
+  const totalSalaryToday = employees.reduce((sum, e) => sum + calcTodaysPay(e), 0)
 
   if (loading && employees.length === 0) {
     return (
@@ -476,36 +422,29 @@ export default function EmployeesManagement() {
                 <div>
                   <h3 className="font-semibold text-lg">{employee.name}</h3>
                   <div className="flex items-center gap-2 mt-1" onClick={(e) => e.stopPropagation()}>
+                    <Label className="text-xs">Shifts Today (0-3)</Label>
                     <Select
-                      value={employee.attendance?.status || (employee.attendance?.present ? "Present" : "Absent")}
-                      onValueChange={(value) => handleAttendanceChange(employee._id, value)}
+                      value={String(getShiftCount(employee._id))}
+                      onValueChange={(val) => {
+                        const num = Number(val)
+                        setShiftCount(employee._id, num)
+                        saveEmployeeShift(employee, num)
+                      }}
                     >
-                      <SelectTrigger className="h-7 w-32">
-                        <div className="flex items-center gap-1">
-                          {getAttendanceIcon(
-                            employee.attendance?.status || (employee.attendance?.present ? "Present" : "Absent"),
-                          )}
-                          <SelectValue />
-                        </div>
+                      <SelectTrigger className="h-7 w-24 px-2 py-1">
+                        <SelectValue placeholder="0" />
                       </SelectTrigger>
-                      <SelectContent>
-                        {attendanceOptions.map((option) => {
-                          const Icon = option.icon
-                          return (
-                            <SelectItem key={option.value} value={option.value}>
-                              <div className="flex items-center gap-2">
-                                <Icon className="w-3 h-3" />
-                                {option.label}
-                              </div>
-                            </SelectItem>
-                          )
-                        })}
+                      <SelectContent align="start">
+                        <SelectItem value="0">0</SelectItem>
+                        <SelectItem value="1">1</SelectItem>
+                        <SelectItem value="2">2</SelectItem>
+                        <SelectItem value="3">3</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
               </div>
-              <Badge className={getStatusColor(employee.status)}>{employee.status}</Badge>
+              {/* Status badge removed */}
             </div>
             <div className="space-y-2 mb-4">
               <div className="flex items-center gap-2 text-sm">
@@ -530,18 +469,18 @@ export default function EmployeesManagement() {
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <DollarSign className="w-4 h-4 text-muted-foreground" />
-                <span>${employee.salary.toLocaleString()}</span>
+                <span>
+                  {employee.workType === "Daily" ? "Per Shift: " : "Salary: "}${employee.salary.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <IndianRupee className="w-4 h-4 text-muted-foreground" />
+                <span>Today's Pay: ${calcTodaysPay(employee).toLocaleString()}</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <Calendar className="w-4 h-4 text-muted-foreground" />
                 <span>Joined: {new Date(employee.joinDate).toLocaleDateString()}</span>
               </div>
-              {employee.attendance?.checkIn && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Clock className="w-4 h-4 text-muted-foreground" />
-                  <span>Check-in: {employee.attendance.checkIn}</span>
-                </div>
-              )}
             </div>
             {employee.skills && employee.skills.length > 0 && (
               <div className="mb-4">
@@ -616,9 +555,9 @@ export default function EmployeesManagement() {
               <TableHead>Employee</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Work Type</TableHead>
-              <TableHead>Salary</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Attendance</TableHead>
+              <TableHead>Per-Shift/Salary</TableHead>
+              <TableHead>Shifts Today</TableHead>
+              <TableHead>Today's Pay</TableHead>
               <TableHead>Contact</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
@@ -654,45 +593,31 @@ export default function EmployeesManagement() {
                   </div>
                 </TableCell>
                 <TableCell>{employee.workType}</TableCell>
-                <TableCell>${employee.salary.toLocaleString()}</TableCell>
                 <TableCell>
-                  <Badge className={getStatusColor(employee.status)}>{employee.status}</Badge>
+                  {employee.workType === "Daily" ? "Per Shift: " : ""}${employee.salary.toLocaleString()}
                 </TableCell>
-                <TableCell>
-                  <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center gap-2">
-                      <Select
-                        value={employee.attendance?.status || (employee.attendance?.present ? "Present" : "Absent")}
-                        onValueChange={(value) => handleAttendanceChange(employee._id, value)}
-                      >
-                        <SelectTrigger className="h-7 w-32">
-                          <div className="flex items-center gap-1">
-                            {getAttendanceIcon(
-                              employee.attendance?.status || (employee.attendance?.present ? "Present" : "Absent"),
-                            )}
-                            <SelectValue />
-                          </div>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {attendanceOptions.map((option) => {
-                            const Icon = option.icon
-                            return (
-                              <SelectItem key={option.value} value={option.value}>
-                                <div className="flex items-center gap-2">
-                                  <Icon className="w-3 h-3" />
-                                  {option.label}
-                                </div>
-                              </SelectItem>
-                            )
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    {employee.attendance?.checkIn && (
-                      <span className="text-xs text-muted-foreground">In: {employee.attendance.checkIn}</span>
-                    )}
-                  </div>
+                {/* Status column removed */}
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <Select
+                    value={String(getShiftCount(employee._id))}
+                    onValueChange={(val) => {
+                      const num = Number(val)
+                      setShiftCount(employee._id, num)
+                      saveEmployeeShift(employee, num)
+                    }}
+                  >
+                    <SelectTrigger className="h-8 w-24 px-2 py-1">
+                      <SelectValue placeholder="0" />
+                    </SelectTrigger>
+                    <SelectContent align="start">
+                      <SelectItem value="0">0</SelectItem>
+                      <SelectItem value="1">1</SelectItem>
+                      <SelectItem value="2">2</SelectItem>
+                      <SelectItem value="3">3</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </TableCell>
+                <TableCell>${calcTodaysPay(employee).toLocaleString()}</TableCell>
                 <TableCell>
                   <div className="text-sm">
                     <div>{employee.phone}</div>
@@ -759,32 +684,24 @@ export default function EmployeesManagement() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Present Today</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600" />
+            <CardTitle className="text-sm font-medium">Total Shifts Today</CardTitle>
+            <Clock4 className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{presentToday}</div>
-            <p className="text-xs text-muted-foreground">Checked in today</p>
+            <div className="text-2xl font-bold text-blue-600">{totalShiftsToday}</div>
+            <p className="text-xs text-muted-foreground">Across all employees</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Absent Today</CardTitle>
-            <XCircle className="h-4 w-4 text-red-600" />
+            <CardTitle className="text-sm font-medium">Today's Salary Total</CardTitle>
+            <IndianRupee className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{absentToday}</div>
-            <p className="text-xs text-muted-foreground">Not present today</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Attendance Rate</CardTitle>
-            <Clock className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{attendanceRate}%</div>
-            <p className="text-xs text-muted-foreground">Today's attendance</p>
+            <div className="text-2xl font-bold text-green-600">
+              ${totalSalaryToday.toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground">Sum of shifts * per-shift</p>
           </CardContent>
         </Card>
       </div>
@@ -860,29 +777,7 @@ export default function EmployeesManagement() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="username">Username *</Label>
-                  <Input
-                    id="username"
-                    value={formData.username}
-                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                    placeholder="Enter username"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password *</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="Enter password"
-                    required
-                  />
-                </div>
-              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone Number *</Label>
@@ -927,15 +822,25 @@ export default function EmployeesManagement() {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="salary">Salary *</Label>
+                  <Label htmlFor="salary">
+                    {formData.workType === "Daily" ? "Per Shift Salary *" : "Salary *"}
+                  </Label>
                   <Input
                     id="salary"
                     type="number"
-                    value={formData.salary}
-                    onChange={(e) => setFormData({ ...formData, salary: Number.parseInt(e.target.value, 10) || 0 })}
-                    placeholder="e.g., 45000"
+                    value={formData.salary === 0 ? "" : formData.salary}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setFormData({
+                        ...formData,
+                        salary: value === "" ? 0 : Number.parseInt(value, 10) || 0
+                      });
+                    }}
+                    placeholder={formData.workType === "Daily" ? "e.g., 1500 (per shift)" : "e.g., 450"}
                     required
+                    className="sm:col-span-2 text-center h-9 appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
+
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -984,21 +889,8 @@ export default function EmployeesManagement() {
                   </Popover>
                 </div>
               </div>
-              {editingEmployee && (
-                <div className="space-y-2">
-                  <Label htmlFor="status">Status *</Label>
-                  <select
-                    id="status"
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                    className="w-full p-2 border rounded-md"
-                    required
-                  >
-                    <option value="Active">Active</option>
-                    <option value="On Leave">On Leave</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
-                </div>
+              {false && (
+                <div />
               )}
               <div className="space-y-2">
                 <Label htmlFor="address">Address</Label>
@@ -1043,19 +935,6 @@ export default function EmployeesManagement() {
               className="pl-10"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-muted-foreground" />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="p-2 border rounded-md"
-            >
-              <option value="All">All Status</option>
-              <option value="Active">Active</option>
-              <option value="On Leave">On Leave</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-          </div>
           <Badge variant="secondary" className="self-center">
             {filteredEmployees.length} Total
           </Badge>
@@ -1089,11 +968,11 @@ export default function EmployeesManagement() {
           <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-medium mb-2">No employees found</h3>
           <p className="text-muted-foreground mb-4">
-            {searchTerm || statusFilter !== "All"
+            {searchTerm
               ? "Try adjusting your search or filter criteria"
               : "Get started by adding your first employee"}
           </p>
-          {!searchTerm && statusFilter === "All" && (
+          {!searchTerm && (
             <Button onClick={() => setIsAddDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
               Add First Employee
@@ -1124,9 +1003,6 @@ export default function EmployeesManagement() {
                   <div className="flex-1">
                     <SheetTitle className="text-2xl">{selectedEmployee.name}</SheetTitle>
                     <p className="text-muted-foreground">{selectedEmployee.role}</p>
-                    <div className="mt-1">
-                      <Badge className={getStatusColor(selectedEmployee.status)}>{selectedEmployee.status}</Badge>
-                    </div>
                   </div>
                   <Button
                     variant="outline"
@@ -1143,44 +1019,36 @@ export default function EmployeesManagement() {
               </SheetHeader>
 
               <Tabs defaultValue="overview" className="mt-6 flex flex-col h-[calc(100%-100px)]">
-                <TabsList className="grid w-full grid-cols-3 mb-4">
+                <TabsList className="grid w-full grid-cols-2 mb-4">
                   <TabsTrigger value="overview">Overview</TabsTrigger>
-                  <TabsTrigger value="performance">Performance</TabsTrigger>
+                  {/* <TabsTrigger value="performance">Performance</TabsTrigger> */}
                   <TabsTrigger value="projects">Projects</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="overview" className="flex-1 overflow-y-auto pr-2 space-y-6">
                   {/* Quick Stats */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4">
+                   
                     <Card>
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-2">
-                          {selectedEmployee.attendance?.present ? (
-                            <CheckCircle className="w-5 h-5 text-green-600" />
-                          ) : (
-                            <XCircle className="w-5 h-5 text-red-600" />
-                          )}
-                          <div>
-                            <p className="text-sm font-medium">
-                              {selectedEmployee.attendance?.present ? "Present Today" : "Absent Today"}
-                            </p>
-                            {selectedEmployee.attendance?.checkIn && (
-                              <p className="text-xs text-muted-foreground">
-                                Check-in: {selectedEmployee.attendance.checkIn}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="p-4">
+                      <CardContent className="p-4 space-y-1">
                         <div className="flex items-center gap-2">
                           <TrendingUp className="w-5 h-5 text-blue-600" />
                           <div>
                             <p className="text-sm font-medium">Work Type</p>
                             <p className="text-xs text-muted-foreground">{selectedEmployee.workType}</p>
                           </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Briefcase className="w-4 h-4 text-muted-foreground" />
+                          <p className="text-xs text-muted-foreground">{selectedEmployee.role}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-muted-foreground" />
+                          <p className="text-xs text-muted-foreground">Shifts Today: {getShiftCount(selectedEmployee._id)}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <IndianRupee className="w-4 h-4 text-green-600" />
+                          <p className="text-xs text-green-700">Today's Pay: ${calcTodaysPay(selectedEmployee).toLocaleString()}</p>
                         </div>
                       </CardContent>
                     </Card>
@@ -1197,46 +1065,92 @@ export default function EmployeesManagement() {
                           <Mail className="w-5 h-5 text-muted-foreground" />
                           <div>
                             <p className="font-medium">Email</p>
-                            <p className="text-sm text-muted-foreground">{selectedEmployee.email}</p>
+                            {selectedEmployee.email ? (
+                              <a className="text-sm text-blue-600 underline" href={`mailto:${selectedEmployee.email}`}>
+                                {selectedEmployee.email}
+                              </a>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">—</p>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
                           <Phone className="w-5 h-5 text-muted-foreground" />
-                          <div>
-                            <p className="font-medium">Phone</p>
-                            <p className="text-sm text-muted-foreground">{selectedEmployee.phone}</p>
+                          <div className="flex items-center gap-2">
+                            <div>
+                              <p className="font-medium">Phone</p>
+                              {selectedEmployee.phone ? (
+                                <a className="text-sm text-blue-600 underline" href={`tel:${selectedEmployee.phone}`}>
+                                  {selectedEmployee.phone}
+                                </a>
+                              ) : (
+                                <p className="text-sm text-muted-foreground">—</p>
+                              )}
+                            </div>
+                            {selectedEmployee.phone && (
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => window.open(`https://wa.me/${selectedEmployee.phone.replace(/[^0-9]/g, "")}`, "_blank")}
+                                title="WhatsApp"
+                              >
+                                <MessageCircle className="w-4 h-4" />
+                              </Button>
+                            )}
                           </div>
                         </div>
+                        {selectedEmployee.address && (
+                          <div className="flex items-center gap-3">
+                            <MapPin className="w-5 h-5 text-muted-foreground" />
+                            <div>
+                              <p className="font-medium">Address</p>
+                              <p className="text-sm text-muted-foreground">{selectedEmployee.address}</p>
+                            </div>
+                          </div>
+                        )}
                         <div className="flex items-center gap-3">
-                          <MapPin className="w-5 h-5 text-muted-foreground" />
+                          <Briefcase className="w-5 h-5 text-muted-foreground" />
                           <div>
-                            <p className="font-medium">Address</p>
-                            <p className="text-sm text-muted-foreground">{selectedEmployee.address}</p>
+                            <p className="font-medium">Role</p>
+                            <p className="text-sm text-muted-foreground">
+                              {selectedEmployee.role}
+                              {selectedEmployee.department ? ` — ${selectedEmployee.department}` : ''}
+                            </p>
                           </div>
                         </div>
+                        {selectedEmployee.supervisor && (
+                          <div className="flex items-center gap-3">
+                            <UserCheck className="w-5 h-5 text-muted-foreground" />
+                            <div>
+                              <p className="font-medium">Supervisor</p>
+                              <p className="text-sm text-muted-foreground">{selectedEmployee.supervisor}</p>
+                            </div>
+                          </div>
+                        )}
                         <div className="flex items-center gap-3">
                           <IndianRupee className="w-5 h-5 text-muted-foreground" />
                           <div>
-                            <p className="font-medium">Salary</p>
+                            <p className="font-medium">{selectedEmployee.workType === 'Daily' ? 'Per Shift' : 'Salary'}</p>
                             <p className="text-sm text-muted-foreground">${selectedEmployee.salary.toLocaleString()}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <Hash className="w-5 h-5 text-muted-foreground" />
-                          <div>
-                            <p className="font-medium">Username</p>
-                            <p className="text-sm text-muted-foreground">{selectedEmployee.username}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
                           <Calendar className="w-5 h-5 text-muted-foreground" />
                           <div>
                             <p className="font-medium">Joined</p>
-                            <p className="text-sm text-muted-foreground">
-                              {format(new Date(selectedEmployee.joinDate), "PPP")}
-                            </p>
+                            <p className="text-sm text-muted-foreground">{format(new Date(selectedEmployee.joinDate), 'PPP')}</p>
                           </div>
                         </div>
+                        {selectedEmployee.endDate && (
+                          <div className="flex items-center gap-3">
+                            <CalendarDays className="w-5 h-5 text-muted-foreground" />
+                            <div>
+                              <p className="font-medium">End Date</p>
+                              <p className="text-sm text-muted-foreground">{format(new Date(selectedEmployee.endDate), 'PPP')}</p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -1249,60 +1163,19 @@ export default function EmployeesManagement() {
                       </CardHeader>
                       <CardContent>
                         <div className="flex flex-wrap gap-2">
-                          {selectedEmployee.skills.map((skill, index) => (
+                          {selectedEmployee.skills.slice(0, 6).map((skill, index) => (
                             <Badge key={index} variant="outline">
                               {skill}
                             </Badge>
                           ))}
+                          {selectedEmployee.skills.length > 6 && (
+                            <Badge variant="outline" className="text-xs">+{selectedEmployee.skills.length - 6} more</Badge>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
                   )}
                 </TabsContent>
-
-                <TabsContent value="performance" className="flex-1 overflow-y-auto pr-2 space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-semibold">Performance Reviews</h3>
-                  </div>
-                  <div className="space-y-3">
-                    {isLoadingPerformance ? (
-                      <div className="flex justify-center py-8">
-                        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary" />
-                      </div>
-                    ) : employeePerformance.length > 0 ? (
-                      employeePerformance.map((review) => (
-                        <Card key={review.id} className="hover:shadow-md transition-shadow">
-                          <CardContent className="p-4">
-                            <div className="flex justify-between items-start mb-2">
-                              <h4 className="font-medium">{review.type}</h4>
-                              <div className="flex items-center gap-2">
-                                <Award className="w-4 h-4 text-yellow-500" />
-                                <span className="font-medium">{review.rating}/5</span>
-                              </div>
-                            </div>
-                            <p className="text-sm text-muted-foreground mb-3">{review.feedback}</p>
-                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                              <div className="flex items-center gap-1">
-                                <UserCheck className="w-3 h-3" />
-                                <span>By: {review.supervisor}</span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
-                                <span>{format(new Date(review.date), "MMM dd, yyyy")}</span>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))
-                    ) : (
-                      <div className="text-center py-8">
-                        <Award className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                        <p className="text-muted-foreground">No performance reviews yet</p>
-                      </div>
-                    )}
-                  </div>
-                </TabsContent>
-
                 <TabsContent value="projects" className="flex-1 overflow-y-auto pr-2 space-y-4">
                   <div className="flex justify-between items-center">
                     <h3 className="text-lg font-semibold">Project History</h3>

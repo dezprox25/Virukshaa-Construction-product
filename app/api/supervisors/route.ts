@@ -6,7 +6,8 @@ import Supervisor from "@/models/Supervisor"
 export async function GET() {
   try {
     await connectToDB()
-    const supervisors = await Supervisor.find({}).sort({ createdAt: -1 })
+    // Explicitly include password (overrides select: false in schema)
+    const supervisors = await Supervisor.find({}).select('+password').sort({ createdAt: -1 })
     return NextResponse.json(supervisors)
   } catch (error) {
     console.error('Error fetching supervisors:', error)
@@ -46,13 +47,10 @@ export async function POST(request: Request) {
       }
     }
 
-    // Hash password before saving
-    const bcrypt = await import('bcryptjs');
-    const hashedPassword = await bcrypt.hash(body.password, 10);
-    
     const newSupervisor = new Supervisor({
       ...body,
-      password: hashedPassword
+      // Store password as plain string (no hashing)
+      password: body.password
     });
 
     const savedSupervisor = await newSupervisor.save()

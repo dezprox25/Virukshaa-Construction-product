@@ -11,7 +11,7 @@ import type {
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000
 
-type ToasterToast = ToastProps & {
+type ToasterToast = Omit<ToastProps, "title" | "children"> & {
   id: string
   title?: React.ReactNode
   description?: React.ReactNode
@@ -142,7 +142,8 @@ function dispatch(action: Action) {
 
 type Toast = Omit<ToasterToast, "id">
 
-function toast({ ...props }: Toast) {
+// Base toast function
+function baseToast({ ...props }: Toast) {
   const id = genId()
 
   const update = (props: ToasterToast) =>
@@ -170,6 +171,49 @@ function toast({ ...props }: Toast) {
     update,
   }
 }
+
+// Augment with helper methods (success, error, warning, info, loading)
+type ToastAPI = typeof baseToast & {
+  success: (message: string | { title?: React.ReactNode; description?: React.ReactNode }) => { id: string; dismiss: () => void; update: (props: ToasterToast) => void }
+  error: (message: string | { title?: React.ReactNode; description?: React.ReactNode }) => { id: string; dismiss: () => void; update: (props: ToasterToast) => void }
+  warning: (message: string | { title?: React.ReactNode; description?: React.ReactNode }) => { id: string; dismiss: () => void; update: (props: ToasterToast) => void }
+  info: (message: string | { title?: React.ReactNode; description?: React.ReactNode }) => { id: string; dismiss: () => void; update: (props: ToasterToast) => void }
+  loading: (message: string | { title?: React.ReactNode; description?: React.ReactNode }) => string
+  dismiss: (toastId?: string) => void
+}
+
+function normalizeMessage(message: string | { title?: React.ReactNode; description?: React.ReactNode }) {
+  if (typeof message === "string") {
+    return { title: message, description: undefined as React.ReactNode | undefined }
+  }
+  return { title: message.title, description: message.description }
+}
+
+const toast = Object.assign(baseToast, {
+  success: (message: string | { title?: React.ReactNode; description?: React.ReactNode }) => {
+    const { title, description } = normalizeMessage(message)
+    return baseToast({ title, description, variant: "success" as ToastProps["variant"] })
+  },
+  error: (message: string | { title?: React.ReactNode; description?: React.ReactNode }) => {
+    const { title, description } = normalizeMessage(message)
+    return baseToast({ title, description, variant: "destructive" as ToastProps["variant"] })
+  },
+  warning: (message: string | { title?: React.ReactNode; description?: React.ReactNode }) => {
+    const { title, description } = normalizeMessage(message)
+    return baseToast({ title, description, variant: "warning" as ToastProps["variant"] })
+  },
+  info: (message: string | { title?: React.ReactNode; description?: React.ReactNode }) => {
+    const { title, description } = normalizeMessage(message)
+    return baseToast({ title, description, variant: "info" as ToastProps["variant"] })
+  },
+  // Returns the toast id so callers can do toast.dismiss(id)
+  loading: (message: string | { title?: React.ReactNode; description?: React.ReactNode }) => {
+    const { title, description } = normalizeMessage(message)
+    const t = baseToast({ title, description })
+    return t.id
+  },
+  dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
+}) as ToastAPI
 
 function useToast() {
   const [state, setState] = React.useState<State>(memoryState)

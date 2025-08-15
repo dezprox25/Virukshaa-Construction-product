@@ -11,8 +11,7 @@ export interface IEmployee extends Document {
   joinDate: Date;
   endDate?: Date;
   address: string;
-  username: string;
-  password: string;
+  username?: string;
   avatar?: string;
   department?: string;
   totalPaid?: number;
@@ -48,8 +47,7 @@ const employeeSchema = new Schema<IEmployee>({
   joinDate: { type: Date, required: true },
   endDate: { type: Date },
   address: { type: String, default: '' },
-  username: { type: String, required: true, unique: true },
-  password: { type: String, required: true, select: false },
+  username: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
   avatar: { type: String, required: false },
   department: { type: String, required: false },
   totalPaid: { type: Number, default: 0 },
@@ -62,5 +60,8 @@ const employeeSchema = new Schema<IEmployee>({
   }
 }, { timestamps: true });
 
-// Create the model or return existing one to prevent recompilation errors
-export default mongoose.models.Employee || mongoose.model<IEmployee>('Employee', employeeSchema);
+// Ensure we don't reuse a stale compiled model with an outdated schema (dev/hot-reload)
+if (mongoose.models.Employee) {
+  delete mongoose.models.Employee;
+}
+export default mongoose.model<IEmployee>('Employee', employeeSchema);

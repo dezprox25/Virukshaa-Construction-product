@@ -10,7 +10,6 @@ const toClientEmployee = (employee: any) => ({
   email: employee.email,
   phone: employee.phone,
   username: employee.username,
-  password: employee.password,
   role: employee.role,
   salary: employee.salary,
   workType: employee.workType,
@@ -18,7 +17,9 @@ const toClientEmployee = (employee: any) => ({
   joinDate: employee.joinDate.toISOString(),
   endDate: employee.endDate?.toISOString(),
   address: employee.address,
-  avatar: employee.avatar
+  avatar: employee.avatar,
+  createdAt: employee.createdAt?.toISOString?.() ?? new Date(employee.createdAt).toISOString(),
+  updatedAt: employee.updatedAt?.toISOString?.() ?? new Date(employee.updatedAt).toISOString()
 })
 
 export async function GET() {
@@ -39,6 +40,10 @@ export async function POST(request: Request) {
   try {
     const data = await request.json();
 
+    // Coerce date strings to Date objects if needed
+    if (typeof data.joinDate === 'string') data.joinDate = new Date(data.joinDate)
+    if (typeof data.endDate === 'string') data.endDate = new Date(data.endDate)
+
     await connectToDB();
     const employee = new Employee(data);
     await employee.save();
@@ -47,11 +52,23 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Error creating employee:', error);
     // Check for duplicate key error (code 11000)
-    if ((error as any).code === 11000 && (error as any).keyPattern.email) {
+    if ((error as any)?.code === 11000) {
+      const dup: any = error as any;
+      const fields = Object.keys(dup.keyPattern || dup.keyValue || {});
+      const field = fields[0] || 'field';
       return NextResponse.json(
-        { message: 'An employee with this email already exists.' },
-        { status: 409 } // 409 Conflict
+        { message: `An employee with this ${field} already exists.` },
+        { status: 409 }
       );
+    }
+    // Validation errors
+    if ((error as any)?.name === 'ValidationError') {
+      const err: any = error as any
+      const messages = Object.values(err.errors || {}).map((e: any) => e.message)
+      return NextResponse.json(
+        { message: messages.join(', ') || 'Validation failed' },
+        { status: 400 }
+      )
     }
     return NextResponse.json(
       { message: 'Failed to create employee' },

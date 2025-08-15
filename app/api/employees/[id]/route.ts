@@ -10,7 +10,6 @@ const toClientEmployee = (employee: any) => ({
   email: employee.email,
   phone: employee.phone,
   username: employee.username,
-  password: employee.password,
   role: typeof employee.role === 'string' ? employee.role.toLowerCase() : employee.role,
   salary: employee.salary,
   workType: employee.workType,
@@ -21,7 +20,9 @@ const toClientEmployee = (employee: any) => ({
   avatar: employee.avatar,
   totalPaid: employee.totalPaid,
   dueAmount: employee.dueAmount,
-  lastPaymentDate: employee.lastPaymentDate?.toISOString()
+  lastPaymentDate: employee.lastPaymentDate?.toISOString(),
+  createdAt: employee.createdAt?.toISOString?.() ?? new Date(employee.createdAt).toISOString(),
+  updatedAt: employee.updatedAt?.toISOString?.() ?? new Date(employee.updatedAt).toISOString()
 })
 
 export async function GET(
@@ -111,7 +112,7 @@ export async function PUT(
     const allowedFields: (keyof IEmployee)[] = [
       'name', 'email', 'phone', 'role', 'salary', 'workType',
       'status', 'joinDate', 'endDate', 'address', 'avatar',
-      'department', 'lastPaymentDate'
+      'department', 'lastPaymentDate', 'username'
     ];
 
     allowedFields.forEach(field => {
@@ -129,11 +130,24 @@ export async function PUT(
     }
 
     await connectToDB();
-    const updatedEmployee = await Employee.findByIdAndUpdate(
-      id,
-      updateData,
-      { new: true, runValidators: true }
-    ).lean();
+    let updatedEmployee: any = null;
+    try {
+      updatedEmployee = await Employee.findByIdAndUpdate(
+        id,
+        updateData,
+        { new: true, runValidators: true }
+      ).lean();
+    } catch (err: any) {
+      if (err?.code === 11000) {
+        const fields = Object.keys(err.keyPattern || err.keyValue || {});
+        const field = fields[0] || 'field';
+        return NextResponse.json(
+          { message: `An employee with this ${field} already exists.` },
+          { status: 409 }
+        );
+      }
+      throw err;
+    }
 
     if (!updatedEmployee) {
       return NextResponse.json({ message: 'Employee not found' }, { status: 404 });
