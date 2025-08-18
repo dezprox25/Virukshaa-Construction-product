@@ -290,8 +290,16 @@ export default function ClientDashboard() {
         )
       case 'payments':
         return <ClientPaymentsManagement/>
-      case 'message':
-        return <MessageBox userType="client" title="Messages" conversationId="client-messages" />
+      case 'message': {
+        const conversationId = client?._id || session?.user?.id
+        return (
+          <MessageBox
+            userType="client"
+            title="Messages"
+            conversationId={conversationId || ''}
+          />
+        )
+      }
       case 'settings':
         return <ClientSettingsManagement />
       default:

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Send, User, ArrowLeft, MoreVertical, Paperclip, Mic, Smile } from 'lucide-react';
+import { Send, User, ArrowLeft } from 'lucide-react';
 
 export interface Message {
   id: string;
@@ -29,44 +29,100 @@ const MessageBox: React.FC<MessageBoxProps> = ({
 }) => {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Track if initial load completed to prevent loading flicker
+  const initialLoadDoneRef = useRef<boolean>(false);
 
-  // Load messages for the conversation from localStorage
+  // Helper to map userType to sender string used by API
+  const currentSender = userType === 'admin' ? 'superadmin' : 'client';
+
+  // Load messages for the conversation from backend
   useEffect(() => {
-    setIsLoading(true);
-    const stored = localStorage.getItem(`messages-${conversationId}`);
-    if (stored) {
+    let isMounted = true;
+    const controller = new AbortController();
+    // reset initial load state when conversation changes
+    initialLoadDoneRef.current = false;
+
+    const load = async () => {
       try {
-        setMessages(JSON.parse(stored));
-      } catch {
-        setMessages([]);
+        // Background load; keep UI interactive
+        const res = await fetch(
+          `/api/messages?conversationId=${encodeURIComponent(conversationId)}`,
+          { cache: 'no-store', signal: controller.signal }
+        );
+        if (!res.ok) throw new Error('Failed to load messages');
+        const data = await res.json();
+        const msgs: Message[] = (data.messages || []).map((m: any) => ({
+          id: m.id,
+          text: m.text,
+          sender: m.sender,
+          conversationId: m.conversationId,
+          timestamp: new Date(m.timestamp),
+          read: !!m.read,
+        }));
+        if (isMounted) setMessages(msgs);
+      } catch (e: any) {
+        if (e?.name !== 'AbortError' && isMounted) {
+          setMessages([]);
+        }
+      } finally {
+        if (isMounted) {
+          initialLoadDoneRef.current = true;
+          setIsLoading(false);
+        }
       }
-    } else {
-      setMessages([]);
-    }
-    setIsLoading(false);
+    };
+
+    load();
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
   }, [conversationId]);
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim() || !conversationId) return;
 
-    const msgObj: Message = {
-      id: Date.now().toString() + Math.random().toString(),
+    const optimistic: Message = {
+      id: 'temp-' + Date.now().toString(),
       text: message,
-      sender: userType === 'admin' ? 'superadmin' : 'client',
+      sender: currentSender,
       conversationId,
       timestamp: new Date(),
       read: true,
     };
 
-    setMessages(prev => {
-      const updated = [...prev, msgObj];
-      localStorage.setItem(`messages-${conversationId}`, JSON.stringify(updated));
-      return updated;
-    });
+    // Optimistic update
+    setMessages(prev => [...prev, optimistic]);
+    const textToSend = message;
     setMessage('');
+
+    try {
+      const res = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: textToSend, sender: currentSender, conversationId }),
+      });
+      if (!res.ok) throw new Error('Failed to send');
+      const data = await res.json();
+      const saved = data.data;
+      // Replace optimistic message with saved one
+      setMessages(prev => prev.map(m => m.id === optimistic.id ? {
+        id: saved.id,
+        text: saved.text,
+        sender: saved.sender,
+        conversationId: saved.conversationId,
+        timestamp: new Date(saved.timestamp),
+        read: !!saved.read,
+      } : m));
+    } catch {
+      // Rollback optimistic message on failure
+      setMessages(prev => prev.filter(m => m.id !== optimistic.id));
+      // Optionally show an error UI/Toast here
+    }
   };
 
 
@@ -100,16 +156,6 @@ const MessageBox: React.FC<MessageBoxProps> = ({
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-col h-screen bg-[#e5ddd5] bg-opacity-30">
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-gray-500">Loading messages...</div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className={`flex flex-col h-screen bg-[#e5ddd5] max-h-[700px] bg-opacity-30 ${className}`}>
       {/* Header */}
@@ -142,10 +188,10 @@ const MessageBox: React.FC<MessageBoxProps> = ({
       <div
         className="flex-1 overflow-y-auto p-4 bg-[#e5ddd5] bg-opacity-30"
       >
-        {messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-gray-500">
-            No messages yet. Start the conversation!
-          </div>
+        {isLoading && messages.length === 0 ? (
+          <div className="flex items-center justify-center h-full text-gray-500">Loading messages...</div>
+        ) : messages.length === 0 ? (
+          <div className="flex items-center justify-center h-full text-gray-500">No messages yet. Start the conversation!</div>
         ) : (
           <div className="space-y-2">
             {messages.map((msg) => (
