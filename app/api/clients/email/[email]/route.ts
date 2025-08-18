@@ -27,7 +27,7 @@ type ClientResponse = {
 
 export async function GET(
   request: Request,
-  { params }: { params: { email: string } }
+  ctx: { params: Promise<{ email: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -39,7 +39,7 @@ export async function GET(
       );
     }
 
-    const { email } = params;
+    const { email } = await ctx.params;
     
     if (!email) {
       return NextResponse.json(

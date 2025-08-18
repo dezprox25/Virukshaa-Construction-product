@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -17,89 +17,192 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Calendar, User, DollarSign, Camera, MessageSquare, FileText, Star } from "lucide-react"
+import { Calendar, User, DollarSign, Camera, MessageSquare, FileText, Star, IndianRupee } from "lucide-react"
 
 export default function ClientProjectsManagement() {
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const projects = [
-    {
-      id: "PRJ-001",
-      name: "Luxury Villa Construction",
-      description: "Modern 4-bedroom villa with swimming pool and garden",
-      progress: 75,
-      status: "On Track",
-      budget: "$450,000",
-      spent: "$337,500",
-      startDate: "Jan 15, 2024",
-      expectedCompletion: "Dec 15, 2024",
-      actualCompletion: null,
-      manager: "John Smith",
-      location: "Beverly Hills, CA",
-      contractor: "Elite Construction Co.",
-      milestones: [
-        { name: "Foundation", status: "Completed", date: "Feb 20, 2024" },
-        { name: "Structure", status: "Completed", date: "May 15, 2024" },
-        { name: "Roofing", status: "In Progress", date: "Nov 30, 2024" },
-        { name: "Interior", status: "Pending", date: "Dec 15, 2024" },
-      ],
-      recentUpdates: [
-        { date: "Nov 12, 2024", update: "Roofing work 80% complete", photos: 5 },
-        { date: "Nov 10, 2024", update: "Electrical rough-in completed", photos: 3 },
-      ],
-    },
-    {
-      id: "PRJ-002",
-      name: "Office Building Renovation",
-      description: "Complete renovation of 5-story office building",
-      progress: 45,
-      status: "Delayed",
-      budget: "$280,000",
-      spent: "$140,000",
-      startDate: "Mar 1, 2024",
-      expectedCompletion: "Feb 28, 2025",
-      actualCompletion: null,
-      manager: "Sarah Johnson",
-      location: "Downtown LA",
-      contractor: "Urban Renovations LLC",
-      milestones: [
-        { name: "Demolition", status: "Completed", date: "Apr 15, 2024" },
-        { name: "Structural Work", status: "In Progress", date: "Dec 30, 2024" },
-        { name: "MEP Installation", status: "Pending", date: "Jan 31, 2025" },
-        { name: "Finishing", status: "Pending", date: "Feb 28, 2025" },
-      ],
-      recentUpdates: [
-        { date: "Nov 11, 2024", update: "Structural work delayed due to permit issues", photos: 2 },
-        { date: "Nov 8, 2024", update: "Floor 3 structural work completed", photos: 4 },
-      ],
-    },
-    {
-      id: "PRJ-003",
-      name: "Warehouse Expansion",
-      description: "Expansion of existing warehouse facility",
-      progress: 90,
-      status: "Nearly Complete",
-      budget: "$320,000",
-      spent: "$304,000",
-      startDate: "Aug 1, 2024",
-      expectedCompletion: "Nov 30, 2024",
-      actualCompletion: null,
-      manager: "Mike Davis",
-      location: "Industrial District",
-      contractor: "Industrial Builders Inc.",
-      milestones: [
-        { name: "Site Preparation", status: "Completed", date: "Aug 15, 2024" },
-        { name: "Foundation", status: "Completed", date: "Sep 15, 2024" },
-        { name: "Structure", status: "Completed", date: "Oct 30, 2024" },
-        { name: "Final Inspection", status: "In Progress", date: "Nov 30, 2024" },
-      ],
-      recentUpdates: [
-        { date: "Nov 13, 2024", update: "Final inspections scheduled for next week", photos: 3 },
-        { date: "Nov 9, 2024", update: "All electrical and plumbing work completed", photos: 6 },
-      ],
-    },
-  ]
+  type UIProject = {
+    id: string
+    name: string
+    description: string
+    progress: number
+    status: string
+    budget: string
+    spent?: string
+    startDate?: string
+    expectedCompletion?: string
+    actualCompletion?: string | null
+    manager?: string
+    location?: string
+    address?: string
+    city?: string
+    state?: string
+    postalCode?: string
+    contractor?: string
+    milestones: { name: string; status: string; date?: string }[]
+    recentUpdates: { date: string; update: string; photos: number }[]
+  }
+  const [projects, setProjects] = useState<UIProject[]>([])
+
+  const currency = (n?: number) => {
+    if (typeof n !== 'number' || isNaN(n)) return '₹0'
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n)
+  }
+
+  const formatDate = (d?: string) => {
+    if (!d) return '-'
+    const date = new Date(d)
+    if (isNaN(date.getTime())) return d
+    return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })
+  }
+
+  const parseToMs = (d?: string) => {
+    if (!d) return NaN
+    // Try native
+    let t = Date.parse(d)
+    if (!isNaN(t)) return t
+    // Try YYYY-MM-DD
+    const iso = /^\d{4}-\d{2}-\d{2}$/
+    if (iso.test(d)) {
+      t = Date.parse(`${d}T00:00:00`)
+      if (!isNaN(t)) return t
+    }
+    // Try DD/MM/YYYY
+    const dmy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
+    const m1 = d.match(dmy)
+    if (m1) {
+      const day = parseInt(m1[1], 10)
+      const month = parseInt(m1[2], 10) - 1
+      const year = parseInt(m1[3], 10)
+      const dt = new Date(year, month, day)
+      if (!isNaN(dt.getTime())) return dt.getTime()
+    }
+    // Try hyphen separated: prefer DD-MM-YYYY (Indian common), fallback MM-DD-YYYY
+    const hyphen = /^(\d{1,2})\-(\d{1,2})\-(\d{4})$/
+    const mHy = d.match(hyphen)
+    if (mHy) {
+      const a = parseInt(mHy[1], 10)
+      const b = parseInt(mHy[2], 10)
+      const y = parseInt(mHy[3], 10)
+      const tryBuild = (day:number, month:number, year:number) => {
+        const dt = new Date(year, month - 1, day)
+        return isNaN(dt.getTime()) ? NaN : dt.getTime()
+      }
+      // Prefer DD-MM-YYYY when first part > 12 or second part <= 12 but we choose Indian style by default
+      let tCandidate = tryBuild(a, b, y) // DD-MM-YYYY
+      if (!isNaN(tCandidate)) return tCandidate
+      tCandidate = tryBuild(b, a, y) // MM-DD-YYYY fallback
+      if (!isNaN(tCandidate)) return tCandidate
+    }
+    // Try DD MMM YYYY (e.g., 18 Aug 2025)
+    const dMonY = /^(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{4})$/
+    const m3 = d.match(dMonY)
+    if (m3) {
+      const day = parseInt(m3[1], 10)
+      const monStr = m3[2].toLowerCase()
+      const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec']
+      const month = months.indexOf(monStr.slice(0,3))
+      const year = parseInt(m3[3], 10)
+      if (month >= 0) {
+        const dt = new Date(year, month, day)
+        if (!isNaN(dt.getTime())) return dt.getTime()
+      }
+    }
+    return NaN
+  }
+
+  const startOfDay = (ms: number) => {
+    const d = new Date(ms)
+    d.setHours(0,0,0,0)
+    return d.getTime()
+  }
+
+  const computeDurationProgress = (start?: string, end?: string, fallback?: number) => {
+    const sRaw = parseToMs(start)
+    const eRaw = parseToMs(end)
+    if (!isNaN(sRaw) && !isNaN(eRaw) && eRaw > sRaw) {
+      const s = startOfDay(sRaw)
+      const e = startOfDay(eRaw)
+      const today = startOfDay(Date.now())
+      if (today < s) return 0
+      if (today === s) return 1
+      if (today >= e) return 100
+      const dayMs = 24 * 60 * 60 * 1000
+      const totalDays = Math.max(1, Math.round((e - s) / dayMs))
+      const elapsedDays = Math.max(0, Math.min(totalDays, Math.round((today - s) / dayMs)))
+      let pct = Math.round((elapsedDays / totalDays) * 100)
+      if (pct === 0 && today > s) pct = 1 // show minimal progress on/after start day
+      if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
+        // Debug log once in a while; keep it lightweight
+        try {
+          console.debug('[durationProgress]', {
+            start,
+            end,
+            parsedStart: new Date(sRaw).toISOString(),
+            parsedEnd: new Date(eRaw).toISOString(),
+            today: new Date(today).toISOString(),
+            totalDays,
+            elapsedDays,
+            pct,
+          })
+        } catch {}
+      }
+      return Math.max(0, Math.min(100, pct))
+    }
+    return typeof fallback === 'number' && !isNaN(fallback) ? Math.max(0, Math.min(100, Math.round(fallback))) : 0
+  }
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const clientId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
+        if (!clientId) {
+          setProjects([])
+          setError('No client session found')
+          return
+        }
+        const res = await fetch(`/api/projects?clientId=${encodeURIComponent(clientId)}`)
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.message || 'Failed to fetch projects')
+        }
+        const data = await res.json()
+        const mapped: UIProject[] = (Array.isArray(data) ? data : []).map((p: any) => ({
+          id: p._id,
+          name: p.title,
+          description: p.description || '',
+          progress: typeof p.progress === 'number' ? p.progress : 0,
+          status: p.status || 'Planning',
+          budget: currency(p.budget),
+          spent: undefined,
+          startDate: p.startDate,
+          expectedCompletion: p.endDate,
+          actualCompletion: null,
+          manager: p.manager,
+          location: [p.city, p.state].filter(Boolean).join(', '),
+          address: p.address,
+          city: p.city,
+          state: p.state,
+          postalCode: p.postalCode,
+          contractor: undefined,
+          milestones: [],
+          recentUpdates: [],
+        }))
+        setProjects(mapped)
+      } catch (e: any) {
+        setError(e?.message || 'Something went wrong')
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -170,6 +273,14 @@ export default function ClientProjectsManagement() {
         </select>
       </div>
 
+      {/* Loading / Error states */}
+      {loading && (
+        <div className="text-center py-8 text-sm text-muted-foreground">Loading projects...</div>
+      )}
+      {!loading && error && (
+        <div className="text-center py-8 text-sm text-red-600">{error}</div>
+      )}
+
       {/* Projects Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {filteredProjects.map((project) => (
@@ -188,181 +299,182 @@ export default function ClientProjectsManagement() {
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span>Progress</span>
-                  <span>{project.progress}%</span>
+                  <span>{computeDurationProgress(project.startDate, project.expectedCompletion, project.progress)}%</span>
                 </div>
-                <Progress value={project.progress} />
+                <Progress value={computeDurationProgress(project.startDate, project.expectedCompletion, project.progress)} />
               </div>
 
               {/* Project Details */}
               <div className="grid grid-cols-2 gap-4 text-sm">
+                {/* <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">Status:</span>
+                  <Badge className={getStatusColor(project.status)}>{project.status}</Badge>
+                </div> */}
                 <div className="flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-muted-foreground" />
+                  <IndianRupee className="w-4 h-4 text-muted-foreground" />
                   <span>Budget: {project.budget}</span>
                 </div>
+
                 <div className="flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-muted-foreground" />
-                  <span>Spent: {project.spent}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-muted-foreground" />
-                  <span>{project.manager}</span>
+                  <Calendar className="w-4 h-4 text-muted-foreground" />
+                  <span>Start Date: {formatDate(project.startDate)}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-muted-foreground" />
-                  <span>{project.expectedCompletion}</span>
+                  <span>End Date: {formatDate(project.expectedCompletion)}</span>
+                </div>
+
+                <div className="items-center gap-2 hidden">
+                  <User className="w-4 h-4 text-muted-foreground" />
+                  <span>Manager: {project.manager || '-'}</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-muted-foreground">Site Address:</span>
+                  <span className="leading-snug">
+                    {project.address || '-'}
+                    {project.city || project.state || project.postalCode ? (
+                      <>
+                        <br />
+                        {[project.city, project.state, project.postalCode].filter(Boolean).join(', ')}
+                      </>
+                    ) : null}
+                  </span>
                 </div>
               </div>
 
               {/* Recent Updates */}
-              <div>
-                <h4 className="font-medium mb-2">Recent Updates</h4>
-                <div className="space-y-2">
-                  {project.recentUpdates.slice(0, 2).map((update, index) => (
-                    <div key={index} className="p-2 bg-muted rounded-lg">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-muted-foreground">{update.date}</span>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Camera className="w-3 h-3" />
-                          {update.photos}
-                        </div>
-                      </div>
-                      <p className="text-sm">{update.update}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              
+            </CardContent>
+            {/* Actions */}
+            {/* <div className="flex gap-2">
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="flex-1 bg-transparent">
+                    View Details
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>{project.name}</DialogTitle>
+                    <DialogDescription>{project.description}</DialogDescription>
+                  </DialogHeader>
+                  <Tabs defaultValue="overview" className="w-full">
+                    <TabsList className="grid w-full grid-cols-4">
+                      <TabsTrigger value="overview">Overview</TabsTrigger>
+                      <TabsTrigger value="milestones">Milestones</TabsTrigger>
+                      <TabsTrigger value="updates">Updates</TabsTrigger>
+                      <TabsTrigger value="documents">Documents</TabsTrigger>
+                    </TabsList>
 
-              {/* Actions */}
-              <div className="flex gap-2">
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" size="sm" className="flex-1 bg-transparent">
-                      View Details
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-                    <DialogHeader>
-                      <DialogTitle>{project.name}</DialogTitle>
-                      <DialogDescription>{project.description}</DialogDescription>
-                    </DialogHeader>
-                    <Tabs defaultValue="overview" className="w-full">
-                      <TabsList className="grid w-full grid-cols-4">
-                        <TabsTrigger value="overview">Overview</TabsTrigger>
-                        <TabsTrigger value="milestones">Milestones</TabsTrigger>
-                        <TabsTrigger value="updates">Updates</TabsTrigger>
-                        <TabsTrigger value="documents">Documents</TabsTrigger>
-                      </TabsList>
-
-                      <TabsContent value="overview" className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label>Project Manager</Label>
-                            <p className="text-sm text-muted-foreground">{project.manager}</p>
-                          </div>
-                          <div>
-                            <Label>Contractor</Label>
-                            <p className="text-sm text-muted-foreground">{project.contractor}</p>
-                          </div>
-                          <div>
-                            <Label>Location</Label>
-                            <p className="text-sm text-muted-foreground">{project.location}</p>
-                          </div>
-                          <div>
-                            <Label>Start Date</Label>
-                            <p className="text-sm text-muted-foreground">{project.startDate}</p>
-                          </div>
+                    <TabsContent value="overview" className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Project Manager</Label>
+                          <p className="text-sm text-muted-foreground">{project.manager}</p>
                         </div>
                         <div>
-                          <Label>Progress: {project.progress}%</Label>
-                          <Progress value={project.progress} className="mt-2" />
+                          <Label>Contractor</Label>
+                          <p className="text-sm text-muted-foreground">{project.contractor}</p>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label>Total Budget</Label>
-                            <p className="text-lg font-semibold">{project.budget}</p>
-                          </div>
-                          <div>
-                            <Label>Amount Spent</Label>
-                            <p className="text-lg font-semibold">{project.spent}</p>
-                          </div>
+                        <div>
+                          <Label>Location</Label>
+                          <p className="text-sm text-muted-foreground">{project.location}</p>
                         </div>
-                      </TabsContent>
-
-                      <TabsContent value="milestones" className="space-y-4">
-                        {project.milestones.map((milestone, index) => (
-                          <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                            <div>
-                              <h4 className="font-medium">{milestone.name}</h4>
-                              <p className="text-sm text-muted-foreground">Expected: {milestone.date}</p>
-                            </div>
-                            <Badge className={getMilestoneColor(milestone.status)}>{milestone.status}</Badge>
-                          </div>
-                        ))}
-                      </TabsContent>
-
-                      <TabsContent value="updates" className="space-y-4">
-                        {project.recentUpdates.map((update, index) => (
-                          <div key={index} className="p-4 border rounded-lg">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm text-muted-foreground">{update.date}</span>
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Camera className="w-4 h-4" />
-                                {update.photos} photos
-                              </div>
-                            </div>
-                            <p>{update.update}</p>
-                            <Button variant="outline" size="sm" className="mt-2 bg-transparent">
-                              View Photos
-                            </Button>
-                          </div>
-                        ))}
-                      </TabsContent>
-
-                      <TabsContent value="documents" className="space-y-4">
-                        <div className="text-center py-8">
-                          <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                          <p className="text-muted-foreground">Project documents will be available here</p>
-                        </div>
-                      </TabsContent>
-                    </Tabs>
-                  </DialogContent>
-                </Dialog>
-
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button size="sm" className="flex-1">
-                      <MessageSquare className="w-4 h-4 mr-2" />
-                      Feedback
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Project Feedback</DialogTitle>
-                      <DialogDescription>Share your feedback about {project.name}</DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <div>
-                        <Label>Rating</Label>
-                        <div className="flex gap-1 mt-2">
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <Star key={star} className="w-5 h-5 text-yellow-400 fill-current cursor-pointer" />
-                          ))}
+                        <div>
+                          <Label>Start Date</Label>
+                          <p className="text-sm text-muted-foreground">{project.startDate}</p>
                         </div>
                       </div>
                       <div>
-                        <Label htmlFor="feedback">Your Feedback</Label>
-                        <Textarea
-                          id="feedback"
-                          placeholder="Share your thoughts about the project progress..."
-                          rows={4}
-                        />
+                        <Label>Progress: {project.progress}%</Label>
+                        <Progress value={project.progress} className="mt-2" />
                       </div>
-                      <Button className="w-full">Submit Feedback</Button>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Total Budget</Label>
+                          <p className="text-lg font-semibold">{project.budget}</p>
+                        </div>
+                        <div>
+                          <Label>Amount Spent</Label>
+                          <p className="text-lg font-semibold">{project.spent}</p>
+                        </div>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="milestones" className="space-y-4">
+                      {project.milestones.map((milestone, index) => (
+                        <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div>
+                            <h4 className="font-medium">{milestone.name}</h4>
+                            <p className="text-sm text-muted-foreground">Expected: {milestone.date}</p>
+                          </div>
+                          <Badge className={getMilestoneColor(milestone.status)}>{milestone.status}</Badge>
+                        </div>
+                      ))}
+                    </TabsContent>
+
+                    <TabsContent value="updates" className="space-y-4">
+                      {project.recentUpdates.map((update, index) => (
+                        <div key={index} className="p-4 border rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm text-muted-foreground">{update.date}</span>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Camera className="w-4 h-4" />
+                              {update.photos} photos
+                            </div>
+                          </div>
+                          <p>{update.update}</p>
+                          <Button variant="outline" size="sm" className="mt-2 bg-transparent">
+                            View Photos
+                          </Button>
+                        </div>
+                      ))}
+                    </TabsContent>
+
+                    <TabsContent value="documents" className="space-y-4">
+                      <div className="text-center py-8">
+                        <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                        <p className="text-muted-foreground">Project documents will be available here</p>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </DialogContent>
+              </Dialog>
+
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button size="sm" className="flex-1">
+                    <MessageSquare className="w-4 h-4 mr-2" />
+                    Feedback
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Project Feedback</DialogTitle>
+                    <DialogDescription>Share your feedback about {project.name}</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Rating</Label>
+                      <div className="flex gap-1 mt-2">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star key={star} className="w-5 h-5 text-yellow-400 fill-current cursor-pointer" />
+                        ))}
+                      </div>
                     </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </CardContent>
+                    <div>
+                      <Label htmlFor="feedback">Your Feedback</Label>
+                      <Textarea
+                        id="feedback"
+                        placeholder="Share your thoughts about the project progress..."
+                        rows={4}
+                      />
+                    </div>
+                    <Button className="w-full">Submit Feedback</Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div> */}
           </Card>
         ))}
       </div>

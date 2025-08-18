@@ -289,7 +289,7 @@ export default function ClientDashboard() {
           </>
         )
       case 'payments':
-        return <MessageBox userType="client" title="Messages" conversationId="default-conversation" />
+        return <ClientPaymentsManagement/>
       case 'message':
         return <MessageBox userType="client" title="Messages" conversationId="client-messages" />
       case 'settings':

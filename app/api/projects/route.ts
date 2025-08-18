@@ -9,6 +9,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const supervisorId = searchParams.get('supervisorId');
+    const clientId = searchParams.get('clientId');
 
     // If supervisorId provided, filter projects where any embedded task is assigned to this supervisor
     if (supervisorId && supervisorId !== '') {
@@ -18,6 +19,12 @@ export async function GET(req: NextRequest) {
         return NextResponse.json([]);
       }
       const projects = await Project.find({ _id: { $in: projectIds } }).sort({ createdAt: -1 });
+      return NextResponse.json(projects);
+    }
+
+    // If clientId provided, return only that client's projects
+    if (clientId && clientId !== '') {
+      const projects = await Project.find({ clientId }).sort({ createdAt: -1 });
       return NextResponse.json(projects);
     }
 

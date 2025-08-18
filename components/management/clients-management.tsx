@@ -60,6 +60,7 @@ import {
   Send,
   Lock,
 } from "lucide-react"
+import MessageBox from "@/components/common/MessageBox"
 
 interface Client {
   _id: string
@@ -121,6 +122,7 @@ interface Invoice {
   status: "Pending" | "Paid" | "Overdue"
   dueDate: string
   createdAt: string
+  notes?: string
 }
 
 interface FormData {
@@ -150,44 +152,7 @@ interface MessageDialogProps {
   onSend: (message: string, clientId: string) => void
 }
 
-function MessageDialog({ open, onOpenChange, client, onSend }: MessageDialogProps) {
-  const [message, setMessage] = useState("")
 
-  const handleSend = () => {
-    if (client && message.trim()) {
-      onSend(message, client._id)
-      setMessage("")
-      onOpenChange(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Send Message to {client?.name}</DialogTitle>
-          <DialogDescription>Send a message to {client?.email}</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <Textarea
-            placeholder="Type your message here..."
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            rows={4}
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSend} disabled={!message.trim()}>
-              Send Message
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
 
 const initialFormData: FormData = {
   name: "",
@@ -254,6 +219,16 @@ export default function ClientsManagement() {
   const [clientInvoices, setClientInvoices] = useState<Invoice[]>([])
   const [isLoadingProjects, setIsLoadingProjects] = useState(false)
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(false)
+  // Invoice Form States
+  const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false)
+  const [invoiceFormData, setInvoiceFormData] = useState({
+    invoiceNumber: "",
+    amount: 0,
+    status: "Pending" as Invoice["status"],
+    dueDate: new Date().toISOString().split("T")[0],
+    notes: "",
+  })
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null)
 
   // Project Form States
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false)
@@ -335,42 +310,16 @@ export default function ClientsManagement() {
     try {
       const response = await fetch(`/api/invoices?clientId=${clientId}`)
       if (!response.ok) {
-        const mockInvoices: Invoice[] = [
-          {
-            _id: "i1",
-            invoiceNumber: "INV-2024-001",
-            amount: 25000,
-            status: "Paid",
-            dueDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-            createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-          },
-          {
-            _id: "i2",
-            invoiceNumber: "INV-2024-002",
-            amount: 15000,
-            status: "Pending",
-            dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
-            createdAt: new Date().toISOString(),
-          },
-        ]
-        setClientInvoices(mockInvoices)
+        setClientInvoices([])
+        toast.error("Failed to load invoices from server")
         return
       }
       const data = await response.json()
       setClientInvoices(data)
     } catch (error) {
       console.error("Error fetching invoices:", error)
-      const mockInvoices: Invoice[] = [
-        {
-          _id: "i1",
-          invoiceNumber: "INV-2024-001",
-          amount: 25000,
-          status: "Paid",
-          dueDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-          createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-      ]
-      setClientInvoices(mockInvoices)
+      setClientInvoices([])
+      toast.error("Unable to reach server. Invoices unavailable")
     } finally {
       setIsLoadingInvoices(false)
     }
@@ -1133,15 +1082,93 @@ export default function ClientsManagement() {
     </Card>
   )
 
+  const handleInvoiceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedClient?._id) return
+    const isUpdate = !!editingInvoice
+    const loadingToast = toast.loading(`${isUpdate ? "Updating" : "Creating"} invoice...`)
+    try {
+      const url = isUpdate ? `/api/invoices/${editingInvoice!._id}` : "/api/invoices"
+      const method = isUpdate ? "PUT" : "POST"
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: selectedClient._id,
+          invoiceNumber: invoiceFormData.invoiceNumber.trim(),
+          amount: Number(invoiceFormData.amount) || 0,
+          status: invoiceFormData.status,
+          dueDate: invoiceFormData.dueDate,
+          notes: invoiceFormData.notes?.trim() || undefined,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.message || `Failed to ${isUpdate ? "update" : "create"} invoice: ${res.status}`)
+      }
+      toast.dismiss(loadingToast)
+      toast.success(`Invoice ${isUpdate ? "updated" : "created"}`)
+      setIsInvoiceDialogOpen(false)
+      setEditingInvoice(null)
+      await fetchClientInvoices(selectedClient._id)
+    } catch (error) {
+      toast.dismiss(loadingToast)
+      console.error(`${isUpdate ? "Update" : "Create"} invoice error:`, error)
+      toast.error(error instanceof Error ? error.message : `Failed to ${isUpdate ? "update" : "create"} invoice`)
+    }
+  }
+
+  const deleteInvoice = async (invoiceId: string) => {
+    const loadingToast = toast.loading("Deleting invoice...")
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}`, { method: "DELETE" })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.message || `Failed to delete invoice: ${res.status}`)
+      }
+      setClientInvoices((prev) => prev.filter((i) => i._id !== invoiceId))
+      toast.dismiss(loadingToast)
+      toast.success("Invoice deleted")
+    } catch (error) {
+      toast.dismiss(loadingToast)
+      console.error("Delete invoice error:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to delete invoice")
+    }
+  }
+
+  const openNewInvoiceDialog = () => {
+    setEditingInvoice(null)
+    setInvoiceFormData({
+      invoiceNumber: "",
+      amount: 0,
+      status: "Pending",
+      dueDate: new Date().toISOString().split("T")[0],
+      notes: "",
+    })
+    setIsInvoiceDialogOpen(true)
+  }
+
+  const openEditInvoiceDialog = (invoice: Invoice) => {
+    setEditingInvoice(invoice)
+    setInvoiceFormData({
+      invoiceNumber: invoice.invoiceNumber,
+      amount: invoice.amount,
+      status: invoice.status,
+      dueDate: new Date(invoice.dueDate).toISOString().split("T")[0],
+      notes: invoice.notes || "",
+    })
+    setIsInvoiceDialogOpen(true)
+  }
+
+  const closeInvoiceDialog = () => {
+    setIsInvoiceDialogOpen(false)
+    setEditingInvoice(null)
+  }
+
   return (
     <>
       <Toaster richColors />
-      <MessageDialog
-        open={messageDialogOpen}
-        onOpenChange={setMessageDialogOpen}
-        client={messageClient}
-        onSend={handleSendMessage}
-      />
+    
       <div className="space-y-6">
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1649,6 +1676,104 @@ export default function ClientsManagement() {
           </DialogContent>
         </Dialog>
 
+        {/* Invoice Form Dialog */}
+        <Dialog
+          open={isInvoiceDialogOpen}
+          onOpenChange={(open) => {
+            setIsInvoiceDialogOpen(open)
+            if (!open) setEditingInvoice(null)
+          }}
+        >
+          <DialogContent
+            className="max-w-xl"
+            aria-label={editingInvoice ? "Edit invoice form" : "Create new invoice form"}
+          >
+            <DialogHeader>
+              <DialogTitle>{editingInvoice ? "Edit Invoice" : "New Invoice"}</DialogTitle>
+              <DialogDescription>
+                {editingInvoice
+                  ? `Edit invoice ${editingInvoice.invoiceNumber} for ${selectedClient?.name}`
+                  : `Create an invoice for ${selectedClient?.name}`}
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleInvoiceSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="invoiceNumber">Invoice Number *</Label>
+                  <Input
+                    id="invoiceNumber"
+                    value={invoiceFormData.invoiceNumber}
+                    onChange={(e) => setInvoiceFormData({ ...invoiceFormData, invoiceNumber: e.target.value })}
+                    placeholder="e.g. INV-0012"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="amount">Amount (₹) *</Label>
+                  <Input
+                    id="amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={invoiceFormData.amount}
+                    onChange={(e) =>
+                      setInvoiceFormData({ ...invoiceFormData, amount: Number(e.target.value) || 0 })
+                    }
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="status">Status</Label>
+                  <Select
+                    value={invoiceFormData.status}
+                    onValueChange={(value) =>
+                      setInvoiceFormData({ ...invoiceFormData, status: value as Invoice["status"] })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Pending">Pending</SelectItem>
+                      <SelectItem value="Paid">Paid</SelectItem>
+                      <SelectItem value="Overdue">Overdue</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dueDate">Due Date *</Label>
+                  <Input
+                    id="dueDate"
+                    type="date"
+                    value={invoiceFormData.dueDate}
+                    onChange={(e) => setInvoiceFormData({ ...invoiceFormData, dueDate: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea
+                  id="notes"
+                  value={invoiceFormData.notes}
+                  onChange={(e) => setInvoiceFormData({ ...invoiceFormData, notes: e.target.value })}
+                  placeholder="Optional notes for this invoice"
+                  rows={3}
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={closeInvoiceDialog}>
+                  Cancel
+                </Button>
+                <Button type="submit">{editingInvoice ? "Update Invoice" : "Create Invoice"}</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
         {/* Client Detail Sheet */}
         <Sheet open={isDetailPanelOpen} onOpenChange={setIsDetailPanelOpen}>
           <SheetContent className="w-[400px] sm:w-[540px] sm:max-w-none">
@@ -1985,7 +2110,7 @@ export default function ClientsManagement() {
                   <TabsContent value="invoices" className="mt-6 space-y-4">
                     <div className="flex justify-between items-center">
                       <h3 className="text-lg font-semibold">Invoices</h3>
-                      <Button size="sm">
+                      <Button size="sm" onClick={openNewInvoiceDialog}>
                         <Plus className="w-4 h-4 mr-2" />
                         New Invoice
                       </Button>
@@ -2006,11 +2131,45 @@ export default function ClientsManagement() {
                                     Due: {format(new Date(invoice.dueDate), "MMM dd, yyyy")}
                                   </p>
                                 </div>
-                                <div className="text-right">
-                                  <Badge className={getInvoiceStatusColor(invoice.status)} variant="secondary">
-                                    {invoice.status}
-                                  </Badge>
-                                  <p className="text-lg font-semibold mt-1">₹{invoice.amount.toLocaleString()}</p>
+                                <div className="flex items-start gap-3">
+                                  <div className="text-right">
+                                    <Badge className={getInvoiceStatusColor(invoice.status)} variant="secondary">
+                                      {invoice.status}
+                                    </Badge>
+                                    <p className="text-lg font-semibold mt-1">₹{invoice.amount.toLocaleString()}</p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      title="Edit invoice"
+                                      onClick={() => openEditInvoiceDialog(invoice)}
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </Button>
+                                    <AlertDialog>
+                                      <AlertDialogTrigger asChild>
+                                        <Button variant="destructive" size="icon" title="Delete invoice">
+                                          <Trash2 className="w-4 h-4" />
+                                        </Button>
+                                      </AlertDialogTrigger>
+                                      <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                          <AlertDialogTitle>Delete invoice</AlertDialogTitle>
+                                          <AlertDialogDescription>
+                                            Are you sure you want to delete invoice {invoice.invoiceNumber}? This action
+                                            cannot be undone.
+                                          </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                          <AlertDialogAction onClick={() => deleteInvoice(invoice._id)}>
+                                            Delete
+                                          </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                      </AlertDialogContent>
+                                    </AlertDialog>
+                                  </div>
                                 </div>
                               </div>
                               <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -2026,7 +2185,12 @@ export default function ClientsManagement() {
                         <div className="text-center py-8">
                           <FileText className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
                           <p className="text-muted-foreground">No invoices found</p>
-                          <Button variant="outline" size="sm" className="mt-2 bg-transparent">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-2 bg-transparent"
+                            onClick={openNewInvoiceDialog}
+                          >
                             <Plus className="w-4 h-4 mr-2" />
                             Create First Invoice
                           </Button>
@@ -2039,6 +2203,27 @@ export default function ClientsManagement() {
             )}
           </SheetContent>
         </Sheet>
+
+        {/* Message Dialog */}
+        <Dialog open={messageDialogOpen} onOpenChange={setMessageDialogOpen}>
+          <DialogContent className="max-w-3xl w-full p-0 overflow-hidden">
+            <DialogHeader className="sr-only">
+              <DialogTitle>Message Client</DialogTitle>
+              <DialogDescription>Chat with client</DialogDescription>
+            </DialogHeader>
+            {messageClient ? (
+              <MessageBox
+                userType="admin"
+                title={messageClient.name}
+                conversationId={messageClient._id}
+                onBack={() => setMessageDialogOpen(false)}
+                className="h-[70vh]"
+              />
+            ) : (
+              <div className="p-6">No client selected</div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </>
   )
