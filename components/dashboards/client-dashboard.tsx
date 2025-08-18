@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import MessageBox from "@/components/common/MessageBox"
+import ClientMessageBox from "@/components/common/ClientMessageBox"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -289,17 +289,17 @@ export default function ClientDashboard() {
           </>
         )
       case 'payments':
-        return <ClientPaymentsManagement/>
-      case 'message': {
-        const conversationId = client?._id || session?.user?.id
+        return <ClientPaymentsManagement />
+      case 'message':
+        // Compute a stable conversationId immediately without showing loaders
+        // Prefer session email, fallback to client id, then a temporary identifier
+        const conversationId = (session?.user?.email as string | undefined) || client?._id || 'guest-chat';
         return (
-          <MessageBox
-            userType="client"
-            title="Messages"
-            conversationId={conversationId || ''}
+          <ClientMessageBox
+            title={client?.name ? `${client.name} • Support` : 'Support'}
+            conversationId={conversationId}
           />
         )
-      }
       case 'settings':
         return <ClientSettingsManagement />
       default:
@@ -324,15 +324,15 @@ export default function ClientDashboard() {
                   </div>
                   {client.avatar && (
                     <div className="h-16 w-16 rounded-full bg-white border-2 border-blue-200 overflow-hidden">
-                      <img 
-                        src={client.avatar} 
-                        alt={client.name || 'Client'} 
+                      <img
+                        src={client.avatar}
+                        alt={client.name || 'Client'}
                         className="h-full w-full object-cover"
                       />
                     </div>
                   )}
                 </div>
-                
+
                 {/* Client Info Badges */}
                 <div className="flex flex-wrap gap-2 mt-4">
                   {client.email && (
@@ -348,7 +348,7 @@ export default function ClientDashboard() {
                     </Badge>
                   )}
                   {client.status && (
-                    <Badge 
+                    <Badge
                       variant={client.status.toLowerCase() === 'active' ? 'default' : 'secondary'}
                       className="capitalize"
                     >
@@ -361,8 +361,8 @@ export default function ClientDashboard() {
               <div className="bg-gradient-to-r from-red-50 to-pink-50 rounded-lg p-6 border border-red-100">
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome!</h1>
                 <p className="text-gray-600">Please complete your profile to get started.</p>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="mt-2"
                   onClick={() => setActiveSection('settings')}
                 >
@@ -376,9 +376,9 @@ export default function ClientDashboard() {
               {PROJECT_STATS.map((stat) => {
                 // Update stats based on client data if available
                 const statWithClientData = { ...stat };
-                
+
                 if (client) {
-                  switch(stat.id) {
+                  switch (stat.id) {
                     case 'active-projects':
                       statWithClientData.value = client.projectTotalAmount ? '3' : '0';
                       break;
@@ -387,7 +387,7 @@ export default function ClientDashboard() {
                       break;
                   }
                 }
-                
+
                 return <StatCard key={statWithClientData.id} {...statWithClientData} />;
               })}
             </div>

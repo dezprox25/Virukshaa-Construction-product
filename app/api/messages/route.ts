@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import connectToDB from '@/lib/db';
 import Message from '@/models/Message';
 // Auth optional for now; wire up NextAuth later if needed
-import { Document, Types } from 'mongoose';
 
 // Type for message creation request body
 interface CreateMessageRequest {
@@ -71,8 +70,8 @@ export async function POST(req: Request) {
     };
 
     return NextResponse.json({ success: true, data: response });
-  } catch (error) {
-    console.error('Error sending message:', error);
+  } catch (error: any) {
+    console.error('Error sending message:', error?.message || error);
     return NextResponse.json(
       { success: false, error: 'Failed to send message' },
       { status: 500 }
@@ -86,6 +85,7 @@ export async function GET(req: Request) {
     await connectToDB();
     const { searchParams } = new URL(req.url);
     const conversationId = searchParams.get('conversationId');
+    const seed = searchParams.get('seed');
     
     if (!conversationId) {
       return NextResponse.json(
@@ -95,10 +95,35 @@ export async function GET(req: Request) {
     }
 
     // Get messages for the conversation, sorted by timestamp
-    const messages = await Message.find({ conversationId })
+    let messages = await Message.find({ conversationId })
       .sort({ timestamp: 1 })
       .lean()
       .exec();
+
+    // Optional seed (first-time welcome from superadmin)
+    if ((seed === '1' || seed === 'true') && (!messages || messages.length === 0)) {
+      const now = new Date();
+      const seedDocs = [
+        new Message({
+          text: "Welcome to our support system! I'm here to help you with any questions.",
+          sender: 'superadmin',
+          receiver: 'client',
+          conversationId,
+          timestamp: new Date(now.getTime() - 1000 * 60 * 10), // 10 mins ago
+          read: false,
+        }),
+        new Message({
+          text: "Great! Feel free to ask me anything. I'm available 24/7 to assist you.",
+          sender: 'superadmin',
+          receiver: 'client',
+          conversationId,
+          timestamp: new Date(now.getTime() - 1000 * 60 * 5), // 5 mins ago
+          read: false,
+        }),
+      ];
+      await Message.insertMany(seedDocs);
+      messages = await Message.find({ conversationId }).sort({ timestamp: 1 }).lean().exec();
+    }
 
     // Format the response
     const response: MessageResponse[] = messages.map((msg: any) => ({
@@ -111,8 +136,8 @@ export async function GET(req: Request) {
     }));
 
     return NextResponse.json({ success: true, messages: response });
-  } catch (error) {
-    console.error('Error fetching messages:', error);
+  } catch (error: any) {
+    console.error('Error fetching messages:', error?.message || error);
     return NextResponse.json(
       { error: 'Failed to fetch messages' },
       { status: 500 }
