@@ -11,6 +11,7 @@ export interface IMaterialRequest extends Document {
   notes?: string;
   requestedBy: string;
   supervisor?: string;
+  projectId?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -56,6 +57,10 @@ const materialRequestSchema = new Schema<IMaterialRequest>(
     },
     supervisor: { 
       type: String 
+    },
+    projectId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Project'
     },
   },
   {

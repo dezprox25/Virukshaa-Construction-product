@@ -45,7 +45,7 @@ export default function DashboardLayout({
   onSectionChange,
 }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [adminProfile, setAdminProfile] = useState<{adminName: string; email: string} | null>(null)
+  const [adminProfile, setAdminProfile] = useState<{ adminName: string; email: string } | null>(null)
   const [profileName, setProfileName] = useState<string>("")
   const [profileEmail, setProfileEmail] = useState<string>("")
   const [profileData, setProfileData] = useState<Record<string, any> | null>(null)
@@ -55,14 +55,14 @@ export default function DashboardLayout({
   // Fetch admin profile data with auto-update
   useEffect(() => {
     let isMounted = true
-    
+
     const fetchAdminProfile = async () => {
       try {
         // Add a timestamp to prevent caching
         const response = await fetch(`/api/admin/profile?_t=${Date.now()}`)
         if (!response.ok) throw new Error('Failed to fetch admin profile')
         const data = await response.json()
-        
+
         if (isMounted) {
           setAdminProfile({
             adminName: data.adminName,
@@ -107,7 +107,7 @@ export default function DashboardLayout({
 
     // Listen for custom event when profile is updated
     window.addEventListener('profileUpdated', handleProfileUpdate)
-    
+
     // Clean up
     return () => {
       window.removeEventListener('profileUpdated', handleProfileUpdate)
@@ -205,8 +205,9 @@ export default function DashboardLayout({
         return [
           ...baseItems,
           { icon: FolderOpen, label: "Task", href: "task", id: "task" },
-          { icon: Users, label: "Employee", href: "employee", id: "employee" },   
-          { icon: ClipboardList, label: "Daily Logs", href: "logs", id: "logs" },
+          { icon: Users, label: "Employee", href: "employee", id: "employee" },
+          { icon: ClipboardList, label: "Reports", href: "reports", id: "reports" },
+          // { icon: Package, label: "Attendance", href: "attendance", id: "attendance" },
           { icon: Package, label: "Materials", href: "materials", id: "materials" },
         ]
       case "client":
@@ -254,9 +255,8 @@ export default function DashboardLayout({
           <Button
             key={item.id}
             variant={activeSection === item.id ? "default" : "ghost"}
-            className={`w-full justify-start gap-3 ${
-              activeSection === item.id ? "bg-[#fff] text-[#316b35] hover:bg-[#fff] hover:shadow-lg shadow-md transition-shadow" : "hover:bg-[#F9F9F9] hover:text-[#000] text-[#051118]"
-            }`}
+            className={`w-full justify-start gap-3 ${activeSection === item.id ? "bg-[#fff] text-[#316b35] hover:bg-[#fff] hover:shadow-lg shadow-md transition-shadow" : "hover:bg-[#F9F9F9] hover:text-[#000] text-[#051118]"
+              }`}
             onClick={() => handleNavClick(item.id)}
           >
             <item.icon className="w-4 h-4" />
@@ -330,7 +330,7 @@ export default function DashboardLayout({
                 {profileData && (
                   <div className="px-3 py-2 max-h-56 overflow-auto space-y-2">
                     {Object.entries(profileData)
-                      .filter(([key]) => !['password', '__v', '_id', 'id', 'totalPaid', 'dueAmount', 'salary', 'createdAt', 'updatedAt','status'].includes(key))
+                      .filter(([key]) => !['password', '__v', '_id', 'id', 'totalPaid', 'dueAmount', 'salary', 'createdAt', 'updatedAt', 'status'].includes(key))
                       .map(([key, value]) => {
                         const label = key.replace(/([A-Z])/g, ' $1').trim()
                         let display: string = ''

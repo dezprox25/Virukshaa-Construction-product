@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { Types } from 'mongoose'
 import connectToDB from "@/lib/db"
 import { Material, IMaterial, MaterialDocument } from "@/models/MaterialModel"
+import Task from "@/models/Task"
 
 // Temporary type until auth is set up
 type Session = {
@@ -21,7 +22,6 @@ type MaterialResponse = {
   currentStock: number;
   reorderLevel: number;
   pricePerUnit: number;
-  supplier: string;
   status: 'In Stock' | 'Low Stock' | 'Out of Stock' | 'On Order';
   description?: string;
   notes?: string;
@@ -31,20 +31,36 @@ type MaterialResponse = {
   sku?: string;
   imageUrl?: string;
   tags?: string[];
+  projectId?: string;
   lastUpdated: string;
   createdAt: string;
   updatedAt: string;
 };
 
 // GET /api/materials
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     console.log('Connecting to database...')
     await connectToDB()
     console.log('Successfully connected to database')
     
+    // Optional supervisor filter: only return materials linked to projects
+    // assigned to the given supervisor via tasks
+    const url = new URL(request.url)
+    const supervisorId = url.searchParams.get('supervisorId')
+
+    let query: any = {}
+    if (supervisorId) {
+      // Find distinct projectIds from Tasks assigned to this supervisor
+      const projectIds = await Task.distinct('projectId', { assignedTo: supervisorId, projectId: { $ne: null } })
+      if (!projectIds || projectIds.length === 0) {
+        return NextResponse.json([])
+      }
+      query = { projectId: { $in: projectIds } }
+    }
+
     console.log('Fetching materials...')
-    const materials = await Material.find({}).sort({ name: 1 }).lean().exec()
+    const materials = await Material.find(query).sort({ name: 1 }).lean().exec()
     console.log(`Found ${materials.length} materials`)
     
     if (!materials || !Array.isArray(materials)) {
@@ -61,7 +77,6 @@ export async function GET() {
       currentStock: number;
       reorderLevel: number;
       pricePerUnit: number;
-      supplier: string;
       status: 'In Stock' | 'Low Stock' | 'Out of Stock' | 'On Order';
       description?: string;
       notes?: string;
@@ -71,6 +86,7 @@ export async function GET() {
       sku?: string;
       imageUrl?: string;
       tags?: string[];
+      projectId?: Types.ObjectId;
       lastUpdated: Date;
       createdAt: Date;
       updatedAt: Date;
@@ -110,8 +126,8 @@ export async function GET() {
         currentStock: material.currentStock,
         reorderLevel: material.reorderLevel,
         pricePerUnit: material.pricePerUnit,
-        supplier: material.supplier,
         status: material.status as 'In Stock' | 'Low Stock' | 'Out of Stock' | 'On Order',
+        ...(material.projectId && { projectId: material.projectId.toString() }),
         lastUpdated: material.lastUpdated.toISOString(),
         createdAt: material.createdAt.toISOString(),
         updatedAt: material.updatedAt.toISOString(),
@@ -145,10 +161,10 @@ export async function POST(request: Request) {
   try {
     const data = await request.json()
     
-    // Validate required fields
-    if (!data.name || !data.category || !data.unit) {
+    // Validate required fields (form was reduced: accept minimal fields)
+    if (!data.name) {
       return NextResponse.json(
-        { message: 'Missing required fields' },
+        { message: 'Missing required fields: name' },
         { status: 400 }
       )
     }
@@ -158,14 +174,16 @@ export async function POST(request: Request) {
     // Set default values for optional fields
     const materialData = {
       name: data.name,
-      category: data.category,
-      unit: data.unit,
+      // Provide sensible defaults when omitted by the client
+      category: data.category || 'Tools',
+      unit: data.unit || '',
       currentStock: data.currentStock || 0,
       reorderLevel: data.reorderLevel || 0,
       pricePerUnit: data.pricePerUnit || 0,
       supplier: data.supplier || '',
       status: data.status || 'In Stock',
       lastUpdated: new Date(),
+      ...(data.projectId && Types.ObjectId.isValid(String(data.projectId)) && { projectId: new Types.ObjectId(String(data.projectId)) }),
       ...(data.description && { description: data.description }),
       ...(data.notes && { notes: data.notes }),
       ...(data.minOrderQuantity && { minOrderQuantity: data.minOrderQuantity }),
@@ -187,8 +205,8 @@ export async function POST(request: Request) {
       currentStock: material.currentStock,
       reorderLevel: material.reorderLevel,
       pricePerUnit: material.pricePerUnit,
-      supplier: material.supplier,
       status: material.status as 'In Stock' | 'Low Stock' | 'Out of Stock' | 'On Order',
+      ...(material.projectId && { projectId: material.projectId.toString() }),
       lastUpdated: material.lastUpdated.toISOString(),
       createdAt: material.createdAt.toISOString(),
       updatedAt: material.updatedAt.toISOString(),
@@ -228,9 +246,14 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     
     await connectToDB()
     
-    const updatedData = {
+    const updatedData: any = {
       ...data,
       lastUpdated: new Date()
+    }
+    if (data.projectId === null || data.projectId === '') {
+      updatedData.projectId = undefined
+    } else if (data.projectId && Types.ObjectId.isValid(String(data.projectId))) {
+      updatedData.projectId = new Types.ObjectId(String(data.projectId))
     }
     
     const material = await Material.findByIdAndUpdate(id, updatedData, { new: true })
@@ -250,7 +273,6 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       currentStock: material.currentStock,
       reorderLevel: material.reorderLevel,
       pricePerUnit: material.pricePerUnit,
-      supplier: material.supplier,
       status: material.status as 'In Stock' | 'Low Stock' | 'Out of Stock' | 'On Order',
       lastUpdated: material.lastUpdated.toISOString(),
       createdAt: material.createdAt.toISOString(),

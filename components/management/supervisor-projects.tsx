@@ -6,6 +6,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { toast } from "sonner"
 import {
   FolderOpen,
   Clock,
@@ -22,6 +23,13 @@ interface TaskItem {
   projectTitle?: string
   startDate?: string
   endDate?: string
+  // Project details (non-payment)
+  projectStartDate?: string
+  projectEndDate?: string
+  address?: string
+  city?: string
+  state?: string
+  postalCode?: string
 }
 
 export default function SupervisorProjects() {
@@ -44,6 +52,11 @@ export default function SupervisorProjects() {
       const role = typeof window !== 'undefined' ? localStorage.getItem('userRole') : null
       if (!supervisorId || role !== 'supervisor') {
         setTasks([])
+        if (!supervisorId) {
+          toast.info('No user found', { description: 'Please sign in to view your tasks.' })
+        } else if (role !== 'supervisor') {
+          toast.warning('Access limited', { description: 'Only supervisors can view these tasks.' } as any)
+        }
         return
       }
       const res = await fetch(`/api/tasks?supervisorId=${encodeURIComponent(supervisorId)}`)
@@ -60,10 +73,18 @@ export default function SupervisorProjects() {
         projectTitle: t.projectTitle || t.projectId?.title,
         startDate: t.startDate,
         endDate: t.endDate,
+        // From populated projectId (safe fields only)
+        projectStartDate: t.projectId?.startDate,
+        projectEndDate: t.projectId?.endDate,
+        address: t.projectId?.address,
+        city: t.projectId?.city,
+        state: t.projectId?.state,
+        postalCode: t.projectId?.postalCode,
       }))
       setTasks(mapped)
     } catch (e: any) {
       setError(e?.message || 'Failed to load tasks')
+      toast.error('Failed to load tasks', { description: e?.message })
     } finally {
       setLoading(false)
     }
@@ -211,17 +232,48 @@ export default function SupervisorProjects() {
                   <Badge className={getPriorityColor(task.priority)}>{task.priority}</Badge>
                 </div>
               </div>
-              <div className="space-y-2 text-sm text-muted-foreground">
-                {task.startDate && (
+              <div className="space-y-3 text-sm text-muted-foreground">
+                {/* Task dates */}
+                {(task.startDate || task.endDate) && (
                   <div>
-                    <span className="font-medium text-foreground">Start:</span> {new Date(task.startDate).toLocaleDateString()}
+                    <span className="font-medium text-foreground">Duration: </span>
+                    {task.startDate && (
+                      <>
+                        Start {new Date(task.startDate).toLocaleDateString()}
+                      </>
+                    )}
+                    {task.endDate && (
+                      <>
+                        {task.startDate ? " · " : ""}Due {new Date(task.endDate).toLocaleDateString()}
+                      </>
+                    )}
                   </div>
                 )}
-                {task.endDate && (
-                  <div>
-                    <span className="font-medium text-foreground">Due:</span> {new Date(task.endDate).toLocaleDateString()}
-                  </div>
-                )}
+
+                {/* Project details (non-payment) */}
+                <div className="space-y-1">
+                  {(task.address || task.city || task.state || task.postalCode) && (
+                    <div>
+                      <span className="font-medium text-foreground">Location:</span>{" "}
+                      {[task.address, task.city, task.state, task.postalCode]
+                        .filter(Boolean)
+                        .join(", ")}
+                    </div>
+                  )}
+                  {(task.projectStartDate || task.projectEndDate) && (
+                    <div>
+                      <span className="font-medium text-foreground">Project:</span>{" "}
+                      {task.projectStartDate && (
+                        <>Start {new Date(task.projectStartDate).toLocaleDateString()}</>
+                      )}
+                      {task.projectEndDate && (
+                        <>
+                          {task.projectStartDate ? " · " : ""}End {new Date(task.projectEndDate).toLocaleDateString()}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>

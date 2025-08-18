@@ -1,11 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDB from "@/lib/db";
 import Project, { IProject } from "@/models/ProjectModel";
+import Task from "@/models/Task";
 
 // GET /api/projects
 export async function GET(req: NextRequest) {
   await connectToDB();
   try {
+    const { searchParams } = new URL(req.url);
+    const supervisorId = searchParams.get('supervisorId');
+
+    // If supervisorId provided, filter projects where any embedded task is assigned to this supervisor
+    if (supervisorId && supervisorId !== '') {
+      // First, find distinct projectIds from Tasks assigned to this supervisor
+      const projectIds = await Task.distinct('projectId', { assignedTo: supervisorId, projectId: { $ne: null } });
+      if (!projectIds || projectIds.length === 0) {
+        return NextResponse.json([]);
+      }
+      const projects = await Project.find({ _id: { $in: projectIds } }).sort({ createdAt: -1 });
+      return NextResponse.json(projects);
+    }
+
     const projects = await Project.find().sort({ createdAt: -1 });
     return NextResponse.json(projects);
   } catch (error) {

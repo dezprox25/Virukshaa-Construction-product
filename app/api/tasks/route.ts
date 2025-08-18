@@ -26,7 +26,8 @@ export async function GET(req: NextRequest) {
     }
 
     const tasks = await Task.find({ assignedTo: supervisorId })
-      .populate('projectId', 'title') // Populate project title
+      // Populate only safe, non-payment project fields
+      .populate('projectId', 'title startDate endDate address city state postalCode')
       .sort({ createdAt: -1 });
 
     return NextResponse.json(tasks);

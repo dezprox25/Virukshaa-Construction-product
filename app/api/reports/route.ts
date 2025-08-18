@@ -10,15 +10,13 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') as 'client' | 'supervisor' | 'employee' | 'supplier' | null;
     const search = searchParams.get('search') || '';
+    const supervisorId = searchParams.get('supervisorId') || '';
 
-    const db = await connectToDB();
-    
-    let query: any = {};
-    
-    if (type) {
-      query.type = type;
-    }
-    
+    await connectToDB();
+
+    const query: any = {};
+    if (type) query.type = type;
+    if (supervisorId) query.supervisorId = supervisorId;
     if (search) {
       query.$or = [
         { title: { $regex: search, $options: 'i' } },
@@ -42,31 +40,35 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    await connectToDB();
     const reportData = await request.json();
-    
-    // Basic validation
-    if (!reportData.title || !reportData.content || !reportData.type) {
+
+    // Basic validation (title + type are required; content optional for supervisor daily reports)
+    if (!reportData?.title || !reportData?.type) {
       return NextResponse.json(
-        { error: 'Title, content, and type are required' },
+        { error: 'Title and type are required' },
         { status: 400 }
       );
     }
 
-    const newReport = {
+    // Normalize fields
+    const payload: any = {
       ...reportData,
-      date: new Date().toISOString(),
-      createdAt: new Date(),
-      updatedAt: new Date()
+      date: reportData.date ? new Date(reportData.date) : new Date()
     };
+    // Remove deprecated field if sent by older clients
+    if ('taskProgress' in payload) delete payload.taskProgress;
 
-    const result = await Report.create(newReport);
-    
-    return NextResponse.json({
-      ...newReport,
-      _id: result.insertedId
-    }, { status: 201 });
-  } catch (error) {
+    const doc = await Report.create(payload);
+    const json = doc.toObject ? doc.toObject() : doc;
+    return NextResponse.json(json, { status: 201 });
+  } catch (error: any) {
     console.error('Error creating report:', error);
+    // Validation errors
+    if (error?.name === 'ValidationError') {
+      const messages = Object.values(error.errors || {}).map((e: any) => e.message);
+      return NextResponse.json({ error: messages.join(', ') || 'Validation failed' }, { status: 400 });
+    }
     return NextResponse.json(
       { error: 'Failed to create report' },
       { status: 500 }

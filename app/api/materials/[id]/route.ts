@@ -22,6 +22,7 @@ type MaterialResponse = {
   sku?: string;
   imageUrl?: string;
   tags?: string[];
+  projectId?: string;
   lastUpdated: string;
   createdAt: string;
   updatedAt: string;
@@ -45,9 +46,14 @@ export async function PUT(
     
     await connectToDB()
     
-    const updatedData = {
+    const updatedData: any = {
       ...data,
       lastUpdated: new Date()
+    }
+    if (data.projectId === null || data.projectId === '') {
+      updatedData.projectId = undefined
+    } else if (data.projectId && Types.ObjectId.isValid(String(data.projectId))) {
+      updatedData.projectId = new Types.ObjectId(String(data.projectId))
     }
     
     const material = (await Material.findByIdAndUpdate(id, updatedData, { new: true })) as MaterialDocument | null
@@ -59,6 +65,7 @@ export async function PUT(
       )
     }
     
+    const mAny = material as any
     const response: MaterialResponse = {
       _id: material._id.toString(),
       name: material.name,
@@ -67,8 +74,9 @@ export async function PUT(
       currentStock: material.currentStock,
       reorderLevel: material.reorderLevel,
       pricePerUnit: material.pricePerUnit,
-      supplier: material.supplier,
+      supplier: mAny.supplier,
       status: material.status as 'In Stock' | 'Low Stock' | 'Out of Stock' | 'On Order',
+      ...(material.projectId && { projectId: material.projectId.toString() }),
       lastUpdated: material.lastUpdated.toISOString(),
       createdAt: material.createdAt.toISOString(),
       updatedAt: material.updatedAt.toISOString(),

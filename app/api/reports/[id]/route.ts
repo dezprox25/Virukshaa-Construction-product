@@ -56,6 +56,9 @@ export async function PATCH(
       );
     }
 
+    // Remove deprecated field if sent by older clients
+    if ('taskProgress' in updateData) delete updateData.taskProgress;
+
     const updatedReport = {
       ...updateData,
       updatedAt: new Date()

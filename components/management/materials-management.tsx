@@ -21,8 +21,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogClose,
 } from "@/components/ui/dialog"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import {
   Package,
   Plus,
@@ -49,6 +50,7 @@ interface Material {
   supplier: string
   lastUpdated: string
   status: "In Stock" | "Low Stock" | "Out of Stock" | "On Order"
+  projectId?: string
 }
 
 interface MaterialRequest {
@@ -63,8 +65,14 @@ interface MaterialRequest {
   notes?: string
   requestedBy: string
   supervisor?: string
+  projectId?: string
   createdAt: string
   updatedAt: string
+}
+
+interface Project {
+  _id: string
+  title: string
 }
 
 export default function MaterialsManagement() {
@@ -80,6 +88,13 @@ export default function MaterialsManagement() {
   const [loading, setLoading] = useState(true)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false)
+  const [isDeleteMaterialOpen, setIsDeleteMaterialOpen] = useState(false)
+  const [materialToDelete, setMaterialToDelete] = useState<Material | null>(null)
+  const [isDeleteRequestOpen, setIsDeleteRequestOpen] = useState(false)
+  const [requestToDelete, setRequestToDelete] = useState<MaterialRequest | null>(null)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [selectedProjectInventory, setSelectedProjectInventory] = useState<string>("")
+  const [selectedProjectRequest, setSelectedProjectRequest] = useState<string>("")
   
   const [inventoryData, setInventoryData] = useState<{
     name: string;
@@ -123,8 +138,64 @@ export default function MaterialsManagement() {
   //   } catch (error) {
   //     console.error("Error fetching suppliers:", error)
   //     throw error
-  //   }
-  // }
+  //   } 
+  // Permanently delete a material request
+
+
+  const handleDeleteRequest = async (id: string) => {
+    setIsDeleteRequestOpen(true)
+    setRequestToDelete(requests.find(req => req._id === id) || null)
+  }
+
+  const fetchProjects = async () => {
+    try {
+      const supervisorId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
+      const role = typeof window !== 'undefined' ? localStorage.getItem('userRole') : null
+      if (!supervisorId || role !== 'supervisor') {
+        setProjects([])
+        return []
+      }
+      const res = await fetch(`/api/projects?supervisorId=${encodeURIComponent(supervisorId)}`)
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.message || 'Failed to load projects')
+      }
+      const data = await res.json()
+      setProjects(data.map((p: any) => ({ _id: p._id, title: p.title })))
+      return data
+    } catch (e) {
+      console.error('Error fetching projects:', e)
+      toast.error('Error', { description: e instanceof Error ? e.message : 'Failed to load projects' })
+      setProjects([])
+      return []
+    }
+  }
+
+  const handleConfirmDeleteRequest = async () => {
+    if (!requestToDelete) return
+    try {
+      setLoading(true)
+      const resp = await fetch(`/api/material-requests/${requestToDelete._id}`, { method: 'DELETE' })
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        throw new Error(err.message || 'Failed to delete request')
+      }
+      setRequests(reqs => reqs.filter(r => r._id !== requestToDelete._id))
+      toast.success('Deleted', { description: 'Material request deleted.' })
+    } catch (error) {
+      console.error('Error deleting request:', error)
+      toast.error('Error', { description: error instanceof Error ? error.message : 'Failed to delete request' })
+    } finally {
+      setLoading(false)
+      setIsDeleteRequestOpen(false)
+      setRequestToDelete(null)
+    }
+  }
+
+  const handleCancelDeleteRequest = () => {
+    setIsDeleteRequestOpen(false)
+    setRequestToDelete(null)
+  }
 
   const fetchSuppliers = async () => {
     try {
@@ -136,10 +207,8 @@ export default function MaterialsManagement() {
       return data
     } catch (error) {
       console.error('Error fetching suppliers:', error)
-      toast({
-        title: "Error",
+      toast.error("Error", {
         description: "Failed to load suppliers. Please try again.",
-        variant: "destructive",
       })
       return []
     } finally {
@@ -154,15 +223,12 @@ export default function MaterialsManagement() {
         await Promise.all([
           fetchMaterials(),
           fetchRequests(),
-          fetchSuppliers()
+          fetchSuppliers(),
+          fetchProjects()
         ])
       } catch (error) {
         console.error('Error fetching data:', error)
-        toast({
-          title: "Error",
-          description: "Failed to load data. Please try again.",
-          variant: "destructive",
-        })
+        toast.error("Error", { description: "Failed to load data. Please try again." })
       } finally {
         setLoading(false)
       }
@@ -173,25 +239,31 @@ export default function MaterialsManagement() {
 
   const fetchMaterials = async () => {
     try {
-      // console.log('Fetching materials from:', '/api/materials')
-      const response = await fetch('/api/materials')
-      
+      const supervisorId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
+      const role = typeof window !== 'undefined' ? localStorage.getItem('userRole') : null
+      if (!supervisorId || role !== 'supervisor') {
+        setMaterials([])
+        if (!supervisorId) {
+          toast.info('No user found', { description: 'Please sign in to view your materials.' })
+        } else if (role !== 'supervisor') {
+          toast.warning('Access limited', { description: 'Only supervisors can view these materials.' } as any)
+        }
+        return []
+      }
+
+      const response = await fetch(`/api/materials?supervisorId=${encodeURIComponent(supervisorId)}`)
       if (!response.ok) {
         const errorData = await response.text()
         console.error('Failed to fetch materials. Status:', response.status, 'Response:', errorData)
         throw new Error(`Failed to fetch materials: ${response.status} ${response.statusText}`)
       }
-      
       const data = await response.json()
-      // console.log('Received materials data:', data)
       setMaterials(data)
       return data
     } catch (error) {
       console.error("Error in fetchMaterials:", error)
-      toast({
-        title: "Error",
+      toast.error("Error", {
         description: error instanceof Error ? error.message : "Failed to load materials",
-        variant: "destructive",
       })
       throw error
     }
@@ -199,7 +271,12 @@ export default function MaterialsManagement() {
 
   const fetchRequests = async () => {
     try {
-      const response = await fetch('/api/material-requests')
+      const supervisorId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
+      const role = typeof window !== 'undefined' ? localStorage.getItem('userRole') : null
+      const url = (supervisorId && role === 'supervisor')
+        ? `/api/material-requests?supervisorId=${encodeURIComponent(supervisorId)}`
+        : '/api/material-requests'
+      const response = await fetch(url)
       if (!response.ok) throw new Error('Failed to fetch material requests')
       const data = await response.json()
       setRequests(data)
@@ -213,27 +290,52 @@ export default function MaterialsManagement() {
     setLoading(true)
 
     try {
-      if (!requestData.materialId || !requestData.materialName || !requestData.unit) {
-        throw new Error("Please fill in all required fields")
+      // Prepare local values and try to infer unit if missing from "Name (Unit)"
+      let materialId = requestData.materialId
+      let materialName = requestData.materialName
+      let unit = requestData.unit
+
+      if (!unit && materialName) {
+        const m = materialName.match(/(.+?)\s*\((.+?)\)$/)
+        if (m) {
+          materialName = m[1].trim()
+          unit = m[2].trim()
+          if (!materialId) {
+            materialId = `hardcoded-${materialName.toLowerCase().replace(/\s+/g, '-')}`
+          }
+        }
       }
 
-      const isHardcodedMaterial = requestData.materialId.startsWith('hardcoded-');
+      if (!materialName || !unit) {
+        toast.error('Missing fields', { description: 'Please select a material (including unit) or type as "Name (Unit)".' })
+        throw new Error("Please fill in all required fields")
+      }
+      if (!materialId) {
+        // Fallback to hardcoded ID if user typed a custom material
+        materialId = `hardcoded-${materialName.toLowerCase().replace(/\s+/g, '-')}`
+      }
+
+      const isHardcodedMaterial = materialId.startsWith('hardcoded-');
       
+      const supervisorId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
+      const role = typeof window !== 'undefined' ? localStorage.getItem('userRole') : null
       const response = await fetch('/api/material-requests', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          material: isHardcodedMaterial ? requestData.materialName : requestData.materialId,
-          materialName: requestData.materialName,
+          material: isHardcodedMaterial ? materialName : materialId,
+          materialName,
           quantity: requestData.quantity,
-          unit: requestData.unit,
+          unit,
           requiredDate: new Date(requestData.requiredDate).toISOString(),
           notes: requestData.notes,
           status: 'Pending',
           requestedBy: 'Anonymous',
-          email: 'anonymous@example.com'
+          email: 'anonymous@example.com',
+          projectId: selectedProjectRequest || undefined,
+          ...(supervisorId && role === 'supervisor' ? { supervisor: supervisorId } : {})
         }),
       })
 
@@ -247,19 +349,12 @@ export default function MaterialsManagement() {
       setIsRequestDialogOpen(false)
       resetRequestForm()
 
-      toast({
-        title: "Request Submitted",
+      toast.success("Request Submitted", {
         description: `Material request for ${requestData.materialName} has been submitted successfully.`,
       })
     } catch (error) {
       console.error('Error submitting request:', error)
-      toast({
-        title: "Error",
-        description: "Failed to submit request. Please try again.",
-
-
-        variant: "destructive",
-      })
+      toast.error("Error", { description: "Failed to submit request. Please try again." })
     } finally {
       setLoading(false)
     }
@@ -275,6 +370,7 @@ export default function MaterialsManagement() {
       supplierId: "",
       notes: "",
     })
+    setSelectedProjectRequest("")
   }
 
   const resetInventoryForm = () => {
@@ -288,6 +384,7 @@ export default function MaterialsManagement() {
       supplier: "",
       status: "In Stock"
     })
+    setSelectedProjectInventory("")
     setEditingMaterial(null)
   }
 
@@ -303,6 +400,7 @@ export default function MaterialsManagement() {
       supplier: material.supplier,
       status: material.status
     })
+    setSelectedProjectInventory(material.projectId || "")
     setIsInventoryDialogOpen(true)
   }
 
@@ -324,7 +422,10 @@ export default function MaterialsManagement() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(inventoryData),
+        body: JSON.stringify({
+          ...inventoryData,
+          projectId: selectedProjectInventory || undefined,
+        }),
       })
 
       // First, check if the response is JSON
@@ -355,17 +456,56 @@ export default function MaterialsManagement() {
       setIsInventoryDialogOpen(false)
       resetInventoryForm()
 
-      toast({
-        title: "Success",
-        description: `Material ${editingMaterial ? 'updated' : 'added'} successfully.`,
-      })
+      toast.success("Success", { description: `Material ${editingMaterial ? 'updated' : 'added'} successfully.` })
     } catch (error) {
       console.error('Error saving material:', error)
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : `Failed to ${editingMaterial ? 'update' : 'add'} material. Please try again.`,
-        variant: "destructive",
+      toast.error("Error", { description: error instanceof Error ? error.message : `Failed to ${editingMaterial ? 'update' : 'add'} material. Please try again.` })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Delete an inventory item
+  const handleDeleteMaterial = async (id: string) => {
+    try {
+      setLoading(true)
+      const resp = await fetch(`/api/materials/${id}`, { method: 'DELETE' })
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        throw new Error(err.message || 'Failed to delete material')
+      }
+      setMaterials(materials.filter(m => m._id !== id))
+      toast.success('Deleted', { description: 'Material deleted successfully.' })
+      setIsDeleteMaterialOpen(false)
+      setMaterialToDelete(null)
+    } catch (error) {
+      console.error('Error deleting material:', error)
+      toast.error('Error', { description: error instanceof Error ? error.message : 'Failed to delete material' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Cancel a material request (mark as Rejected)
+  const handleCancelRequest = async (id: string) => {
+    const confirmed = window.confirm('Cancel this request?')
+    if (!confirmed) return
+    try {
+      setLoading(true)
+      const resp = await fetch(`/api/material-requests/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Rejected' })
       })
+      const updated = await resp.json().catch(() => null)
+      if (!resp.ok) {
+        throw new Error(updated?.message || 'Failed to cancel request')
+      }
+      setRequests(reqs => reqs.map(r => r._id === id ? { ...r, status: 'Rejected', updatedAt: new Date().toISOString() } : r))
+      toast.success('Request Cancelled', { description: 'The request was marked as Rejected.' })
+    } catch (error) {
+      console.error('Error cancelling request:', error)
+      toast.error('Error', { description: error instanceof Error ? error.message : 'Failed to cancel request' })
     } finally {
       setLoading(false)
     }
@@ -527,7 +667,24 @@ export default function MaterialsManagement() {
                   </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmitInventory} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4">
+                    {projects.length > 0 && (
+                      <div className="space-y-2">
+                        <Label htmlFor="inventoryProject">Project (assigned)</Label>
+                        <select
+                          id="inventoryProject"
+                          value={selectedProjectInventory}
+                          onChange={(e) => setSelectedProjectInventory(e.target.value)}
+                          className="w-full p-2 border rounded-md"
+                          required
+                        >
+                          <option value="" disabled>Select a project</option>
+                          {projects.map((p) => (
+                            <option key={p._id} value={p._id}>{p.title}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <Label htmlFor="materialName">Material Name *</Label>
                       <Input
@@ -538,23 +695,7 @@ export default function MaterialsManagement() {
                         required
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="category">Category *</Label>
-                      <select
-                        id="category"
-                        value={inventoryData.category}
-                        onChange={(e) => setInventoryData({...inventoryData, category: e.target.value})}
-                        className="w-full p-2 border rounded-md"
-                        required
-                      >
-                        <option value="">Select Category</option>
-                        {categories.map((category) => (
-                          <option key={category} value={category}>
-                            {category}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -591,19 +732,8 @@ export default function MaterialsManagement() {
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="pricePerUnit">Price per Unit *</Label>
-                      <Input
-                        id="pricePerUnit"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={inventoryData.pricePerUnit}
-                        onChange={(e) => setInventoryData({...inventoryData, pricePerUnit: Number(e.target.value)})}
-                        required
-                      />
-                    </div>
+                  <div className="grid grid-cols-1 gap-4">
+                  
                     <div className="space-y-2">
                       <Label htmlFor="status">Status *</Label>
                       <select
@@ -620,27 +750,7 @@ export default function MaterialsManagement() {
                       </select>
                     </div>
                   </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="supplier">Supplier</Label>
-                    <select
-                      id="supplier"
-                      value={inventoryData.supplier || ''}
-                      onChange={(e) => setInventoryData({...inventoryData, supplier: e.target.value})}
-                      className="w-full p-2 border rounded-md"
-                    >
-                      <option value="">Select a supplier</option>
-                      {suppliers.map((supplier) => (
-                        <option key={supplier._id} value={supplier.name}>
-                          {supplier.name}
-                        </option>
-                      ))}
-                    </select>
-                    {isLoadingSuppliers && (
-                      <p className="text-sm text-muted-foreground">Loading suppliers...</p>
-                    )}
-                  </div>
-                  
+               
                   <div className="flex justify-end gap-2 pt-4">
                     <Button
                       type="button"
@@ -675,6 +785,23 @@ export default function MaterialsManagement() {
               </DialogHeader>
               <form onSubmit={handleRequestSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {projects.length > 0 && (
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="requestProject">Project (assigned) *</Label>
+                      <select
+                        id="requestProject"
+                        value={selectedProjectRequest}
+                        onChange={(e) => setSelectedProjectRequest(e.target.value)}
+                        className="w-full p-2 border rounded-md"
+                        required
+                      >
+                        <option value="" disabled>Select a project</option>
+                        {projects.map((p) => (
+                          <option key={p._id} value={p._id}>{p.title}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="materialInput">Material *</Label>
                     <div className="relative">
@@ -748,24 +875,19 @@ export default function MaterialsManagement() {
                       required
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="unitInput">Unit *</Label>
+                    <Input
+                      id="unitInput"
+                      value={requestData.unit}
+                      onChange={(e) => setRequestData({ ...requestData, unit: e.target.value })}
+                      placeholder="e.g., Bags, Pieces, Meters"
+                      required
+                    />
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="supplierId">Preferred Supplier (Optional)</Label>
-                    <select
-                      id="supplierId"
-                      value={requestData.supplierId || ''}
-                      onChange={(e) => setRequestData({ ...requestData, supplierId: e.target.value })}
-                      className="w-full p-2 border rounded-md"
-                    >
-                      <option value="">Select Supplier (Optional)</option>
-                      {suppliers.map((supplier) => (
-                        <option key={supplier._id} value={supplier._id}>
-                          {supplier.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                
                   <div className="space-y-2">
                     <Label htmlFor="requiredDate">Required Date *</Label>
                     <Input
@@ -900,22 +1022,24 @@ export default function MaterialsManagement() {
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">Current Stock:</span>
                     <span className="text-sm">
-                      {material.currentStock} {material.unit}
+                      {material.currentStock}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">Reorder Level:</span>
                     <span className="text-sm">
-                      {material.reorderLevel} {material.unit}
+                      {material.reorderLevel}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium">Price per {material.unit}:</span>
-                    <span className="text-sm">${material.pricePerUnit}</span>
+                    <span className="text-sm font-medium">Quantity:</span>
+                    <span className="text-sm"> {material.unit}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium">Supplier:</span>
-                    <span className="text-sm">{material.supplier}</span>
+                    <span className="text-sm font-medium">Project:</span>
+                    <span className="text-sm">
+                      {projects.find(p => p._id === material.projectId)?.title || '—'}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">Last Updated:</span>
@@ -949,6 +1073,14 @@ export default function MaterialsManagement() {
                   >
                     <ShoppingCart className="w-4 h-4 mr-2" />
                     Request
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="flex-1 bg-red-400"
+                    onClick={() => { setMaterialToDelete(material); setIsDeleteMaterialOpen(true) }}
+                  >
+                    Delete
                   </Button>
                 </div>
               </CardContent>
@@ -985,6 +1117,12 @@ export default function MaterialsManagement() {
                     <span className="text-sm font-medium">Required:</span>
                     <p className="text-sm">{new Date(request.requiredDate).toLocaleDateString()}</p>
                   </div>
+                  {request.projectId && (
+                    <div>
+                      <span className="text-sm font-medium">Project:</span>
+                      <p className="text-sm">{projects.find(p => p._id === request.projectId)?.title || '—'}</p>
+                    </div>
+                  )}
                   <div>
                     <span className="text-sm font-medium">Supervisor:</span>
                     <p className="text-sm">{request.supervisor}</p>
@@ -1004,10 +1142,13 @@ export default function MaterialsManagement() {
                     Edit Request
                   </Button>
                   {request.status === "Pending" && (
-                    <Button size="sm" variant="destructive">
+                    <Button size="sm" variant="destructive" onClick={() => handleCancelRequest(request._id)}>
                       Cancel Request
                     </Button>
                   )}
+                  <Button size="sm" variant="destructive" onClick={() => handleDeleteRequest(request._id)}>
+                    Delete
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -1045,6 +1186,59 @@ export default function MaterialsManagement() {
           )}
         </div>
       )}
+
+      {/* Delete Material Confirmation Dialog */}
+      <Dialog open={isDeleteMaterialOpen} onOpenChange={setIsDeleteMaterialOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete material?</DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. This will permanently delete
+              {" "}
+              <span className="font-medium">{materialToDelete?.name}</span>
+              {" "}from your inventory.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              onClick={() => materialToDelete && handleDeleteMaterial(materialToDelete._id)}
+              disabled={loading}
+            >
+              {loading ? "Deleting..." : "Delete"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Request Confirmation Dialog */}
+      <Dialog open={isDeleteRequestOpen} onOpenChange={setIsDeleteRequestOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete request?</DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. This will permanently delete the request for
+              {" "}
+              <span className="font-medium">{requestToDelete?.materialName}</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <DialogClose asChild>
+              <Button variant="outline" onClick={() => { setIsDeleteRequestOpen(false); setRequestToDelete(null) }}>Cancel</Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDeleteRequest}
+              disabled={loading}
+            >
+              {loading ? "Deleting..." : "Delete"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

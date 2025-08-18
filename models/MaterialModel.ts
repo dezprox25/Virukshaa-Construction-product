@@ -8,7 +8,6 @@ export interface IMaterial {
   currentStock: number;
   reorderLevel: number;
   pricePerUnit: number;
-  supplier: string;
   lastUpdated: Date;
   status: 'In Stock' | 'Low Stock' | 'Out of Stock' | 'On Order';
   description?: string;
@@ -19,6 +18,7 @@ export interface IMaterial {
   sku?: string;
   imageUrl?: string;
   tags?: string[];
+  projectId?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -59,11 +59,6 @@ const materialSchema = new Schema<IMaterial>(
       required: true,
       min: 0
     },
-    supplier: { 
-      type: String, 
-      required: false,
-      trim: true
-    },
     lastUpdated: { 
       type: Date, 
       default: Date.now 
@@ -80,7 +75,8 @@ const materialSchema = new Schema<IMaterial>(
     barcode: { type: String },
     sku: { type: String },
     imageUrl: { type: String },
-    tags: [{ type: String }]
+    tags: [{ type: String }],
+    projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: false }
   },
   {
     timestamps: true

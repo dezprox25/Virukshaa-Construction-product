@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/components/providers/auth-provider'
+import SonnerToaster from '@/components/providers/sonner-toaster'
 import { ClientProvider } from '@/contexts/ClientContext'
 
 export const metadata: Metadata = {
@@ -25,6 +26,7 @@ export default function RootLayout({
         <AuthProvider>
           <ClientProvider>
             {children}
+            <SonnerToaster />
           </ClientProvider>
         </AuthProvider>
       </body>

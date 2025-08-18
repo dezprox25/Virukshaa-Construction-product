@@ -1,26 +1,18 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import DashboardLayout from "@/components/layout/dashboard-layout"
-import AttendanceChart from "@/components/charts/attendance-chart"
-import { ClipboardList, Users, Package, Camera, CheckCircle, AlertTriangle } from "lucide-react"
-
+import { Package, CheckCircle, AlertTriangle, Loader2 } from "lucide-react"
+import SupervisorReports from "@/components/management/supervisor-reports"
 import ProjectsManagement from "@/components/management/supervisor-projects"
-import DailyLogsManagement from "@/components/management/daily-logs"
-import AttendanceManagement from "@/components/management/attendance-management"
 import MaterialsManagement from "@/components/management/materials-management"
 import EmployeeManagement from "@/components/management/supervisor-employee"
 
 export default function SupervisorDashboard() {
   const [activeSection, setActiveSection] = useState("dashboard")
-  const [dailyLog, setDailyLog] = useState("")
-  const [materialUsed, setMaterialUsed] = useState("")
   const [loadingTasks, setLoadingTasks] = useState(false)
   const [tasksError, setTasksError] = useState<string | null>(null)
   const [tasks, setTasks] = useState<Array<{
@@ -30,13 +22,69 @@ export default function SupervisorDashboard() {
     priority: "Low" | "Medium" | "High"
     projectTitle?: string
   }>>([])
+  const [statsLoading, setStatsLoading] = useState(false)
+  const [stats, setStats] = useState({
+    tasksCompleted: "0/0",
+    materialsUsed: "0%",
+    safetyIssues: "0",
+  })
 
-  const todayStats = [
-    { title: "Workers Present", value: "28/32", icon: Users, color: "text-green-600" },
-    { title: "Tasks Completed", value: "12/15", icon: CheckCircle, color: "text-blue-600" },
-    { title: "Materials Used", value: "85%", icon: Package, color: "text-orange-600" },
-    { title: "Safety Issues", value: "2", icon: AlertTriangle, color: "text-red-600" },
-  ]
+  const today = useMemo(() => {
+    const d = new Date()
+    // format as YYYY-MM-DD for API compatibility if needed
+    return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+  }, [])
+
+  const loadStats = async () => {
+    try {
+      setStatsLoading(true)
+      const supervisorId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
+      const role = typeof window !== 'undefined' ? localStorage.getItem('userRole') : null
+
+      // Tasks completed: from loaded tasks state (fallback to fetching if empty)
+      let tasksData = tasks
+      if ((tasksData?.length ?? 0) === 0) {
+        try {
+          const supId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
+          if (supId) {
+            const res = await fetch(`/api/tasks?supervisorId=${encodeURIComponent(supId)}`, { cache: 'no-store' })
+            if (res.ok) tasksData = await res.json()
+          }
+        } catch {}
+      }
+      const totalTasks = tasksData?.length || 0
+      const completedTasks = (tasksData || []).filter((t: any) => t.status === 'Completed').length
+      const tasksCompleted = `${completedTasks}/${totalTasks}`
+
+      // Materials used: derive a percentage from material-requests status for this supervisor
+      let materialsUsed = '0%'
+      try {
+        const supId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
+        const mrUrl = supId && role === 'supervisor'
+          ? `/api/material-requests?supervisorId=${encodeURIComponent(supId)}`
+          : `/api/material-requests`
+        const mrRes = await fetch(mrUrl, { cache: 'no-store' })
+        if (mrRes.ok) {
+          const items: any[] = await mrRes.json()
+          const total = items.length
+          const progressed = items.filter((m) => {
+            const s = (m.status || '').toLowerCase()
+            return s === 'approved' || s === 'completed' || s === 'issued' || s === 'delivered'
+          }).length
+          const pct = total > 0 ? Math.round((progressed / total) * 100) : 0
+          materialsUsed = `${pct}%`
+        }
+      } catch {}
+
+      // Safety issues: derive from tasks with High priority and not completed
+      const issues = (tasksData || []).filter((t: any) => t.priority === 'High' && t.status !== 'Completed').length
+      const safetyIssues = String(issues)
+
+      setStats({ tasksCompleted, materialsUsed, safetyIssues })
+    } finally {
+      setStatsLoading(false)
+    }
+  }
 
   // Load tasks assigned to this supervisor
   useEffect(() => {
@@ -74,6 +122,12 @@ export default function SupervisorDashboard() {
     fetchTasks()
   }, [])
 
+  // Load top stats once and whenever tasks change
+  useEffect(() => {
+    loadStats()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks.length])
+
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case "High":
@@ -106,98 +160,53 @@ export default function SupervisorDashboard() {
         return <ProjectsManagement />
       case "employee":
         return <EmployeeManagement />
-      case "attendance":
-        return <AttendanceManagement />
+      // case "attendance":
+      //   return <AttendanceManagement />
+      case "reports":
+        return <SupervisorReports />  
       case "materials":
         return <MaterialsManagement />
       default:
         return (
           <div className="space-y-6">
             {/* Today's Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {todayStats.map((stat) => (
-                <Card key={stat.title}>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-                    <stat.icon className={`h-4 w-4 ${stat.color}`} />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{stat.value}</div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Daily Log Entry */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <ClipboardList className="w-5 h-5" />
-                    Daily Progress Log
-                  </CardTitle>
-                  <CardDescription>Record today's work progress and observations</CardDescription>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Tasks Completed</CardTitle>
+                  <CheckCircle className="h-4 w-4 text-blue-600" />
                 </CardHeader>
                 <CardContent>
-                  <Tabs defaultValue="progress" className="w-full">
-                    <TabsList className="grid w-full grid-cols-3">
-                      <TabsTrigger value="progress">Progress</TabsTrigger>
-                      <TabsTrigger value="materials">Materials</TabsTrigger>
-                      <TabsTrigger value="issues">Issues</TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="progress" className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="progress-log">Work Progress</Label>
-                        <Textarea
-                          id="progress-log"
-                          placeholder="Describe today's work progress..."
-                          value={dailyLog}
-                          onChange={(e) => setDailyLog(e.target.value)}
-                          rows={4}
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm">
-                          <Camera className="w-4 h-4 mr-2" />
-                          Add Photo
-                        </Button>
-                        <Button size="sm" variant="outline">
-                          Save Log
-                        </Button>
-                      </div>
-                    </TabsContent>
-
-                    <TabsContent value="materials" className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="materials-used">Materials Used Today</Label>
-                        <Textarea
-                          id="materials-used"
-                          placeholder="List materials used and quantities..."
-                          value={materialUsed}
-                          onChange={(e) => setMaterialUsed(e.target.value)}
-                          rows={4}
-                        />
-                      </div>
-                      <Button size="sm">Record Materials</Button>
-                    </TabsContent>
-
-                    <TabsContent value="issues" className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="safety-issues">Safety Issues / Concerns</Label>
-                        <Textarea id="safety-issues" placeholder="Report any safety issues or concerns..." rows={4} />
-                      </div>
-                      <Button size="sm" variant="destructive">
-                        Report Issue
-                      </Button>
-                    </TabsContent>
-                  </Tabs>
+                  <div className="text-2xl font-bold flex items-center gap-2">
+                    {statsLoading ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : stats.tasksCompleted}
+                  </div>
                 </CardContent>
               </Card>
-
-              {/* Attendance Chart */}
-              <AttendanceChart />
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Materials Used</CardTitle>
+                  <Package className="h-4 w-4 text-orange-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold flex items-center gap-2">
+                    {statsLoading ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : stats.materialsUsed}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Safety Issues</CardTitle>
+                  <AlertTriangle className="h-4 w-4 text-red-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold flex items-center gap-2">
+                    {statsLoading ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : stats.safetyIssues}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
+
+            {/* Removed Daily Log and Attendance widgets from the dashboard view */}
 
             {/* Current Tasks */}
             <Card>
@@ -240,23 +249,8 @@ export default function SupervisorDashboard() {
               </CardContent>
             </Card>
 
-            {/* Quick Actions */}
+            {/* Quick Actions (Materials only) */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="w-5 h-5" />
-                    Mark Attendance
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground mb-4">Record worker attendance for today</p>
-                  <Button className="w-full" onClick={() => setActiveSection("attendance")}>
-                    Take Attendance
-                  </Button>
-                </CardContent>
-              </Card>
-
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -268,21 +262,6 @@ export default function SupervisorDashboard() {
                   <p className="text-sm text-muted-foreground mb-4">Request additional materials</p>
                   <Button className="w-full" onClick={() => setActiveSection("materials")}>
                     Request Materials
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Camera className="w-5 h-5" />
-                    Site Photos
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground mb-4">Upload progress photos</p>
-                  <Button className="w-full" onClick={() => setActiveSection("logs")}>
-                    Upload Photos
                   </Button>
                 </CardContent>
               </Card>
