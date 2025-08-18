@@ -38,7 +38,7 @@ import PayrollManagement from "@/components/management/payroll-management"
 import AdminSetting from "@/components/management/admin-setting"
 import { Skeleton } from "@/components/ui/skeleton"
 import UserDetailsModal from "@/components/ui/user-details-model"
-import MessagingPanel from "@/components/messaging/MessagingPanel"
+import MessageBox from "@/components/common/MessageBox"
 import { toast } from "sonner"
 
 interface ApiResponse<T> {
@@ -1178,7 +1178,7 @@ export default function AdminDashboard() {
       case "message":
         return (
           <div className="h-[calc(100vh-200px)] bg-white rounded-lg shadow-sm">
-            <MessagingPanel />
+            <MessageBox userType="admin" title="Messages" />
           </div>
         )
       case "settings":

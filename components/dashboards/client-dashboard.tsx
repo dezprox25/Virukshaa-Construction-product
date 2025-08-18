@@ -291,13 +291,11 @@ export default function ClientDashboard() {
       case 'payments':
         return <ClientPaymentsManagement />
       case 'message':
-        // Compute a stable conversationId immediately without showing loaders
-        // Prefer session email, fallback to client id, then a temporary identifier
-        const conversationId = (session?.user?.email as string | undefined) || client?._id || 'guest-chat';
+        // Use client._id as the single source of truth for conversationId
         return (
           <ClientMessageBox
-            title={client?.name ? `${client.name} • Support` : 'Support'}
-            conversationId={conversationId}
+            title={client?.name ? `${client.name}` : 'Super Admin'}
+            conversationId={client?._id || 'guest-chat'}
           />
         )
       case 'settings':
