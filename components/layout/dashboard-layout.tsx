@@ -25,6 +25,7 @@ import {
   Package,
   ClipboardList,
   MessageSquare,
+  CreditCard,
   Settings,
   LogOut,
   Bell,
@@ -214,9 +215,8 @@ export default function DashboardLayout({
         return [
           ...baseItems,
           { icon: FolderOpen, label: "My Projects", href: "projects", id: "projects" },
-          { icon: MessageSquare, label: "Payments", href: "payments", id: "payments" },
+          { icon: CreditCard, label: "Payments", href: "payments", id: "payments" },
           { icon: MessageSquare, label: "Messages", href: "message", id: "message" },
-          { icon: Settings, label: "Settings", href: "settings", id: "settings" },
         ]
       case "supplier":
         return [
