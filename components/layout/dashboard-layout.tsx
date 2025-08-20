@@ -242,7 +242,7 @@ export default function DashboardLayout({
 
   // bg-[#051118] 
   const Sidebar = ({ mobile = false }) => (
-    <div className={`flex flex-col h-full ${mobile ? "w-full" : "w-64"} bg-[#F0F0F0] shadow-md`}>
+    <div className={`flex flex-col h-full ${mobile ? "w-full" : "w-64"} bg-[#fff0] shadow-md`}>
       <div className="flex items-center gap-2 p-6">
         <div className="w-8 h-8 rounded-lg flex items-center justify-center">
           <Building2 className="w-5 h-5 text-[#37db44]" />
@@ -363,7 +363,16 @@ export default function DashboardLayout({
         </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-auto p-6">{children}</main>
+        <main
+          className="flex-1 overflow-auto p-6"
+          style={{
+            backgroundImage: 'url(/virukshaa3.png)',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+        >
+          {children}
+        </main>
       </div>
     </div>
   )

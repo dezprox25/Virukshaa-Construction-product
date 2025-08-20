@@ -18,9 +18,10 @@ interface MessageBoxProps {
   title: string
   onBack?: () => void
   className?: string
+  conversationId?: string
 }
 
-const MessageBox: React.FC<MessageBoxProps> = ({ userType, title, onBack, className = "" }) => {
+const MessageBox: React.FC<MessageBoxProps> = ({ userType, title, onBack, className = "", conversationId }) => {
   const [message, setMessage] = useState("")
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -35,9 +36,14 @@ const MessageBox: React.FC<MessageBoxProps> = ({ userType, title, onBack, classN
 
     const load = async () => {
       try {
+        if (!conversationId) {
+          // without a conversation id, do not load anything
+          if (isMounted) setMessages([])
+          return
+        }
         setIsLoading(true)
         const seedParam = userType === "client" ? "&seed=1" : ""
-        const res = await fetch(`/api/messages?${seedParam}`, {
+        const res = await fetch(`/api/messages?conversationId=${encodeURIComponent(conversationId)}${seedParam}`, {
           cache: "no-store",
           signal: controller.signal,
         })
@@ -69,15 +75,16 @@ const MessageBox: React.FC<MessageBoxProps> = ({ userType, title, onBack, classN
       isMounted = false
       controller.abort()
     }
-  }, [userType])
+  }, [userType, conversationId])
 
   // Silent background polling to refresh messages without UI flicker
   useEffect(() => {
     let isMounted = true
     const interval = setInterval(async () => {
       try {
+        if (!conversationId) return
         const seedParam = userType === "client" ? "&seed=1" : ""
-        const res = await fetch(`/api/messages?${seedParam}`, { cache: "no-store" })
+        const res = await fetch(`/api/messages?conversationId=${encodeURIComponent(conversationId)}${seedParam}`, { cache: "no-store" })
         if (!res.ok) return
         const data = await res.json()
         const incoming: Message[] = (data.messages || []).map((m: any) => ({
@@ -106,11 +113,12 @@ const MessageBox: React.FC<MessageBoxProps> = ({ userType, title, onBack, classN
       isMounted = false
       clearInterval(interval)
     }
-  }, [userType])
+  }, [userType, conversationId])
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!message.trim() || isSending) return
+    if (!conversationId) return
 
     const optimistic: Message = {
       id: "temp-" + Date.now().toString(),
@@ -129,7 +137,7 @@ const MessageBox: React.FC<MessageBoxProps> = ({ userType, title, onBack, classN
       const res = await fetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: textToSend, sender: currentSender }),
+        body: JSON.stringify({ text: textToSend, sender: currentSender, conversationId }),
       })
       if (!res.ok) throw new Error("Failed to send")
       const data = await res.json()
@@ -151,7 +159,7 @@ const MessageBox: React.FC<MessageBoxProps> = ({ userType, title, onBack, classN
 
       // Refresh to get latest messages
       try {
-        const refresh = await fetch(`/api/messages`, { cache: "no-store" })
+        const refresh = await fetch(`/api/messages?conversationId=${encodeURIComponent(conversationId)}`, { cache: "no-store" })
         if (refresh.ok) {
           const payload = await refresh.json()
           const synced: Message[] = (payload.messages || []).map((m: any) => ({

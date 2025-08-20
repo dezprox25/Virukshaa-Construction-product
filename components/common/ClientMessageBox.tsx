@@ -35,8 +35,12 @@ const ClientMessageBox: React.FC<ClientMessageBoxProps> = ({ title, onBack, clas
 
     const load = async () => {
       try {
+        if (!conversationId) {
+          if (isMounted) setMessages([])
+          return
+        }
         if (isMounted) setIsLoading(true)
-        const res = await fetch(`/api/messages?seed=1${conversationId ? `&conversationId=${encodeURIComponent(conversationId)}` : ""}` , {
+        const res = await fetch(`/api/messages?seed=1&conversationId=${encodeURIComponent(conversationId)}` , {
           cache: "no-store",
           signal: controller.signal,
         })
@@ -66,14 +70,15 @@ const ClientMessageBox: React.FC<ClientMessageBoxProps> = ({ title, onBack, clas
       isMounted = false
       controller.abort()
     }
-  }, [])
+  }, [conversationId])
 
   // Silent background polling to refresh messages without visible UI changes
   useEffect(() => {
     let isMounted = true
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/messages?seed=1${conversationId ? `&conversationId=${encodeURIComponent(conversationId)}` : ""}` , { cache: "no-store" })
+        if (!conversationId) return
+        const res = await fetch(`/api/messages?seed=1&conversationId=${encodeURIComponent(conversationId)}` , { cache: "no-store" })
         if (!res.ok) return
         const data = await res.json()
         const incoming: ClientMessage[] = (data.messages || []).map((m: any) => ({
@@ -102,7 +107,7 @@ const ClientMessageBox: React.FC<ClientMessageBoxProps> = ({ title, onBack, clas
       isMounted = false
       clearInterval(interval)
     }
-  }, [])
+  }, [conversationId])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -111,6 +116,7 @@ const ClientMessageBox: React.FC<ClientMessageBoxProps> = ({ title, onBack, clas
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!message.trim()) return
+    if (!conversationId) return
 
     const optimistic: ClientMessage = {
       id: "temp-" + Date.now().toString(),

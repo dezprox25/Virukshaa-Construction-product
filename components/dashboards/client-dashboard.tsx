@@ -295,12 +295,16 @@ export default function ClientDashboard() {
     }
   }, [])
 
-  // Local polling for latest message preview (dashboard-only)
+  // Local polling for latest message preview (dashboard-only), scoped per client conversation
   useEffect(() => {
     let mounted = true
+    const convId = client?._id || queryClientId || (typeof window !== 'undefined' ? localStorage.getItem('userId') : null)
+    if (!convId) return
+
     const fetchLatest = async () => {
       try {
-        const res = await fetch(`/api/messages?_t=${Date.now()}`, { cache: 'no-store' })
+        const url = `/api/messages?conversationId=${encodeURIComponent(convId)}&_t=${Date.now()}`
+        const res = await fetch(url, { cache: 'no-store' })
         if (!res.ok) return
         const data = await res.json()
         const msgs: Array<{ id: string; text: string; timestamp: string; read?: boolean }> = data?.messages || []
@@ -315,10 +319,11 @@ export default function ClientDashboard() {
         }
       } catch (_) { /* silent */ }
     }
+
     fetchLatest()
     const interval = setInterval(fetchLatest, 6000)
     return () => { mounted = false; clearInterval(interval) }
-  }, [])
+  }, [client?._id, queryClientId])
 
   // Fetch real projects for this client (fallback to localStorage userId like client-projects.tsx)
   useEffect(() => {
@@ -426,14 +431,26 @@ export default function ClientDashboard() {
         )
       case 'payments':
         return <ClientPaymentsManagement />
-      case 'message':
-        // Use client._id as the single source of truth for conversationId
+      case 'message': {
+        // Compute the same conversationId used across the dashboard (no 'guest-chat' fallbacks)
+        let convId = client?._id || queryClientId || (typeof window !== 'undefined' ? localStorage.getItem('userId') : null)
+        if (!convId) {
+          return (
+            <div className="h-[calc(100vh-200px)] bg-white rounded-lg shadow-sm flex items-center justify-center p-6 text-center text-gray-600">
+              <div>
+                <p className="text-lg font-medium">No conversation available</p>
+                <p className="text-sm mt-2">Please sign in or complete profile to start chatting.</p>
+              </div>
+            </div>
+          )
+        }
         return (
           <ClientMessageBox
-            title={client?.name ? `${client.name}` : 'Super Admin'}
-            conversationId={client?._id || 'guest-chat'}
+            title={client?.name ? `${client.name}` : 'Support'}
+            conversationId={convId}
           />
         )
+      }
       default:
         return (
           <div className="space-y-8">

@@ -6,6 +6,7 @@ import Message from "@/models/Message"
 interface CreateMessageRequest {
   text: string
   sender: "client" | "superadmin"
+  conversationId?: string
 }
 
 // Type for message response
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
   try {
     await connectToDB()
 
-    const { text, sender }: Partial<CreateMessageRequest> = await req.json()
+    const { text, sender, conversationId }: Partial<CreateMessageRequest> = await req.json()
 
     // Validate request body
     if (!text?.trim() || !sender) {
@@ -33,11 +34,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Invalid sender type" }, { status: 400 })
     }
 
+    // Require a conversationId to ensure messages are never written to a global thread unintentionally
+    if (!conversationId || !String(conversationId).trim()) {
+      return NextResponse.json({ success: false, error: "conversationId is required" }, { status: 400 })
+    }
+
     const message = new Message({
       text: text.trim(),
       sender,
       receiver: sender === "client" ? "superadmin" : "client",
-      conversationId: "main-chat", // Single conversation for all messages
+      conversationId: String(conversationId),
       timestamp: new Date(),
       read: false,
     })
@@ -66,8 +72,16 @@ export async function GET(req: Request) {
     await connectToDB()
     const { searchParams } = new URL(req.url)
     const seed = searchParams.get("seed")
+    const conversationId = searchParams.get("conversationId") || undefined
 
-    let messages = await Message.find({}).sort({ timestamp: 1 }).lean().exec()
+    // Require conversationId for listing; if missing, return an empty list
+    if (!conversationId) {
+      return NextResponse.json({ success: true, messages: [] })
+    }
+
+    const query: Record<string, any> = { conversationId }
+
+    let messages = await Message.find(query).sort({ timestamp: 1 }).lean().exec()
 
     // Optional seed for first-time users
     if ((seed === "1" || seed === "true") && (!messages || messages.length === 0)) {
@@ -77,7 +91,7 @@ export async function GET(req: Request) {
           text: "Welcome to our support system! I'm here to help you with any questions.",
           sender: "superadmin",
           receiver: "client",
-          conversationId: "main-chat",
+          conversationId,
           timestamp: new Date(now.getTime() - 1000 * 60 * 10), // 10 mins ago
           read: false,
         }),
@@ -85,13 +99,13 @@ export async function GET(req: Request) {
           text: "Great! Feel free to ask me anything. I'm available 24/7 to assist you.",
           sender: "superadmin",
           receiver: "client",
-          conversationId: "main-chat",
+          conversationId,
           timestamp: new Date(now.getTime() - 1000 * 60 * 5), // 5 mins ago
           read: false,
         }),
       ]
       await Message.insertMany(seedDocs)
-      messages = await Message.find({}).sort({ timestamp: 1 }).lean().exec()
+      messages = await Message.find(query).sort({ timestamp: 1 }).lean().exec()
     }
 
     const response: MessageResponse[] = messages.map((msg: any) => ({

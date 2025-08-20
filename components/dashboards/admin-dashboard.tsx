@@ -1177,8 +1177,11 @@ export default function AdminDashboard() {
         return <PayrollManagement />
       case "message":
         return (
-          <div className="h-[calc(100vh-200px)] bg-white rounded-lg shadow-sm">
-            <MessageBox userType="admin" title="Messages" />
+          <div className="h-[calc(100vh-200px)] bg-white rounded-lg shadow-sm flex items-center justify-center p-6 text-center text-gray-600">
+            <div>
+              <p className="text-lg font-medium">No conversation selected</p>
+              <p className="text-sm mt-2">Open a client profile from the Clients section to start chatting.</p>
+            </div>
           </div>
         )
       case "settings":
