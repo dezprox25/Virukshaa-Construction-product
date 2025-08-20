@@ -110,9 +110,11 @@ export default function EmployeesManagement() {
 
   // Shift tracking (local, per-day): 0-3 shifts per employee for calculations
   const [shiftsToday, setShiftsToday] = useState<Record<string, number>>({})
-  const getShiftCount = (id: string) => Math.max(0, Math.min(3, shiftsToday[id] ?? 0))
+  const roundToHalf = (n: number) => Math.round((n ?? 0) * 2) / 2
+  const clampShift = (n: number) => Math.max(0, Math.min(3, roundToHalf(n)))
+  const getShiftCount = (id: string) => clampShift(shiftsToday[id] ?? 0)
   const setShiftCount = (id: string, val: number) =>
-    setShiftsToday((prev) => ({ ...prev, [id]: Math.max(0, Math.min(3, Math.floor(val))) }))
+    setShiftsToday((prev) => ({ ...prev, [id]: clampShift(val) }))
   const calcTodaysPay = (emp: Employee) => getShiftCount(emp._id) * (emp.salary || 0)
 
   // INR currency formatter
@@ -137,7 +139,7 @@ export default function EmployeesManagement() {
       for (const d of docs) {
         // d.employeeId may be object when populated; handle both
         const id = typeof (d as any).employeeId === 'object' ? (d as any).employeeId._id : d.employeeId
-        map[id] = Math.max(0, Math.min(3, Math.floor((d as any).shifts ?? 0)))
+        map[id] = clampShift((d as any).shifts ?? 0)
       }
       setShiftsToday((prev) => ({ ...prev, ...map }))
     } catch (e) {
@@ -154,7 +156,7 @@ export default function EmployeesManagement() {
         body: JSON.stringify({
           employeeId: emp._id,
           date: dateStr,
-          shifts: Math.max(0, Math.min(3, Math.floor(count))),
+          shifts: clampShift(count),
           perShiftSalary: emp.salary || 0,
         }),
       })
@@ -427,7 +429,7 @@ export default function EmployeesManagement() {
                 <div>
                   <h3 className="font-semibold text-lg">{employee.name}</h3>
                   <div className="flex items-center gap-2 mt-1" onClick={(e) => e.stopPropagation()}>
-                    <Label className="text-xs">Shifts Today (0-3)</Label>
+                    <Label className="text-xs">Shifts Today (0–3, 0.5-step)</Label>
                     <Select
                       value={String(getShiftCount(employee._id))}
                       onValueChange={(val) => {
@@ -441,8 +443,11 @@ export default function EmployeesManagement() {
                       </SelectTrigger>
                       <SelectContent align="start">
                         <SelectItem value="0">0</SelectItem>
+                        <SelectItem value="0.5">0.5</SelectItem>
                         <SelectItem value="1">1</SelectItem>
+                        <SelectItem value="1.5">1.5</SelectItem>
                         <SelectItem value="2">2</SelectItem>
+                        <SelectItem value="2.5">2.5</SelectItem>
                         <SelectItem value="3">3</SelectItem>
                       </SelectContent>
                     </Select>
@@ -616,8 +621,11 @@ export default function EmployeesManagement() {
                     </SelectTrigger>
                     <SelectContent align="start">
                       <SelectItem value="0">0</SelectItem>
+                      <SelectItem value="0.5">0.5</SelectItem>
                       <SelectItem value="1">1</SelectItem>
+                      <SelectItem value="1.5">1.5</SelectItem>
                       <SelectItem value="2">2</SelectItem>
+                      <SelectItem value="2.5">2.5</SelectItem>
                       <SelectItem value="3">3</SelectItem>
                     </SelectContent>
                   </Select>
@@ -1054,7 +1062,7 @@ export default function EmployeesManagement() {
                         </div>
                         <div className="flex items-center gap-2">
                           <IndianRupee className="w-4 h-4 text-green-600" />
-                          <p className="text-xs text-green-700">Today's Pay: ${calcTodaysPay(selectedEmployee).toLocaleString()}</p>
+                          <p className="text-xs text-green-700">Today's Pay: {formatINR(calcTodaysPay(selectedEmployee))}</p>
                         </div>
                       </CardContent>
                     </Card>
@@ -1138,7 +1146,7 @@ export default function EmployeesManagement() {
                           <IndianRupee className="w-5 h-5 text-muted-foreground" />
                           <div>
                             <p className="font-medium">{selectedEmployee.workType === 'Daily' ? 'Per Shift' : 'Salary'}</p>
-                            <p className="text-sm text-muted-foreground">${selectedEmployee.salary.toLocaleString()}</p>
+                            <p className="text-sm text-muted-foreground">{formatINR(selectedEmployee.salary)}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">

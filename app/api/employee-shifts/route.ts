@@ -38,11 +38,15 @@ export async function POST(req: NextRequest) {
 
     const d = new Date(date);
     d.setUTCHours(0, 0, 0, 0);
-    const totalPay = Math.max(0, Math.min(3, Math.floor(shifts))) * perShiftSalary;
+    // Support half-shift increments: round to nearest 0.5 and clamp within 0-3
+    const roundToHalf = (n: number) => Math.round((n ?? 0) * 2) / 2;
+    const clampShift = (n: number) => Math.max(0, Math.min(3, roundToHalf(n)));
+    const clampedShifts = clampShift(shifts);
+    const totalPay = clampedShifts * perShiftSalary;
 
     const doc = await EmployeeShift.findOneAndUpdate(
       { employeeId, date: d },
-      { shifts: Math.max(0, Math.min(3, Math.floor(shifts))), perShiftSalary, totalPay },
+      { shifts: clampedShifts, perShiftSalary, totalPay },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
