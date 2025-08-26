@@ -9,7 +9,6 @@ const toClientEmployee = (employee: any) => ({
   name: employee.name,
   email: employee.email,
   phone: employee.phone,
-  username: employee.username,
   role: typeof employee.role === 'string' ? employee.role.toLowerCase() : employee.role,
   salary: employee.salary,
   workType: employee.workType,
@@ -112,7 +111,7 @@ export async function PUT(
     const allowedFields: (keyof IEmployee)[] = [
       'name', 'email', 'phone', 'role', 'salary', 'workType',
       'status', 'joinDate', 'endDate', 'address', 'avatar',
-      'department', 'lastPaymentDate', 'username'
+      'department', 'lastPaymentDate',
     ];
 
     allowedFields.forEach(field => {

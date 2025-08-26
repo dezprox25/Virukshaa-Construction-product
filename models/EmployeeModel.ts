@@ -11,7 +11,6 @@ export interface IEmployee extends Document {
   joinDate: Date;
   endDate?: Date;
   address: string;
-  username?: string;
   avatar?: string;
   department?: string;
   totalPaid?: number;
@@ -47,7 +46,6 @@ const employeeSchema = new Schema<IEmployee>({
   joinDate: { type: Date, required: true },
   endDate: { type: Date },
   address: { type: String, default: '' },
-  username: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
   avatar: { type: String, required: false },
   department: { type: String, required: false },
   totalPaid: { type: Number, default: 0 },
@@ -60,8 +58,30 @@ const employeeSchema = new Schema<IEmployee>({
   }
 }, { timestamps: true });
 
-// Ensure we don't reuse a stale compiled model with an outdated schema (dev/hot-reload)
-if (mongoose.models.Employee) {
-  delete mongoose.models.Employee;
+// Create the model or retrieve it if it already exists to prevent OverwriteModelError
+let Employee: mongoose.Model<IEmployee> | null = null;
+
+try {
+  // Try to get the existing model
+  Employee = mongoose.models.Employee as mongoose.Model<IEmployee>;
+  
+  // If model exists, check and drop the problematic index
+  if (Employee) {
+    Employee.collection.dropIndex('username_1').catch((err: any) => {
+      if (err && err.codeName !== 'NamespaceNotFound') {
+        console.log('Error dropping username index:', err);
+      } else {
+        console.log('Dropped username index successfully');
+      }
+    });
+  }
+} catch (e) {
+  console.log('Error checking for existing model:', e);
 }
-export default mongoose.model<IEmployee>('Employee', employeeSchema);
+
+// Create the model if it doesn't exist
+if (!Employee) {
+  Employee = mongoose.model<IEmployee>('Employee', employeeSchema);
+}
+
+export default Employee;

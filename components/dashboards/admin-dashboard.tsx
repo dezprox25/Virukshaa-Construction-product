@@ -136,6 +136,13 @@ interface DashboardData {
     status: string
     lastUpdated: string
   }>
+  reportsData: Array<{
+    id: string
+    title: string
+    type: 'client' | 'supervisor' | 'employee' | 'supplier'
+    date: string
+    status?: 'Draft' | 'Submitted'
+  }>
 }
 
 interface ApiData {
@@ -163,6 +170,7 @@ export default function AdminDashboard() {
     supervisorsData: [],
     materialsData: [],
     payrollData: [],
+    reportsData: [],
   })
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -172,7 +180,7 @@ export default function AdminDashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<any>(null)
   const [selectedUserType, setSelectedUserType] = useState<
-    "supervisor" | "employee" | "client" | "material" | "payroll"
+    "supervisor" | "employee" | "client" | "material"
   >("supervisor")
 
   // Enhanced fetch function with better payroll user resolution
@@ -189,6 +197,7 @@ export default function AdminDashboard() {
         { name: "employees", url: `${baseUrl}/api/employees` },
         { name: "materials", url: `${baseUrl}/api/materials` },
         { name: "payroll", url: `${baseUrl}/api/payroll` },
+        { name: "reports", url: `${baseUrl}/api/reports` },
       ]
 
       console.log(
@@ -308,40 +317,40 @@ export default function AdminDashboard() {
       // Enhanced payroll data processing with user resolution
       const payrollData = Array.isArray(data.payroll?.data)
         ? data.payroll.data.map((item: any) => {
-            console.log("Processing payroll item:", item)
+          console.log("Processing payroll item:", item)
 
-            let resolvedUser = item.user
+          let resolvedUser = item.user
 
-            // If user is just an ID string, resolve it from our lookup
-            if (typeof item.user === "string") {
-              const foundUser = allUsers.get(item.user)
-              if (foundUser) {
-                resolvedUser = {
-                  _id: foundUser._id || foundUser.id,
-                  name: foundUser.name || foundUser.firstName + " " + foundUser.lastName || "Unknown User",
-                  email: foundUser.email,
-                }
-                console.log("Resolved user from ID:", item.user, "to:", resolvedUser)
-              } else {
-                // Create a placeholder user object
-                resolvedUser = {
-                  _id: item.user,
-                  name: `User ${item.user.slice(-4)}`,
-                  email: "unknown@example.com",
-                }
-                console.log("Created placeholder user for ID:", item.user)
+          // If user is just an ID string, resolve it from our lookup
+          if (typeof item.user === "string") {
+            const foundUser = allUsers.get(item.user)
+            if (foundUser) {
+              resolvedUser = {
+                _id: foundUser._id || foundUser.id,
+                name: foundUser.name || foundUser.firstName + " " + foundUser.lastName || "Unknown User",
+                email: foundUser.email,
               }
+              console.log("Resolved user from ID:", item.user, "to:", resolvedUser)
+            } else {
+              // Create a placeholder user object
+              resolvedUser = {
+                _id: item.user,
+                name: `User ${item.user.slice(-4)}`,
+                email: "unknown@example.com",
+              }
+              console.log("Created placeholder user for ID:", item.user)
             }
+          }
 
-            return {
-              ...item,
-              _id: item._id?.toString(),
-              user: resolvedUser,
-              paymentDate: item.paymentDate || new Date(),
-              amount: typeof item.amount === "string" ? Number.parseFloat(item.amount) : item.amount || 0,
-              userRole: item.userRole || "Employee",
-            }
-          })
+          return {
+            ...item,
+            _id: item._id?.toString(),
+            user: resolvedUser,
+            paymentDate: item.paymentDate || new Date(),
+            amount: typeof item.amount === "string" ? Number.parseFloat(item.amount) : item.amount || 0,
+            userRole: item.userRole || "Employee",
+          }
+        })
         : []
 
       console.log("Enhanced payroll data:", payrollData)
@@ -355,15 +364,15 @@ export default function AdminDashboard() {
         totalPayroll: payrollData
           .filter((item: any) => item.status === "paid")
           .reduce((sum: number, item: any) => sum + (isNaN(item.amount) ? 0 : item.amount), 0),
-        totalReports: 0,
+        totalReports: Array.isArray(data.reports?.data) ? data.reports.data.length : 0,
         payrollData,
         recentProjects: Array.isArray(data.clients?.data)
           ? data.clients.data.slice(0, 5).map((client: any) => ({
-              name: client.name || "Unnamed Client",
-              status: "Active",
-              manager: client.contactPerson || "No Contact",
-              progress: 100,
-            }))
+            name: client.name || "Unnamed Client",
+            status: "Active",
+            manager: client.contactPerson || "No Contact",
+            progress: 100,
+          }))
           : [],
         clientStatusData: {
           labels:
@@ -385,53 +394,62 @@ export default function AdminDashboard() {
         },
         clientsData: Array.isArray(data.clients?.data)
           ? data.clients.data.map((client: any) => ({
-              id: client._id || client.id || Math.random().toString(),
-              name: client.name || "Unnamed Client",
-              company: client.company || client.name || "Unknown Company",
-              email: client.email || "No email",
-              phone: client.phone || "No phone",
-              status: client.status || "Active",
-              projects: client.projects || [],
-            }))
+            id: client._id || client.id || Math.random().toString(),
+            name: client.name || "Unnamed Client",
+            company: client.company || client.name || "Unknown Company",
+            email: client.email || "No email",
+            phone: client.phone || "No phone",
+            status: client.status || "Active",
+            projects: client.projects || [],
+          }))
           : [],
         employeesData: Array.isArray(data.employees?.data)
           ? data.employees.data.map((employee: any) => ({
-              id: employee._id || employee.id || Math.random().toString(),
-              name: employee.name || "Unnamed Employee",
-              position: employee.position || "Unknown Position",
-              department: employee.department || "Unknown Department",
-              email: employee.email || "No email",
-              phone: employee.phone || "No phone",
-              status: employee.status || "Active",
-              joinDate: employee.joinDate || new Date().toISOString(),
-            }))
+            id: employee._id || employee.id || Math.random().toString(),
+            name: employee.name || "Unnamed Employee",
+            position: employee.position || "Unknown Position",
+            department: employee.department || "Unknown Department",
+            email: employee.email || "No email",
+            phone: employee.phone || "No phone",
+            status: employee.status || "Active",
+            joinDate: employee.joinDate || new Date().toISOString(),
+          }))
           : [],
         supervisorsData: Array.isArray(data.supervisors?.data)
           ? data.supervisors.data.map((supervisor: any) => ({
-              id: supervisor._id || supervisor.id || Math.random().toString(),
-              name: supervisor.name || "Unnamed Supervisor",
-              position: supervisor.position || "Supervisor",
-              department: supervisor.department || "Unknown Department",
-              email: supervisor.email || "No email",
-              phone: supervisor.phone || "No phone",
-              status: supervisor.status || "Active",
-              joinDate: supervisor.joinDate || new Date().toISOString(),
-              experience: supervisor.experience || "Not specified",
-              projects: supervisor.projects || [],
-            }))
+            id: supervisor._id || supervisor.id || Math.random().toString(),
+            name: supervisor.name || "Unnamed Supervisor",
+            position: supervisor.position || "Supervisor",
+            department: supervisor.department || "Unknown Department",
+            email: supervisor.email || "No email",
+            phone: supervisor.phone || "No phone",
+            status: supervisor.status || "Active",
+            joinDate: supervisor.joinDate || new Date().toISOString(),
+            experience: supervisor.experience || "Not specified",
+            projects: supervisor.projects || [],
+          }))
           : [],
         materialsData: Array.isArray(data.materials?.data)
           ? data.materials.data.map((material: any) => ({
-              id: material._id || material.id || Math.random().toString(),
-              name: material.name || "Unnamed Material",
-              category: material.category || "Unknown Category",
-              quantity: material.quantity || 0,
-              unit: material.unit || "pcs",
-              price: material.price || 0,
-              supplier: material.supplier || "Unknown Supplier",
-              status: material.status || "Available",
-              lastUpdated: material.lastUpdated || new Date().toISOString(),
-            }))
+            id: material._id || material.id || Math.random().toString(),
+            name: material.name || "Unnamed Material",
+            category: material.category || "Unknown Category",
+            quantity: material.quantity || 0,
+            unit: material.unit || "pcs",
+            price: material.price || 0,
+            supplier: material.supplier || "Unknown Supplier",
+            status: material.status || "Available",
+            lastUpdated: material.lastUpdated || new Date().toISOString(),
+          }))
+          : [],
+        reportsData: Array.isArray(data.reports?.data)
+          ? data.reports.data.map((r: any) => ({
+            id: r._id || r.id || Math.random().toString(),
+            title: r.title || 'Untitled',
+            type: r.type || 'supervisor',
+            date: (r.date ? new Date(r.date) : new Date()).toISOString(),
+            status: r.status,
+          }))
           : [],
       }
 
@@ -457,7 +475,7 @@ export default function AdminDashboard() {
     fetchDashboardData()
   }, [])
 
-  const handleViewDetails = (user: any, type: "supervisor" | "employee" | "client" | "material" | "payroll") => {
+  const handleViewDetails = (user: any, type: "supervisor" | "employee" | "client" | "material") => {
     setSelectedUser(user)
     setSelectedUserType(type)
     setIsModalOpen(true)
@@ -477,11 +495,11 @@ export default function AdminDashboard() {
       case "materials":
         setActiveSection("materials")
         break
-      case "payroll":
-        setActiveSection("payroll")
-        break
       case "message":
         setActiveSection("message")
+        break
+      case "reports":
+        setActiveSection("reports")
         break
       default:
         setActiveSection("dashboard")
@@ -512,11 +530,11 @@ export default function AdminDashboard() {
       action: () => setActiveSection("suppliers"),
     },
     {
-        title:"Add supervisor",
-        description:"Register a new supervisor",
-        icon:UserCheck,
-        color:"bg-purple-500",
-        action:()=>setActiveSection("supervisors"),
+      title: "Add supervisor",
+      description: "Register a new supervisor",
+      icon: UserCheck,
+      color: "bg-purple-500",
+      action: () => setActiveSection("supervisors"),
     },
     {
       title: "Process Payroll",
@@ -525,7 +543,7 @@ export default function AdminDashboard() {
       color: "bg-green-500",
       action: () => setActiveSection("payroll"),
     },
- 
+
     {
       title: "View Reports",
       description: "Generate reports",
@@ -533,7 +551,7 @@ export default function AdminDashboard() {
       color: "bg-red-500",
       action: () => setActiveSection("reports"),
     },
- 
+
   ]
 
   const stats = [
@@ -541,8 +559,6 @@ export default function AdminDashboard() {
       id: "clients",
       title: "Total Clients",
       value: dashboardData?.totalClients.toString() || "0",
-      change: "+12%",
-      trend: "up",
       icon: Users,
       color: "text-blue-600",
       bgColor: "bg-blue-50",
@@ -551,8 +567,6 @@ export default function AdminDashboard() {
       id: "supervisors",
       title: "Supervisors",
       value: dashboardData?.totalSupervisors.toString() || "0",
-      change: "+5%",
-      trend: "up",
       icon: UserCheck,
       color: "text-green-600",
       bgColor: "bg-green-50",
@@ -561,8 +575,6 @@ export default function AdminDashboard() {
       id: "employees",
       title: "Employees",
       value: dashboardData?.totalEmployees.toString() || "0",
-      change: "+8%",
-      trend: "up",
       icon: Users,
       color: "text-purple-600",
       bgColor: "bg-purple-50",
@@ -571,28 +583,14 @@ export default function AdminDashboard() {
       id: "materials",
       title: "Materials",
       value: dashboardData?.totalMaterials.toString() || "0",
-      change: "-2%",
-      trend: "down",
       icon: Truck,
       color: "text-orange-600",
       bgColor: "bg-orange-50",
     },
     {
-      id: "payroll",
-      title: "Total Payroll",
-      value: dashboardData ? `₹${dashboardData.totalPayroll.toLocaleString()}` : "₹0",
-      change: "+15%",
-      trend: "up",
-      icon: DollarSign,
-      color: "text-green-600",
-      bgColor: "bg-green-50",
-    },
-    {
       id: "reports",
       title: "Reports",
       value: dashboardData?.totalReports.toString() || "0",
-      change: "+3%",
-      trend: "up",
       icon: FileText,
       color: "text-red-600",
       bgColor: "bg-red-50",
@@ -618,98 +616,98 @@ export default function AdminDashboard() {
   )
 
   const renderDetailsTable = () => {
-    if (selectedStat === "payroll" && dashboardData?.payrollData && dashboardData.payrollData.length > 0) {
-      return (
-        <div className="h-full overflow-y-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Payment Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Notes</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {dashboardData.payrollData.slice(0, 5).map((payment) => {
-                // Enhanced user name resolution
-                let userName = "Unknown User"
-                let userInitials = "U"
+    // if (selectedStat === "payroll" && dashboardData?.payrollData && dashboardData.payrollData.length > 0) {
+    //   return (
+    //     <div className="h-full overflow-y-auto">
+    //       <Table>
+    //         <TableHeader>
+    //           <TableRow>
+    //             <TableHead>Employee</TableHead>
+    //             <TableHead>Role</TableHead>
+    //             <TableHead>Amount</TableHead>
+    //             <TableHead>Payment Date</TableHead>
+    //             <TableHead>Status</TableHead>
+    //             <TableHead>Notes</TableHead>
+    //           </TableRow>
+    //         </TableHeader>
+    //         <TableBody>
+    //           {dashboardData.payrollData.slice(0, 5).map((payment) => {
+    //             // Enhanced user name resolution
+    //             let userName = "Unknown User"
+    //             let userInitials = "U"
 
-                if (typeof payment.user === "object" && payment.user?.name) {
-                  userName = payment.user.name
-                  userInitials = payment.user.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")
-                    .toUpperCase()
-                } else if (typeof payment.user === "string") {
-                  userName = `User ${payment.user.slice(-4)}`
-                  userInitials = "U"
-                }
+    //             if (typeof payment.user === "object" && payment.user?.name) {
+    //               userName = payment.user.name
+    //               userInitials = payment.user.name
+    //                 .split(" ")
+    //                 .map((n) => n[0])
+    //                 .join("")
+    //                 .toUpperCase()
+    //             } else if (typeof payment.user === "string") {
+    //               userName = `User ${payment.user.slice(-4)}`
+    //               userInitials = "U"
+    //             }
 
-                return (
-                  <TableRow key={payment._id}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-600 text-white">
-                            {userInitials}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="font-medium">{userName}</div>
-                          {typeof payment.user === "object" && payment.user?.email && (
-                            <div className="text-xs text-muted-foreground">{payment.user.email}</div>
-                          )}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="capitalize">
-                        {payment.userRole?.toLowerCase() || "employee"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="font-semibold">
-                      ₹{typeof payment.amount === "number" ? payment.amount.toLocaleString() : "0"}
-                    </TableCell>
-                    <TableCell>
-                      {payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString("en-IN") : "-"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          payment.status === "paid"
-                            ? "default"
-                            : payment.status === "pending"
-                              ? "secondary"
-                              : "destructive"
-                        }
-                        className={
-                          payment.status === "paid"
-                            ? "bg-green-100 text-green-800"
-                            : payment.status === "pending"
-                              ? "bg-yellow-100 text-yellow-800"
-                              : "bg-red-100 text-red-800"
-                        }
-                      >
-                        {payment.status === "paid" && <CheckCircle className="w-3 h-3 mr-1" />}
-                        {payment.status === "pending" && <Clock className="w-3 h-3 mr-1" />}
-                        {payment.status === "failed" && <XCircle className="w-3 h-3 mr-1" />}
-                        {payment.status?.charAt(0).toUpperCase() + payment.status?.slice(1) || "Unknown"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="max-w-[200px] truncate">{payment.notes || "-"}</TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      )
-    }
+    //             return (
+    //               <TableRow key={payment._id}>
+    //                 <TableCell className="font-medium">
+    //                   <div className="flex items-center gap-2">
+    //                     <Avatar className="h-8 w-8">
+    //                       <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-600 text-white">
+    //                         {userInitials}
+    //                       </AvatarFallback>
+    //                     </Avatar>
+    //                     <div>
+    //                       <div className="font-medium">{userName}</div>
+    //                       {typeof payment.user === "object" && payment.user?.email && (
+    //                         <div className="text-xs text-muted-foreground">{payment.user.email}</div>
+    //                       )}
+    //                     </div>
+    //                   </div>
+    //                 </TableCell>
+    //                 <TableCell>
+    //                   <Badge variant="outline" className="capitalize">
+    //                     {payment.userRole?.toLowerCase() || "employee"}
+    //                   </Badge>
+    //                 </TableCell>
+    //                 <TableCell className="font-semibold">
+    //                   ₹{typeof payment.amount === "number" ? payment.amount.toLocaleString() : "0"}
+    //                 </TableCell>
+    //                 <TableCell>
+    //                   {payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString("en-IN") : "-"}
+    //                 </TableCell>
+    //                 <TableCell>
+    //                   <Badge
+    //                     variant={
+    //                       payment.status === "paid"
+    //                         ? "default"
+    //                         : payment.status === "pending"
+    //                           ? "secondary"
+    //                           : "destructive"
+    //                     }
+    //                     className={
+    //                       payment.status === "paid"
+    //                         ? "bg-green-100 text-green-800"
+    //                         : payment.status === "pending"
+    //                           ? "bg-yellow-100 text-yellow-800"
+    //                           : "bg-red-100 text-red-800"
+    //                     }
+    //                   >
+    //                     {payment.status === "paid" && <CheckCircle className="w-3 h-3 mr-1" />}
+    //                     {payment.status === "pending" && <Clock className="w-3 h-3 mr-1" />}
+    //                     {payment.status === "failed" && <XCircle className="w-3 h-3 mr-1" />}
+    //                     {payment.status?.charAt(0).toUpperCase() + payment.status?.slice(1) || "Unknown"}
+    //                   </Badge>
+    //                 </TableCell>
+    //                 <TableCell className="max-w-[200px] truncate">{payment.notes || "-"}</TableCell>
+    //               </TableRow>
+    //             )
+    //           })}
+    //         </TableBody>
+    //       </Table>
+    //     </div>
+    //   )
+    // }
 
     // Other table rendering logic remains the same...
     if (selectedStat === "supervisors" && dashboardData?.supervisorsData && dashboardData.supervisorsData.length > 0) {
@@ -781,7 +779,7 @@ export default function AdminDashboard() {
                 <TableHead>Quantity</TableHead>
                 <TableHead>Unit</TableHead>
                 <TableHead>Price</TableHead>
-                <TableHead>Supplier</TableHead>
+                {/* <TableHead>Supplier</TableHead> */}
                 <TableHead>Status</TableHead>
                 <TableHead>Last Updated</TableHead>
                 <TableHead>Actions</TableHead>
@@ -795,7 +793,7 @@ export default function AdminDashboard() {
                   <TableCell>{material.quantity}</TableCell>
                   <TableCell>{material.unit}</TableCell>
                   <TableCell>₹{material.price.toFixed(2)}</TableCell>
-                  <TableCell>{material.supplier || "-"}</TableCell>
+                  {/* <TableCell>{material.supplier || "-"}</TableCell> */}
                   <TableCell>
                     <Badge
                       variant={
@@ -919,6 +917,48 @@ export default function AdminDashboard() {
       )
     }
 
+    // Reports table
+    if (selectedStat === "reports" && dashboardData?.reportsData && dashboardData.reportsData.length > 0) {
+      return (
+        <div className="h-full overflow-y-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Title</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {dashboardData.reportsData.map((report) => (
+                <TableRow key={report.id}>
+                  <TableCell className="font-medium">{report.title}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="capitalize">{report.type}</Badge>
+                  </TableCell>
+                  <TableCell>{new Date(report.date).toLocaleDateString()}</TableCell>
+                  <TableCell>
+                    <Badge variant={report.status === 'Submitted' ? 'default' : 'secondary'}>
+                      {report.status || 'Submitted'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button variant="outline" size="sm" onClick={() => handleViewMore('reports')}>
+                        <ExternalLink className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )
+    }
+
     if (selectedStat) {
       return (
         <div className="h-full flex items-center justify-center">
@@ -970,26 +1010,49 @@ export default function AdminDashboard() {
       item.percentage = totalItems > 0 ? (item.value / totalItems) * 100 : 0
     })
 
-    // Monthly trend data (mock data for demonstration)
-    const monthlyData = [
-      { month: "Jan", employees: 45, supervisors: 8, clients: 12, materials: 150 },
-      { month: "Feb", employees: 52, supervisors: 9, clients: 15, materials: 165 },
-      { month: "Mar", employees: 48, supervisors: 10, clients: 18, materials: 180 },
-      { month: "Apr", employees: 61, supervisors: 11, clients: 22, materials: 195 },
-      { month: "May", employees: 55, supervisors: 12, clients: 25, materials: 210 },
-      {
-        month: "Jun",
-        employees: dashboardData?.totalEmployees || 58,
-        supervisors: dashboardData?.totalSupervisors || 13,
-        clients: dashboardData?.totalClients || 28,
-        materials: dashboardData?.totalMaterials || 225,
-      },
-    ]
+    // Generate last 6 months of data with growth patterns
+    const monthlyData = Array.from({ length: 6 }, (_, i) => {
+      const date = new Date();
+      date.setMonth(date.getMonth() - (5 - i));
+      const monthName = date.toLocaleString('default', { month: 'short' });
+      const isCurrentMonth = i === 5;
+      
+      // Calculate historical data based on current data and position in the timeline
+      const positionFactor = (i + 1) / 6; // 0.166, 0.333, 0.5, 0.666, 0.833, 1.0
+      const growthFactor = 0.2; // 20% growth over 6 months
+      
+      // Calculate values with a growth pattern
+      const calculateHistoricalValue = (currentValue: number) => {
+        if (isCurrentMonth) return currentValue || 0;
+        // Apply a growth curve - starts slower, accelerates over time
+        const growthPosition = Math.pow(positionFactor, 0.7); // Non-linear growth
+        return Math.max(1, Math.floor(currentValue * (1 - growthFactor * (1 - growthPosition))));
+      };
+      
+      const currentEmployees = dashboardData?.totalEmployees || 0;
+      const currentSupervisors = dashboardData?.totalSupervisors || 0;
+      const currentClients = dashboardData?.totalClients || 0;
+      const currentMaterials = dashboardData?.totalMaterials || 0;
+      
+      // Ensure we have at least some data points
+      const minEmployees = Math.min(1, Math.floor(currentEmployees * 0.1));
+      const minSupervisors = Math.min(1, Math.floor(currentSupervisors * 0.1));
+      const minClients = Math.min(1, Math.floor(currentClients * 0.1));
+      const minMaterials = Math.min(10, Math.floor(currentMaterials * 0.1));
+      
+      return {
+        month: monthName,
+        employees: Math.max(minEmployees, calculateHistoricalValue(currentEmployees)),
+        supervisors: Math.max(minSupervisors, calculateHistoricalValue(currentSupervisors)),
+        clients: Math.max(minClients, calculateHistoricalValue(currentClients)),
+        materials: Math.max(minMaterials, calculateHistoricalValue(currentMaterials)),
+      };
+    });
 
     return (
       <div className="w-full h-full p-6 space-y-6">
         {/* Enhanced Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className=" md:grid hidden grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Pie Chart */}
           <Card className="bg-gradient-to-br from-blue-50 to-indigo-100 border-0 shadow-lg">
             <CardHeader>
@@ -1031,7 +1094,7 @@ export default function AdminDashboard() {
                     <RechartsPrimitive.Tooltip
                       content={({ active, payload }) => {
                         if (!active || !payload || !payload.length) return null;
-                        
+
                         // Create a custom tooltip component with proper typing
                         const CustomTooltip = () => (
                           <div className="bg-white p-3 border border-gray-200 rounded shadow-lg">
@@ -1040,20 +1103,20 @@ export default function AdminDashboard() {
                             <p>{`Percentage: ${(((payload[0].value as number) / totalItems) * 100).toFixed(1)}%`}</p>
                           </div>
                         );
-                        
+
                         return <CustomTooltip />;
                       }}
                     />
-                    <RechartsPrimitive.Legend 
+                    <RechartsPrimitive.Legend
                       content={({ payload }) => (
                         <div className="flex flex-wrap justify-center gap-2 mt-4">
                           {payload?.map((entry, index) => (
-                            <div 
-                              key={`legend-${index}`} 
+                            <div
+                              key={`legend-${index}`}
                               className="flex items-center gap-2 text-sm"
                             >
-                              <div 
-                                className="w-3 h-3 rounded-full" 
+                              <div
+                                className="w-3 h-3 rounded-full"
                                 style={{ backgroundColor: entry.color }}
                               />
                               <span>{entry.value}</span>
@@ -1078,7 +1141,7 @@ export default function AdminDashboard() {
               <CardDescription>6-month performance overview</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-[300px]">
+              <div className="h-[400px]">
                 <ChartContainer
                   config={{
                     employees: { label: "Employees", color: "#3B82F6" },
@@ -1092,10 +1155,10 @@ export default function AdminDashboard() {
                     <RechartsPrimitive.XAxis dataKey="month" stroke="#6b7280" />
                     <RechartsPrimitive.YAxis stroke="#6b7280" />
                     <RechartsPrimitive.Tooltip content={<ChartTooltipContent />} />
-                    <RechartsPrimitive.Legend 
+                    <RechartsPrimitive.Legend
                       content={({ payload }) => (
                         <ChartLegendContent {...(payload as any)} />
-                      )} 
+                      )}
                     />
                     <RechartsPrimitive.Line
                       type="monotone"
@@ -1141,7 +1204,7 @@ export default function AdminDashboard() {
                     {item.value.toLocaleString()}
                   </div>
                   <div className="text-sm text-gray-600">{item.name}</div>
-                  <div className="text-xs text-gray-500 mt-1">{item.percentage.toFixed(1)}% of total</div>
+                  {/* <div className="text-xs text-gray-500 mt-1">{item.percentage.toFixed(1)}% of total</div> */}
                 </div>
               ))}
             </div>
@@ -1152,7 +1215,7 @@ export default function AdminDashboard() {
   }
 
   const renderContent = () => {
-    if (isLoading) {
+    if (isLoading) { 
       return renderLoadingState()
     }
 
@@ -1200,13 +1263,12 @@ export default function AdminDashboard() {
             )}
 
             {/* Enhanced Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
               {stats.map((stat) => (
                 <Card
                   key={stat.id}
-                  className={`h-[140px] hover:shadow-xl border-0 transition-all duration-300 cursor-pointer transform hover:scale-105 ${
-                    selectedStat === stat.id ? "shadow-lg ring-2 ring-blue-500" : ""
-                  } ${stat.bgColor}`}
+                  className={`h-[140px] hover:shadow-xl border-0 transition-all duration-300 cursor-pointer transform hover:scale-105 ${selectedStat === stat.id ? "shadow-lg ring-2 ring-blue-500" : ""
+                    } ${stat.bgColor}`}
                   onClick={() => setSelectedStat(selectedStat === stat.id ? null : stat.id)}
                 >
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1217,7 +1279,7 @@ export default function AdminDashboard() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
-                    <div className="flex items-center mt-2">
+                    {/* <div className="flex items-center mt-2">
                       {stat.trend === "up" ? (
                         <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
                       ) : (
@@ -1229,7 +1291,7 @@ export default function AdminDashboard() {
                         {stat.change}
                       </span>
                       <span className="text-xs text-gray-500 ml-1">from last month</span>
-                    </div>
+                    </div> */}
                   </CardContent>
                 </Card>
               ))}
@@ -1312,7 +1374,7 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       <DashboardLayout userRole="admin" activeSection={activeSection} onSectionChange={setActiveSection}>
-        <div className="p-6">{renderContent()}</div>
+        <div className="lg:p-6">{renderContent()}</div>
       </DashboardLayout>
 
       {/* User Details Modal */}

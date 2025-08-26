@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -18,7 +18,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Briefcase, Calendar, CalendarPlus, Calculator, CheckCircle, ClipboardList, Clock, Edit, Eye, Filter, Folder, Grid3X3, Hash, HelpCircle, IndianRupee, List, Mail, MapPin, MessageCircle, Phone, Plus, RefreshCw, Search, Trash2, Users, XCircle, FileText,Lock, UserMinus } from 'lucide-react'
+import { Briefcase, Calendar, CalendarPlus, Calculator, CheckCircle, ClipboardList, Clock, Edit, Eye, EyeOff, Filter, Folder, Grid3X3, Hash, HelpCircle, IndianRupee, List, Mail, MapPin, MessageCircle, Phone, Plus, RefreshCw, Search, Trash2, Users, XCircle, FileText, Lock, UserMinus } from 'lucide-react'
 import { SupervisorLeaveApprovalModal } from "@/components/management/SupervisorLeaveApprovalModal"
 import { AcroFormPasswordField } from "jspdf"
 
@@ -586,6 +586,8 @@ export default function SupervisorsPage() {
   const [isEmployeeAssignOpen, setIsEmployeeAssignOpen] = useState(false)
   const [supervisorEmployees, setSupervisorEmployees] = useState<Employee[]>([])
   const [detailTab, setDetailTab] = useState<'overview' | 'tasks' | 'team'>('overview')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   // Leave modal state
   const [showLeaveApproval, setShowLeaveApproval] = useState(false)
@@ -594,6 +596,10 @@ export default function SupervisorsPage() {
   const [leaveDates, setLeaveDates] = useState<Date[]>([])
   const [isSubmittingLeave, setIsSubmittingLeave] = useState(false)
   const [existingPaidLeaveDays, setExistingPaidLeaveDays] = useState(0)
+
+  // Delete confirmation dialog
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [supervisorToDelete, setSupervisorToDelete] = useState<Supervisor | null>(null)
 
   // Computed: filtered supervisors
   const filteredSupervisors = useMemo(() => {
@@ -1461,42 +1467,127 @@ export default function SupervisorsPage() {
     setIsAddDialogOpen(true)
   }, [])
 
-  const handleDeleteSupervisor = useCallback(
-    async (id: string) => {
-      try {
-        const s = supervisors.find((x) => x._id === id)
-        const res = await fetch(`/api/supervisors/${id}`, { method: "DELETE" })
-        if (!res.ok) throw new Error(await res.text())
-        setSupervisors((prev) => prev.filter((x) => x._id !== id))
-        if (selectedSupervisor?._id === id) closeSupervisorDetail()
-        toast.success(`Deleted ${s?.name || "supervisor"}`)
-      } catch (e: any) {
-        console.error(e)
-        toast.error(e?.message || "Failed to delete supervisor")
-      }
-    },
-    [closeSupervisorDetail, selectedSupervisor, supervisors]
-  )
+  // Open delete confirmation dialog
+  const confirmDeleteSupervisor = useCallback((supervisor: Supervisor) => {
+    setSupervisorToDelete(supervisor)
+    setIsDeleteDialogOpen(true)
+  }, [])
+
+  // Handle actual deletion after confirmation
+  const handleDeleteSupervisor = useCallback(async () => {
+    if (!supervisorToDelete) return
+    
+    try {
+      const res = await fetch(`/api/supervisors/${supervisorToDelete._id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error(await res.text())
+      
+      setSupervisors((prev) => prev.filter((x) => x._id !== supervisorToDelete._id))
+      if (selectedSupervisor?._id === supervisorToDelete._id) closeSupervisorDetail()
+      
+      toast.success(`Deleted ${supervisorToDelete.name || "supervisor"}`)
+      setIsDeleteDialogOpen(false)
+      setSupervisorToDelete(null)
+    } catch (e: any) {
+      console.error(e)
+      toast.error(e?.message || "Failed to delete supervisor")
+    }
+  }, [closeSupervisorDetail, selectedSupervisor, supervisorToDelete])
 
   const handleSubmitSupervisor = useCallback<React.FormEventHandler>(
     async (e) => {
       e.preventDefault()
-      // Basic client-side validations
-      if (!editingSupervisor) {
-        const emailExists = supervisors.some((s) => s.email && s.email.toLowerCase() === formData.email.toLowerCase())
-        if (emailExists) {
-          toast.error("Email already in use")
+
+      // Required field validations
+      if (!formData.name?.trim()) {
+        toast.error("Name is required")
+        return
+      }
+
+      if (!formData.email?.trim()) {
+        toast.error("Email is required")
+        return
+      }
+
+      // Email format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(formData.email)) {
+        toast.error("Please enter a valid email address")
+        return
+      }
+
+      if (!formData.phone?.trim()) {
+        toast.error("Phone number is required")
+        return
+      }
+
+      // Phone number validation (basic international format)
+      const phoneRegex = /^[+]?[\s\-\(\)0-9]*$/
+      if (!phoneRegex.test(formData.phone) || formData.phone.replace(/[^0-9]/g, '').length < 8) {
+        toast.error("Please enter a valid phone number")
+        return
+      }
+
+      if (!formData.address?.trim()) {
+        toast.error("Address is required")
+        return
+      }
+
+      if (isNaN(formData.salary) || formData.salary < 0) {
+        toast.error("Please enter a valid salary amount")
+        return
+      }
+
+      if (!formData.username?.trim()) {
+        toast.error("Username is required")
+        return
+      }
+
+      // For new supervisors or when changing password
+      if (!editingSupervisor || formData.password) {
+        if (!formData.password) {
+          toast.error("Password is required")
           return
         }
-        const phoneExists = supervisors.some((s) => s.phone === formData.phone)
-        if (phoneExists) {
-          toast.error("Phone already in use")
+
+        // Password strength validation
+        if (formData.password.length < 8) {
+          toast.error("Password must be at least 8 characters long")
           return
         }
+
+        // if (!/[A-Z]/.test(formData.password)) {
+        //   toast.error("Password must contain at least one uppercase letter")
+        //   return
+        // }
+
+        if (!/[0-9]/.test(formData.password)) {
+          toast.error("Password must contain at least one number")
+          return
+        }
+
         if (formData.password !== formData.confirmPassword) {
           toast.error("Passwords do not match")
           return
         }
+      }
+
+      // Check for duplicate email/phone
+      const emailExists = supervisors.some(
+        (s) => s.email && s.email.toLowerCase() === formData.email.toLowerCase() &&
+          (!editingSupervisor || s._id !== editingSupervisor._id)
+      )
+      if (emailExists) {
+        toast.error("Email is already in use")
+        return
+      }
+
+      const phoneExists = supervisors.some(
+        (s) => s.phone === formData.phone &&
+          (!editingSupervisor || s._id !== editingSupervisor._id)
+      )
+      if (phoneExists) {
+        toast.error("Phone number is already in use")
+        return
       }
       setLoading(true)
       try {
@@ -1529,7 +1620,7 @@ export default function SupervisorsPage() {
       {filteredSupervisors.map((supervisor) => (
         <Card
           key={supervisor._id}
-          className="hover:shadow-lg transition-all duration-200 cursor-pointer hover:scale-[1.02]"
+          className="hover:shadow-lg transition-all duration-200 cursor-pointer hover:scale-[1.02] overflow-hidden"
           onClick={() => openSupervisorDetail(supervisor)}
         >
           <CardContent className="p-6">
@@ -1632,7 +1723,7 @@ export default function SupervisorsPage() {
               <Button variant="outline" size="sm" onClick={() => openSupervisorDetail(supervisor)}>
                 <Eye className="w-4 h-4" />
               </Button>
-              <Button variant="destructive" size="sm" onClick={() => handleDeleteSupervisor(supervisor._id)}>
+              <Button variant="destructive" size="sm" onClick={() => confirmDeleteSupervisor(supervisor)}>
                 <Trash2 className="w-4 h-4" />
               </Button>
             </div>
@@ -1764,7 +1855,7 @@ export default function SupervisorsPage() {
                     <Button variant="outline" size="sm" onClick={() => openSupervisorDetail(supervisor)}>
                       <Eye className="w-4 h-4" />
                     </Button>
-                    <Button variant="destructive" size="sm" onClick={() => handleDeleteSupervisor(supervisor._id)}>
+                    <Button variant="destructive" size="sm" onClick={() => confirmDeleteSupervisor(supervisor)}>
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -1920,32 +2011,62 @@ export default function SupervisorsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">{editingSupervisor ? "New Password" : "Password *"}</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => setFormData((p) => ({ ...p, password: e.target.value }))}
-                    placeholder={editingSupervisor ? "Leave blank to keep current" : "Enter password"}
-                    required={!editingSupervisor}
-                  />
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      value={formData.password}
+                      onChange={(e) => setFormData((p) => ({ ...p, password: e.target.value }))}
+                      placeholder={editingSupervisor ? "Leave blank to keep current" : "Enter password"}
+                      required={!editingSupervisor}
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                      onClick={() => setShowPassword(!showPassword)}
+                      tabIndex={-1}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword">Confirm Password</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    value={formData.confirmPassword}
-                    onChange={(e) => setFormData((p) => ({ ...p, confirmPassword: e.target.value }))}
-                    placeholder="Confirm password"
-                    required
-                    autoComplete="new-password"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={formData.confirmPassword}
+                      onChange={(e) => setFormData((p) => ({ ...p, confirmPassword: e.target.value }))}
+                      placeholder="Confirm password"
+                      required
+                      autoComplete="new-password"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      tabIndex={-1}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number *</Label>
+                  <Label htmlFor="phone">Phone Numbeandr *</Label>
                   <Input
                     id="phone"
                     value={formData.phone}
@@ -1959,11 +2080,20 @@ export default function SupervisorsPage() {
                   <Input
                     id="salary"
                     type="number"
-                    value={formData.salary}
-                    onChange={(e) => setFormData((p) => ({ ...p, salary: Number.parseInt(e.target.value, 10) || 0 }))}
-                    placeholder="e.g., 1500 (per day)"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={formData.salary === 0 ? "" : formData.salary} // don’t force 0
+                    onChange={(e) =>
+                      setFormData((p) => ({
+                        ...p,
+                        salary: e.target.value === "" ? 0 : parseInt(e.target.value, 10),
+                      }))
+                    }
+                    placeholder="e.g., 150 (per day)"
                     required
+                    className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
+
                   <p className="text-xs text-muted-foreground">Enter daily salary amount</p>
                 </div>
               </div>
@@ -2573,6 +2703,38 @@ export default function SupervisorsPage() {
               <Button type="submit">Update Task</Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Supervisor</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {supervisorToDelete?.name || 'this supervisor'}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 mt-4">
+            <DialogClose asChild>
+              <Button 
+                variant="outline"
+                onClick={() => setSupervisorToDelete(null)}
+              >
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button 
+              variant="destructive" 
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteSupervisor();
+              }}
+              disabled={!supervisorToDelete}
+            >
+              Delete
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

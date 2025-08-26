@@ -291,6 +291,47 @@ export default function EmployeesManagement() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Required field validations
+    if (!formData.name?.trim()) {
+      toast.error("Name is required")
+      return
+    }
+
+    if (!formData.email?.trim()) {
+      toast.error("Email is required")
+      return
+    }
+
+    // Email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(formData.email)) {
+      toast.error("Please enter a valid email address")
+      return
+    }
+
+    if (!formData.phone?.trim()) {
+      toast.error("Phone number is required")
+      return
+    }
+
+    // Phone number validation (basic international format)
+    const phoneRegex = /^[+]?[\s\-\(\)0-9]*$/
+    if (!phoneRegex.test(formData.phone) || formData.phone.replace(/[^0-9]/g, '').length < 8) {
+      toast.error("Please enter a valid phone number")
+      return
+    }
+
+    if (!formData.address?.trim()) {
+      toast.error("Address is required")
+      return
+    }
+
+    if (isNaN(formData.salary) || formData.salary < 0) {
+      toast.error("Please enter a valid salary amount")
+      return
+    }
+
     setLoading(true)
     try {
       const url = editingEmployee ? `/api/employees/${editingEmployee._id}` : "/api/employees"
@@ -312,13 +353,33 @@ export default function EmployeesManagement() {
         resetForm()
         toast.success(`${formData.name} has been ${editingEmployee ? "updated" : "added"} successfully.`)
       } else {
+        let errorMessage = `Failed to ${editingEmployee ? 'update' : 'create'} employee`
         let details: any = null
+        
         try {
           details = await response.json()
-        } catch {}
-        const msg = details?.message || `Failed to ${editingEmployee ? 'update' : 'create'} employee (HTTP ${response.status})`
-        toast.error(msg)
-        console.error('Employee save failed:', { status: response.status, body: details })
+          if (details?.message) {
+            errorMessage = details.message
+          } else {
+            errorMessage += ` (HTTP ${response.status})`
+          }
+        } catch (e) {
+          errorMessage += ` (HTTP ${response.status})`
+        }
+        
+        toast.error(errorMessage, {
+          duration: 5000,
+          action: {
+            label: 'Dismiss',
+            onClick: () => {}
+          }
+        })
+        
+        console.error('Employee save failed:', { 
+          status: response.status, 
+          details,
+          formData: { ...formData, password: '*****' } // Don't log actual password
+        })
       }
     } catch (error) {
       console.error("Error saving employee:", error)
@@ -428,30 +489,32 @@ export default function EmployeesManagement() {
                 </Avatar>
                 <div>
                   <h3 className="font-semibold text-lg">{employee.name}</h3>
-                  <div className="flex items-center gap-2 mt-1" onClick={(e) => e.stopPropagation()}>
-                    <Label className="text-xs">Shifts Today (0–3, 0.5-step)</Label>
-                    <Select
-                      value={String(getShiftCount(employee._id))}
-                      onValueChange={(val) => {
-                        const num = Number(val)
-                        setShiftCount(employee._id, num)
-                        saveEmployeeShift(employee, num)
-                      }}
-                    >
-                      <SelectTrigger className="h-7 w-24 px-2 py-1">
-                        <SelectValue placeholder="0" />
-                      </SelectTrigger>
-                      <SelectContent align="start">
-                        <SelectItem value="0">0</SelectItem>
-                        <SelectItem value="0.5">0.5</SelectItem>
-                        <SelectItem value="1">1</SelectItem>
-                        <SelectItem value="1.5">1.5</SelectItem>
-                        <SelectItem value="2">2</SelectItem>
-                        <SelectItem value="2.5">2.5</SelectItem>
-                        <SelectItem value="3">3</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {employee.workType === 'Daily' && (
+                    <div className="flex items-center gap-2 mt-1" onClick={(e) => e.stopPropagation()}>
+                      <Label className="text-xs">Shifts Today (0–3, 0.5-step)</Label>
+                      <Select
+                        value={String(getShiftCount(employee._id))}
+                        onValueChange={(val) => {
+                          const num = Number(val)
+                          setShiftCount(employee._id, num)
+                          saveEmployeeShift(employee, num)
+                        }}
+                      >
+                        <SelectTrigger className="h-7 w-24 px-2 py-1">
+                          <SelectValue placeholder="0" />
+                        </SelectTrigger>
+                        <SelectContent align="start">
+                          <SelectItem value="0">0</SelectItem>
+                          <SelectItem value="0.5">0.5</SelectItem>
+                          <SelectItem value="1">1</SelectItem>
+                          <SelectItem value="1.5">1.5</SelectItem>
+                          <SelectItem value="2">2</SelectItem>
+                          <SelectItem value="2.5">2.5</SelectItem>
+                          <SelectItem value="3">3</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </div>
               </div>
               {/* Status badge removed */}
@@ -699,11 +762,11 @@ export default function EmployeesManagement() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Shifts Today</CardTitle>
-            <Clock4 className="h-4 w-4 text-blue-600" />
+            <Clock4 className="h-4 w-4 text-orange-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{totalShiftsToday}</div>
-            <p className="text-xs text-muted-foreground">Across all employees</p>
+            <div className="text-2xl font-bold text-orange-600">{totalShiftsToday}</div>
+            <p className="text-xs text-muted-foreground">Across daily employees</p>
           </CardContent>
         </Card>
         <Card>
@@ -715,7 +778,21 @@ export default function EmployeesManagement() {
             <div className="text-2xl font-bold text-green-600">
               {formatINR(totalSalaryToday)}
             </div>
-            <p className="text-xs text-muted-foreground">Sum of shifts * per-shift</p>
+            <p className="text-xs text-muted-foreground">Daily shifts total</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Monthly Salary Total</CardTitle>
+            <IndianRupee className="h-4 w-4 text-teal-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-teal-600">
+              {formatINR(employees
+                .filter(e => e.workType === 'Monthly')
+                .reduce((sum, emp) => sum + (emp.salary || 0), 0))}
+            </div>
+            <p className="text-xs text-muted-foreground">Monthly staff total</p>
           </CardContent>
         </Card>
       </div>

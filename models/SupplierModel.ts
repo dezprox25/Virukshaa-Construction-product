@@ -22,6 +22,7 @@ export interface ISupplier extends Document {
   dueAmount?: number;
   lastPaymentDate?: Date;
   avatar?: string;
+  username?: string; // Added to handle existing index
   bankDetails?: {
     accountNumber?: string;
     accountHolderName?: string;
@@ -66,6 +67,7 @@ const supplierSchema = new Schema<ISupplier>({
   contactPerson: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   phone: { type: String, required: true },
+  username: { type: String, unique: true, sparse: true }, // Added to handle existing index
   materialTypes: [{ type: String, required: true }],
   projectMaterials: [projectMaterialSchema],
   supplyStartDate: { type: Date },
@@ -105,7 +107,29 @@ supplierSchema.index({
 });
 
 // Create the model or retrieve it if it already exists to prevent OverwriteModelError
-const Supplier = mongoose.models.Supplier as mongoose.Model<ISupplier> || 
-                 mongoose.model<ISupplier>('Supplier', supplierSchema);
+let Supplier: mongoose.Model<ISupplier>;
+
+try {
+  // Try to get the existing model
+  Supplier = mongoose.models.Supplier as mongoose.Model<ISupplier>;
+  
+  // If model exists, check and drop the problematic index
+  if (Supplier) {
+    Supplier.collection.dropIndex('username_1').catch((err: any) => {
+      if (err && err.codeName !== 'NamespaceNotFound') {
+        console.log('Error dropping username index:', err);
+      } else {
+        console.log('Dropped username index successfully');
+      }
+    });
+  }
+} catch (e) {
+  console.log('Error checking for existing model:', e);
+}
+
+// Create the model if it doesn't exist
+if (!Supplier) {
+  Supplier = mongoose.model<ISupplier>('Supplier', supplierSchema);
+}
 
 export default Supplier;

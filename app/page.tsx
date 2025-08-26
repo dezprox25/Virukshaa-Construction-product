@@ -7,11 +7,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Building2, Users, ClipboardList } from "lucide-react"
+import { Building2, Users, ClipboardList, Eye, EyeOff } from "lucide-react"
+import { toast } from "sonner"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [role, setRole] = useState("")
   const [isLoading, setIsLoading] = useState(false)
 
@@ -76,6 +78,7 @@ export default function LoginPage() {
       const selectedRole = demoRole || role;
 
       if (!selectedRole) {
+        toast.error('Please select a role');
         throw new Error('Please select a role');
       }
       // Always authenticate against the API for all roles so passwords are validated
@@ -90,6 +93,7 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (!response.ok) {
+        toast.error(data.error || 'Login failed');
         throw new Error(data.error || 'Login failed');
       }
 
@@ -103,7 +107,7 @@ export default function LoginPage() {
       router.push("/dashboard");
     } catch (error) {
       console.error('Login error:', error);
-      alert(error instanceof Error ? error.message : 'Login failed. Please try again.');
+      toast.error(error instanceof Error ? error.message : 'Login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -121,10 +125,7 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="login">Login</TabsTrigger>
-              <TabsTrigger value="demo">Sign UP</TabsTrigger>
-            </TabsList>
+           
 
             <TabsContent value="login" className="space-y-4">
               <div className="space-y-2">
@@ -139,13 +140,27 @@ export default function LoginPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -173,91 +188,7 @@ export default function LoginPage() {
               </Button>
             </TabsContent>
 
-            <TabsContent value="demo" className="space-y-4">
-              <form onSubmit={handleSignup} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input
-                    id="name"
-                    type="text"
-                    placeholder="Enter your full name"
-                    value={signupData.name}
-                    onChange={(e) => setSignupData({...signupData, name: e.target.value})}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="signup-email">Email</Label>
-                  <Input
-                    id="signup-email"
-                    type="email"
-                    placeholder="Enter your email"
-                    value={signupData.email}
-                    onChange={(e) => setSignupData({...signupData, email: e.target.value})}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="signup-password">Password</Label>
-                  <Input
-                    id="signup-password"
-                    type="password"
-                    placeholder="Create a password"
-                    value={signupData.password}
-                    onChange={(e) => setSignupData({...signupData, password: e.target.value})}
-                    minLength={6}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="confirm-password">Confirm Password</Label>
-                  <Input
-                    id="confirm-password"
-                    type="password"
-                    placeholder="Confirm your password"
-                    value={signupData.confirmPassword}
-                    onChange={(e) => setSignupData({...signupData, confirmPassword: e.target.value})}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="signup-role">Role</Label>
-                  <select
-                    id="signup-role"
-                    value={signupData.role}
-                    onChange={(e) => setSignupData({...signupData, role: e.target.value})}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    required
-                  >
-                    <option value="">Select a role</option>
-                    <option value="client">Client</option>
-                    <option value="supervisor">Supervisor</option>
-                  </select>
-                </div>
-
-                <Button 
-                  type="submit"
-                  disabled={isSignupLoading}
-                  className={`w-full ${isSignupLoading ? 'opacity-70' : ''}`}
-                >
-                  {isSignupLoading ? 'Creating Account...' : 'Create Account'}
-                </Button>
-              </form>
-
-              <div className="text-center text-sm mt-4">
-                Already have an account?{' '}
-                <button 
-                  onClick={() => (document.querySelector('button[data-value="login"]') as HTMLButtonElement)?.click()}
-                  className="font-medium text-primary hover:underline cursor-pointer"
-                >
-                  Sign in
-                </button>
-              </div>
-            </TabsContent>
+          
           </Tabs>
         </CardContent>
       </Card>

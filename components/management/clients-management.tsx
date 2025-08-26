@@ -62,7 +62,7 @@ import {
 } from "lucide-react"
 import MessageBox from "@/components/common/MessageBox"
 
-interface Client {
+interface Client { 
   _id: string
   name: string
   username: string
@@ -604,23 +604,45 @@ export default function ClientsManagement() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Validate required fields
-    if (!formData.name || !formData.email || !formData.phone) {
-      toast.error("Please fill in all required fields (Name, Email, Phone)")
+    // Required field validations
+    if (!formData.name?.trim()) {
+      toast.error("Name is required")
       return
     }
 
-    // Email validation
+    if (!formData.email?.trim()) {
+      toast.error("Email is required")
+      return
+    }
+
+    // Email format validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(formData.email)) {
       toast.error("Please enter a valid email address")
       return
     }
 
-    // Phone validation
-    const phoneRegex = /^[+]?[1-9][\d]{0,15}$/
-    if (!phoneRegex.test(formData.phone.replace(/\s/g, ""))) {
-      toast.warning("Please enter a valid phone number")
+    if (!formData.phone?.trim()) {
+      toast.error("Phone number is required")
+      return
+    }
+
+    // Phone number validation (basic international format)
+    const phoneRegex = /^[+]?[\s\-\(\)0-9]*$/
+    if (!phoneRegex.test(formData.phone) || formData.phone.replace(/[^0-9]/g, '').length < 8) {
+      toast.error("Please enter a valid phone number")
+      return
+    }
+
+    if (!formData.address?.trim()) {
+      toast.error("Address is required")
+      return
+    }
+
+    // Project total amount validation
+    const amount = Number.parseFloat(formData.projectTotalAmount) || 0
+    if (isNaN(amount) || amount < 0) {
+      toast.error("Please enter a valid project amount")
       return
     }
 

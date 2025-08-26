@@ -186,7 +186,7 @@ const SettingsContent = () => {
 
   const tabs = [
     'My Details',
-    'Profile',
+    'Edit Profile',
     'Password',
     'Notifications',
   ];
@@ -363,18 +363,18 @@ const SettingsContent = () => {
                       {formData.bio || 'Not provided'}
                     </dd>
                   </div>
-                </dl>
+                </dl> 
               </div>
             </div>
           </div>
         );
-      case 'Profile':
+      case 'Edit Profile':
         return (
           <>
             <div className="p-2 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Profile</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">Edit Profile</h2>
                 </div>
               </div>
             </div>

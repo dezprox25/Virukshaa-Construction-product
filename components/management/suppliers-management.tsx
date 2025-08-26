@@ -269,41 +269,89 @@ const SuppliersManagement: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+
+    // Client-side validation
+    if (!formData.companyName?.trim()) {
+      toast.error("Company name is required")
+      setLoading(false)
+      return
+    }
+    if (!formData.contactPerson?.trim()) {
+      toast.error("Contact person is required")
+      setLoading(false)
+      return
+    }
+    if (!formData.email?.trim()) {
+      toast.error("Email is required")
+      setLoading(false)
+      return
+    }
+    if (!formData.phone?.trim()) {
+      toast.error("Phone number is required")
+      setLoading(false)
+      return
+    }
+    if (!formData.address?.trim()) {
+      toast.error("Address is required")
+      setLoading(false)
+      return
+    }
+    if (!formData.materialTypes?.length) {
+      toast.error("Please add at least one material type")
+      setLoading(false)
+      return
+    }
+
     try {
-      const url = editingSupplier ? `/api/suppliers/${editingSupplier._id}` : "/api/suppliers"
-      const method = editingSupplier ? "PUT" : "POST"
+      const url = editingSupplier ? `/api/suppliers/${editingSupplier._id}` : '/api/suppliers'
+      const method = editingSupplier ? 'PUT' : 'POST'
+
+      // Prepare the request body
+      const requestBody = {
+        companyName: formData.companyName.trim(),
+        contactPerson: formData.contactPerson.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        address: formData.address.trim(),
+        materialTypes: formData.materialTypes,
+        // Optional fields
+        ...(formData.supplyStartDate && { supplyStartDate: formData.supplyStartDate }),
+        ...(formData.avatar && { avatar: formData.avatar }),
+        ...(formData.bankDetails?.length && { bankDetails: formData.bankDetails }),
+      }
+
+      console.log('Sending request:', { method, url, body: requestBody })
+
       const response = await fetch(url, {
         method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...formData,
-          // Remove empty strings and undefined values
-          ...Object.fromEntries(
-            Object.entries(formData).filter(([_, v]) => v !== "" && v !== undefined)
-          ),
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
       })
+
+      const responseData = await response.json()
+
       if (!response.ok) {
-        throw new Error("Failed to save supplier")
+        console.error('Server response:', responseData)
+        throw new Error(responseData.error || 'Failed to save supplier')
       }
-      const savedSupplier = await response.json()
+
+      const savedSupplier = responseData
       toast.success(`Supplier ${editingSupplier ? "updated" : "created"} successfully`)
 
       // Update the suppliers list
       if (editingSupplier) {
         setSuppliers(suppliers.map(s => s._id === savedSupplier._id ? savedSupplier : s))
       } else {
-        setSuppliers([...suppliers, savedSupplier])
+        setSuppliers([savedSupplier, ...suppliers])
       }
+
       // Close the dialog and reset the form
       setIsAddDialogOpen(false)
       setEditingSupplier(null)
       resetForm()
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving supplier:", error)
-      toast.error("Failed to save supplier. Please try again.")
+      toast.error(error.message || "Failed to save supplier. Please check the console for details.")
     } finally {
       setLoading(false)
     }
@@ -609,25 +657,17 @@ const SuppliersManagement: React.FC = () => {
         )
       );
 
-      // Update local state
+      // Update local state to remove the project and its materials
       setProjectMaterials(prev => {
-        const newProjectMaterials = { ...prev };
-        delete newProjectMaterials[projectId];
-        return newProjectMaterials;
+        const updated = { ...prev };
+        delete updated[projectId];
+        return updated;
       });
 
-      // Remove project input state
-      setProjectMaterialInputs(prev => {
-        const newInputs = { ...prev };
-        delete newInputs[projectId];
-        return newInputs;
-      });
-
-      // Update the selected supplier's project materials
+      // Update the projectMaterials in the selectedSupplier state
       if (selectedSupplier) {
-        const updatedProjectMaterials = (selectedSupplier.projectMaterials || []).filter(pm =>
-          pm.projectId !== projectId
-        );
+        const updatedProjectMaterials = { ...selectedSupplier.projectMaterials };
+        delete updatedProjectMaterials[projectId];
 
         setSelectedSupplier({
           ...selectedSupplier,
@@ -763,90 +803,7 @@ const SuppliersManagement: React.FC = () => {
     )
   }
 
-  const renderSupplierCard = (supplier: Supplier) => {
-    const primaryBankAccount = supplier.bankDetails?.find(acc => acc.isPrimary) || supplier.bankDetails?.[0];
 
-    return (
-      <Card key={supplier._id} className="hover:shadow-md transition-shadow">
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <Avatar className="h-12 w-12">
-                <AvatarImage
-                  src={supplier.avatar || `https://avatar.vercel.sh/${supplier.email}.png`}
-                  alt={supplier.companyName}
-                />
-                <AvatarFallback>
-                  {supplier.companyName
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <h3 className="font-semibold">{supplier.companyName}</h3>
-                <p className="text-sm text-muted-foreground">{supplier.contactPerson}</p>
-              </div>
-            </div>
-            <Badge variant={supplier.status === "Active" ? "default" : "secondary"}>
-              {supplier.status}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="flex items-center text-sm">
-            <Mail className="mr-2 h-4 w-4 text-muted-foreground" />
-            <a href={`mailto:${supplier.email}`} className="hover:underline">
-              {supplier.email}
-            </a>
-          </div>
-          <div className="flex items-center text-sm">
-            <Phone className="mr-2 h-4 w-4 text-muted-foreground" />
-            <a href={`tel:${supplier.phone}`} className="hover:underline">
-              {supplier.phone}
-            </a>
-          </div>
-          {primaryBankAccount && (
-            <div className="mt-2 pt-2 border-t">
-              <p className="text-xs text-muted-foreground mb-1">Bank Account</p>
-              <div className="text-sm">
-                <div>{primaryBankAccount.accountHolderName}</div>
-                <div className="text-muted-foreground">
-                  {primaryBankAccount.bankName} ••••{primaryBankAccount.accountNumber?.slice(-4)}
-                </div>
-                {primaryBankAccount.isPrimary && (
-                  <Badge variant="outline" className="mt-1">
-                    Primary
-                  </Badge>
-                )}
-              </div>
-            </div>
-          )}
-        </CardContent>
-        <CardFooter className="flex justify-between">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              openEditDialog(supplier);
-            }}
-          >
-            <Edit3 className="w-4 h-4 mr-1" /> Edit
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setSelectedSupplier(supplier);
-              setIsDetailSheetOpen(true);
-            }}
-          >
-            <Eye className="w-4 h-4 mr-1" /> View
-          </Button>
-        </CardFooter>
-      </Card>
-    );
-  };
 
   const renderGridView = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ">
@@ -1087,7 +1044,7 @@ const SuppliersManagement: React.FC = () => {
     <div className="space-y-6">
       <Toaster richColors />
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="md:grid hidden sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Suppliers</CardTitle>
@@ -1587,32 +1544,42 @@ const SuppliersManagement: React.FC = () => {
 
       {/* Filters and View Toggle */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between mb-6">
-        <div className="flex flex-col sm:flex-row gap-4 flex-1">
-          <div className="relative flex-1 max-w-sm">
+        <div className="flex flex-wrap gap-3 items-center w-full">
+          {/* Search */}
+          <div className="relative flex-1 w-full lg:max-w-[200px]">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
             <Input
               placeholder="Search suppliers..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-10 w-full"
             />
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* Filter */}
+          <div className="flex items-center gap-2 w-full sm:w-48 lg:w-48">
             <Filter className="w-4 h-4 text-muted-foreground" />
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
-              className="p-2 border rounded-md"
+              onChange={(e) =>
+                setStatusFilter(e.target.value as "all" | "active" | "inactive")
+              }
+              className="p-2 border rounded-md w-full"
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
             </select>
           </div>
-          <Badge variant="secondary" className="self-center">
+
+          {/* Badge */}
+          <Badge variant="default" className="ml-auto">
             {filteredSuppliers.length} Total
           </Badge>
         </div>
+
+
+
         {/* View Toggle */}
         <div className="flex items-center gap-2 bg-muted p-1 rounded-lg">
           <Button
@@ -1872,7 +1839,7 @@ const SuppliersManagement: React.FC = () => {
                               {/* Add Material Form */}
                               <div className="space-y-2">
                                 <Label className="text-sm font-medium">Add Material</Label>
-                                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                                <div className="gap-3 flex flex-col">
                                   <div className="sm:col-span-5">
                                     <Select
                                       value={currentInput.materialType}
@@ -1896,7 +1863,7 @@ const SuppliersManagement: React.FC = () => {
                                     min="1"
                                     value={currentInput.quantity}
                                     onChange={(e) => updateProjectMaterialInput(projectId, "quantity", e.target.value)}
-                                    className="sm:col-span-2 text-center h-9"
+                                    className="sm:col-span-2 text-center h-9 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                   />
                                   <div className="relative sm:col-span-3">
                                     <IndianRupee className="absolute left-2 top-2.5 w-4 h-4 text-muted-foreground" />
@@ -1907,7 +1874,7 @@ const SuppliersManagement: React.FC = () => {
                                       step="0.01"
                                       value={currentInput.amount}
                                       onChange={(e) => updateProjectMaterialInput(projectId, "amount", e.target.value)}
-                                      className="pl-8 text-center h-9"
+                                      className="pl-8 text-center h-9 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     />
                                   </div>
                                   <Button
@@ -1981,7 +1948,7 @@ const SuppliersManagement: React.FC = () => {
                     </CardContent>
                   </Card>
                 </TabsContent>
-            
+
               </Tabs>
             </div>
           )}
