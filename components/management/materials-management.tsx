@@ -51,6 +51,7 @@ interface Material {
   lastUpdated: string
   status: "In Stock" | "Low Stock" | "Out of Stock" | "On Order"
   projectId?: string
+  supervisor: string
 }
 
 interface MaterialRequest {
@@ -258,8 +259,10 @@ export default function MaterialsManagement() {
         throw new Error(`Failed to fetch materials: ${response.status} ${response.statusText}`)
       }
       const data = await response.json()
-      setMaterials(data)
-      return data
+      // Enforce client-side ownership filter as a safeguard
+      const scoped = Array.isArray(data) ? data.filter((m: any) => m && String(m.supervisor || '') === String(supervisorId)) : []
+      setMaterials(scoped)
+      return scoped
     } catch (error) {
       console.error("Error in fetchMaterials:", error)
       toast.error("Error", {
@@ -417,6 +420,11 @@ export default function MaterialsManagement() {
       
       console.log('Submitting material data:', { url, method, data: inventoryData })
       
+      const supervisorId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
+      if (!supervisorId) {
+        toast.error('Authentication Error', { description: 'Please sign in to manage materials.' })
+        throw new Error('Supervisor ID not found')
+      }
       const response = await fetch(url, {
         method,
         headers: {
@@ -425,6 +433,7 @@ export default function MaterialsManagement() {
         body: JSON.stringify({
           ...inventoryData,
           projectId: selectedProjectInventory || undefined,
+          supervisor: supervisorId,
         }),
       })
 

@@ -19,6 +19,8 @@ export interface IMaterial {
   imageUrl?: string;
   tags?: string[];
   projectId?: Types.ObjectId;
+  // Associate each material with a supervisor for scoping
+  supervisor?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -76,7 +78,9 @@ const materialSchema = new Schema<IMaterial>(
     sku: { type: String },
     imageUrl: { type: String },
     tags: [{ type: String }],
-    projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: false }
+    projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: false },
+    // Link to supervisor who owns/created the material
+    supervisor: { type: Schema.Types.ObjectId, ref: 'Supervisor', required: false }
   },
   {
     timestamps: true

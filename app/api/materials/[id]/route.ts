@@ -23,6 +23,8 @@ type MaterialResponse = {
   imageUrl?: string;
   tags?: string[];
   projectId?: string;
+  // add supervisor id for ownership
+  supervisor?: string;
   lastUpdated: string;
   createdAt: string;
   updatedAt: string;
@@ -55,6 +57,12 @@ export async function PUT(
     } else if (data.projectId && Types.ObjectId.isValid(String(data.projectId))) {
       updatedData.projectId = new Types.ObjectId(String(data.projectId))
     }
+    // Map supervisor to ObjectId if provided
+    if (data.supervisor === null || data.supervisor === '') {
+      updatedData.supervisor = undefined
+    } else if (data.supervisor && Types.ObjectId.isValid(String(data.supervisor))) {
+      updatedData.supervisor = new Types.ObjectId(String(data.supervisor))
+    }
     
     const material = (await Material.findByIdAndUpdate(id, updatedData, { new: true })) as MaterialDocument | null
     
@@ -77,6 +85,7 @@ export async function PUT(
       supplier: mAny.supplier,
       status: material.status as 'In Stock' | 'Low Stock' | 'Out of Stock' | 'On Order',
       ...(material.projectId && { projectId: material.projectId.toString() }),
+      ...(mAny.supervisor && { supervisor: String(mAny.supervisor) }),
       lastUpdated: material.lastUpdated.toISOString(),
       createdAt: material.createdAt.toISOString(),
       updatedAt: material.updatedAt.toISOString(),
