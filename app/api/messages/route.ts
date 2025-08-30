@@ -4,18 +4,30 @@ import Message from "@/models/Message"
 
 // Type for message creation request body
 interface CreateMessageRequest {
-  text: string
+  text?: string
   sender: "client" | "superadmin"
   conversationId?: string
+  attachment?: {
+    fileName: string
+    fileSize: number
+    fileType: string
+    fileUrl: string
+  }
 }
 
 // Type for message response
 interface MessageResponse {
   id: string
-  text: string
+  text?: string
   sender: "client" | "superadmin"
   timestamp: string
   read: boolean
+  attachment?: {
+    fileName: string
+    fileSize: number
+    fileType: string
+    fileUrl: string
+  }
 }
 
 // Create a new message
@@ -23,10 +35,10 @@ export async function POST(req: Request) {
   try {
     await connectToDB()
 
-    const { text, sender, conversationId }: Partial<CreateMessageRequest> = await req.json()
+    const { text, sender, conversationId, attachment }: Partial<CreateMessageRequest> = await req.json()
 
     // Validate request body
-    if (!text?.trim() || !sender) {
+    if ((!text?.trim() && !attachment) || !sender) {
       return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 })
     }
 
@@ -40,12 +52,13 @@ export async function POST(req: Request) {
     }
 
     const message = new Message({
-      text: text.trim(),
+      text: text?.trim() || "",
       sender,
       receiver: sender === "client" ? "superadmin" : "client",
       conversationId: String(conversationId),
       timestamp: new Date(),
       read: false,
+      attachment: attachment || undefined,
     })
 
     await message.save()
@@ -57,6 +70,7 @@ export async function POST(req: Request) {
       sender: messageObj.sender,
       timestamp: messageObj.timestamp.toISOString(),
       read: messageObj.read,
+      attachment: messageObj.attachment || undefined,
     }
 
     return NextResponse.json({ success: true, data: response })
@@ -114,6 +128,7 @@ export async function GET(req: Request) {
       sender: msg.sender,
       timestamp: msg.timestamp.toISOString(),
       read: msg.read || false,
+      attachment: msg.attachment || undefined,
     }))
 
     return NextResponse.json({ success: true, messages: response })
