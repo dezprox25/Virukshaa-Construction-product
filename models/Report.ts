@@ -15,6 +15,12 @@ export interface IReport extends Document {
   queries?: string;
   employees?: mongoose.Types.ObjectId[];
   status?: 'Draft' | 'Submitted';
+  attachments?: {
+    fileName: string;
+    fileSize: number;
+    fileType: string;
+    fileUrl: string;
+  }[];
 }
 
 const ReportSchema = new Schema<IReport>({
@@ -35,7 +41,13 @@ const ReportSchema = new Schema<IReport>({
   employeeSummary: { type: String },
   queries: { type: String },
   employees: [{ type: Schema.Types.ObjectId, ref: 'Employee' }],
-  status: { type: String, enum: ['Draft', 'Submitted'], default: 'Submitted' }
+  status: { type: String, enum: ['Draft', 'Submitted'], default: 'Submitted' },
+  attachments: [{
+    fileName: { type: String, required: true },
+    fileSize: { type: Number, required: true },
+    fileType: { type: String, required: true },
+    fileUrl: { type: String, required: true }
+  }]
 }, { timestamps: true });
 
 // Hot-reload safety in dev

@@ -1,12 +1,13 @@
 "use client"
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, useRef } from 'react'
 import { useToast } from '@/hooks/use-toast'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Paperclip, X, FileText, Image as ImageIcon, Download } from 'lucide-react'
 
 type Project = {
   _id: string
@@ -28,6 +29,12 @@ type ReportItem = {
   queries?: string
   employees?: string[]
   date?: string
+  attachments?: {
+    fileName: string
+    fileSize: number
+    fileType: string
+    fileUrl: string
+  }[]
 }
 
 const SupervisorReports: React.FC = () => {
@@ -46,7 +53,11 @@ const SupervisorReports: React.FC = () => {
     employeeSummary: '',
     queries: '',
     employees: [] as string[],
+    attachments: [] as { fileName: string; fileSize: number; fileType: string; fileUrl: string }[],
   })
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [filePreviews, setFilePreviews] = useState<{ [key: string]: string }>({})
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     // Load projects and employees for selection
@@ -109,11 +120,109 @@ const SupervisorReports: React.FC = () => {
     })
   }
 
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  const getFileIcon = (fileType: string) => {
+    if (fileType.startsWith('image/')) return <ImageIcon className="h-4 w-4" />
+    if (fileType === 'application/pdf') return <FileText className="h-4 w-4 text-red-500" />
+    if (fileType.includes('word') || fileType.includes('document')) return <FileText className="h-4 w-4 text-blue-500" />
+    if (fileType.includes('sheet') || fileType.includes('excel')) return <FileText className="h-4 w-4 text-green-500" />
+    return <FileText className="h-4 w-4" />
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+
+    // Check file sizes (max 10MB each)
+    const oversizedFiles = files.filter(file => file.size > 10 * 1024 * 1024)
+    if (oversizedFiles.length > 0) {
+      toast.error(`Files must be less than 10MB: ${oversizedFiles.map(f => f.name).join(', ')}`)
+      return
+    }
+
+    setSelectedFiles(prev => [...prev, ...files])
+
+    // Create previews for images
+    files.forEach(file => {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          setFilePreviews(prev => ({
+            ...prev,
+            [file.name]: e.target?.result as string
+          }))
+        }
+        reader.readAsDataURL(file)
+      }
+    })
+  }
+
+  const removeFile = (fileName: string) => {
+    setSelectedFiles(prev => prev.filter(f => f.name !== fileName))
+    setFilePreviews(prev => {
+      const newPreviews = { ...prev }
+      delete newPreviews[fileName]
+      return newPreviews
+    })
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const uploadFiles = async (files: File[]): Promise<{ fileName: string; fileSize: number; fileType: string; fileUrl: string }[]> => {
+    const uploadPromises = files.map(async (file) => {
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('conversationId', 'reports')
+
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        })
+
+        if (!response.ok) throw new Error('Upload failed')
+        
+        const data = await response.json()
+        return {
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type,
+          fileUrl: data.fileUrl,
+        }
+      } catch (error) {
+        console.error(`File upload error for ${file.name}:`, error)
+        throw error
+      }
+    })
+
+    return Promise.all(uploadPromises)
+  }
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!canSubmit) return
     setLoading(true)
     try {
+      // Upload files first if any
+      let attachments: { fileName: string; fileSize: number; fileType: string; fileUrl: string }[] = []
+      if (selectedFiles.length > 0) {
+        try {
+          attachments = await uploadFiles(selectedFiles)
+        } catch (error) {
+          toast.error('Failed to upload files. Please try again.')
+          setLoading(false)
+          return
+        }
+      }
+
       const supervisorId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
       const res = await fetch('/api/reports', {
         method: 'POST',
@@ -128,6 +237,7 @@ const SupervisorReports: React.FC = () => {
           employees: form.employees,
           supervisorId: supervisorId || undefined,
           date: new Date().toISOString(),
+          attachments: form.attachments,
         }),
       })
       if (!res.ok) {
@@ -142,7 +252,10 @@ const SupervisorReports: React.FC = () => {
         employeeSummary: '',
         queries: '',
         employees: [],
+        attachments: [],
       })
+      setSelectedFiles([])
+      setFilePreviews({})
       toast.success('Report submitted successfully')
       // reload reports
       try {
@@ -170,7 +283,10 @@ const SupervisorReports: React.FC = () => {
       employeeSummary: rep.employeeSummary || '',
       queries: rep.queries || '',
       employees: rep.employees || [],
+      attachments: rep.attachments || [],
     })
+    setSelectedFiles([])
+    setFilePreviews({})
   }
 
   const onUpdate = async () => {
@@ -187,6 +303,7 @@ const SupervisorReports: React.FC = () => {
           employeeSummary: form.employeeSummary || undefined,
           queries: form.queries || undefined,
           employees: form.employees,
+          attachments: form.attachments,
         }),
       })
       if (!res.ok) {
@@ -220,7 +337,9 @@ const SupervisorReports: React.FC = () => {
       setReports((prev) => prev.filter(r => r._id !== id))
       if (editingId === id) {
         setEditingId(null)
-        setForm({ title: '', projectId: '', siteUpdate: '', employeeSummary: '', queries: '', employees: [] })
+        setForm({ title: '', projectId: '', siteUpdate: '', employeeSummary: '', queries: '', employees: [], attachments: [] })
+        setSelectedFiles([])
+        setFilePreviews({})
       }
       toast.success('Report deleted')
     } catch (e: any) {
@@ -291,13 +410,100 @@ const SupervisorReports: React.FC = () => {
           </div>
         </div>
 
+        {/* File Attachments */}
+        <div className="grid gap-2">
+          <Label>Attachments</Label>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={handleFileSelect}
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+                multiple
+                className="hidden"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-2"
+              >
+                <Paperclip className="h-4 w-4" />
+                Add Files
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Max 10MB per file. Images, PDFs, Documents supported.
+              </span>
+            </div>
+
+            {/* Selected Files Preview */}
+            {selectedFiles.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Selected Files:</p>
+                <div className="space-y-2 max-h-32 overflow-auto">
+                  {selectedFiles.map((file, index) => (
+                    <div key={`${file.name}-${index}`} className="flex items-center justify-between bg-gray-50 p-2 rounded">
+                      <div className="flex items-center gap-2">
+                        {filePreviews[file.name] ? (
+                          <img src={filePreviews[file.name]} alt="Preview" className="w-8 h-8 object-cover rounded" />
+                        ) : (
+                          <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center">
+                            {getFileIcon(file.type)}
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-sm font-medium truncate max-w-[200px]">{file.name}</p>
+                          <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeFile(file.name)}
+                        className="p-1 h-auto"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Existing Attachments (for edit mode) */}
+            {form.attachments.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Current Attachments:</p>
+                <div className="space-y-2 max-h-32 overflow-auto">
+                  {form.attachments.map((attachment, index) => (
+                    <div key={`existing-${index}`} className="flex items-center justify-between bg-blue-50 p-2 rounded">
+                      <div className="flex items-center gap-2 cursor-pointer" onClick={() => window.open(attachment.fileUrl, '_blank')}>
+                        <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center">
+                          {getFileIcon(attachment.fileType)}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium truncate max-w-[200px]">{attachment.fileName}</p>
+                          <p className="text-xs text-gray-500">{formatFileSize(attachment.fileSize)}</p>
+                        </div>
+                        <Download className="h-3 w-3 text-gray-400" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         <div className="flex gap-3">
           {editingId ? (
             <>
               <Button type="button" onClick={onUpdate} disabled={!canSubmit || loading}>
                 {loading ? 'Saving...' : 'Save Changes'}
               </Button>
-              <Button type="button" variant="secondary" onClick={() => { setEditingId(null); setForm({ title: '', projectId: '', siteUpdate: '', employeeSummary: '', queries: '', employees: [] }) }} disabled={loading}>
+              <Button type="button" variant="secondary" onClick={() => { setEditingId(null); setForm({ title: '', projectId: '', siteUpdate: '', employeeSummary: '', queries: '', employees: [], attachments: [] }); setSelectedFiles([]); setFilePreviews({}) }} disabled={loading}>
                 Cancel
               </Button>
             </>
@@ -306,7 +512,7 @@ const SupervisorReports: React.FC = () => {
               {loading ? 'Submitting...' : 'Submit Report'}
             </Button>
           )}
-          <Button type="button" variant="secondary" onClick={() => setForm({ title: '', projectId: '', siteUpdate: '', employeeSummary: '', queries: '', employees: [] })} disabled={loading}>
+          <Button type="button" variant="secondary" onClick={() => { setForm({ title: '', projectId: '', siteUpdate: '', employeeSummary: '', queries: '', employees: [], attachments: [] }); setSelectedFiles([]); setFilePreviews({}) }} disabled={loading}>
             Reset
           </Button>
         </div>
@@ -343,6 +549,24 @@ const SupervisorReports: React.FC = () => {
                   )}
                   {Array.isArray(r.employees) && r.employees.length > 0 && (
                     <p className="text-sm"><span className="font-bold">Employees:</span> {employees.filter(e => r.employees?.includes(e._id)).map(e => e.name).join(', ')}</p>
+                  )}
+                  {Array.isArray(r.attachments) && r.attachments.length > 0 && (
+                    <div className="text-sm">
+                      <span className="font-bold">Attachments:</span>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {r.attachments.map((attachment, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded text-xs cursor-pointer hover:bg-gray-200"
+                            onClick={() => window.open(attachment.fileUrl, '_blank')}
+                          >
+                            {getFileIcon(attachment.fileType)}
+                            <span className="truncate max-w-[100px]">{attachment.fileName}</span>
+                            <Download className="h-3 w-3" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
                 <div className="flex gap-2">
