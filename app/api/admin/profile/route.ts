@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { hash } from 'bcryptjs';
 import connectToDB from '@/lib/db';
 import AdminProfile, { IAdminProfile } from '@/models/AdminProfile';
 
@@ -21,7 +20,7 @@ export async function GET() {
         companyName: 'My Company',
         adminName: 'Admin',
         email: 'admin@example.com',
-        password: await hash('admin123', 12),
+        password: 'admin123',
         username: 'admin',
         website: 'www.example.com',
         bio: 'Welcome to my profile!',
@@ -80,7 +79,7 @@ export async function PUT(request: Request) {
         companyName: companyName || 'My Company',
         adminName: adminName || 'Admin',
         email: email || 'admin@example.com',
-        password: password ? await hash(password, 12) : await hash('admin123', 12),
+        password: password || 'admin123',
         username: username || '',
         website: website || '',
         bio: bio || '',
@@ -107,7 +106,7 @@ export async function PUT(request: Request) {
       
       // Only update password if a new one is provided
       if (password) {
-        updateFields.password = await hash(password, 12);
+        updateFields.password = password;
       }
       if (email !== undefined) updateFields.email = email;
       if (password) updateFields.password = await hash(password, 12);

@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { compare, hash } from 'bcryptjs';
 import connectToDB from '@/lib/db';
 import AdminProfile from '@/models/AdminProfile';
 
@@ -19,7 +18,7 @@ export async function POST(request: Request) {
     }
 
     // Verify current password
-    const isPasswordValid = await compare(currentPassword, adminProfile.password);
+    const isPasswordValid = currentPassword === adminProfile.password;
     if (!isPasswordValid) {
       return NextResponse.json(
         { message: 'Current password is incorrect' },
@@ -27,8 +26,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Hash the new password
-    const hashedPassword = await hash(newPassword, 12);
+    // Store new password as plain text
+    const plainPassword = newPassword;
 
     // Add current password to history before updating
     const passwordHistory = adminProfile.passwordHistory || [];
@@ -43,7 +42,7 @@ export async function POST(request: Request) {
     const updatedPasswordHistory = passwordHistory.slice(0, 5);
 
     // Update the password and history
-    adminProfile.password = hashedPassword;
+    adminProfile.password = plainPassword;
     adminProfile.passwordHistory = updatedPasswordHistory;
     adminProfile.updatedAt = new Date();
     

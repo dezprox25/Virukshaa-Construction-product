@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { compare, hash } from 'bcryptjs';
 import connectToDB from '@/lib/db';
 import AdminProfile from '@/models/AdminProfile';
 
@@ -35,19 +34,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Compare passwords; migrate plaintext to bcrypt if necessary
-    const stored = admin.password as unknown as string;
-    let isPasswordValid = false;
-    if (stored && (stored.startsWith('$2a$') || stored.startsWith('$2b$') || stored.startsWith('$2y$'))) {
-      isPasswordValid = await compare(password, stored);
-    } else {
-      isPasswordValid = stored === password;
-      if (isPasswordValid) {
-        // migrate to bcrypt hash
-        admin.password = await hash(password, 10) as any;
-        await admin.save();
-      }
-    }
+    // Compare passwords as plain text
+    const isPasswordValid = admin.password === password;
 
     if (!isPasswordValid) {
       return NextResponse.json(

@@ -180,7 +180,11 @@ const MessageBox: React.FC<MessageBoxProps> = ({ userType, title, onBack, classN
         body: formData,
       })
 
-      if (!response.ok) throw new Error("Upload failed")
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        console.error("Upload failed:", response.status, errorData)
+        throw new Error(`Upload failed: ${errorData.error || response.statusText}`)
+      }
       
       const data = await response.json()
       return {

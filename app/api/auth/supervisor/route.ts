@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server"
 import connectToDB from "@/lib/db"
 import Supervisor from "@/models/Supervisor"
-import bcrypt from "bcryptjs"
-
-function isBcryptHash(v?: string): boolean {
-  return typeof v === "string" && v.startsWith("$2")
-}
 
 export async function POST(req: Request) {
   try {
@@ -26,21 +21,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Invalid credentials" }, { status: 401 })
     }
 
-    const stored: string | undefined = user.password
-    let ok = false
-
-    if (isBcryptHash(stored)) {
-      ok = await bcrypt.compare(password, stored!)
-      // Migrate legacy bcrypt -> plain on first successful login (to match current storage policy)
-      if (ok) {
-        user.password = password
-        await user.save()
-      }
-    } else {
-      ok = stored === password
-    }
-
-    if (!ok) {
+    if (user.password !== password) {
       return NextResponse.json({ message: "Invalid credentials" }, { status: 401 })
     }
 

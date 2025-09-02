@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import connectToDB from '@/lib/db'
 import AdminProfile from '@/models/AdminProfile'
 import Supervisor from '@/models/Supervisor'
@@ -45,7 +45,10 @@ export async function POST(req: Request) {
     }
 
     const stored = (user as any).password as string | undefined
-    const ok = stored === password
+    let ok = false
+    
+    ok = stored === password
+    
     if (!ok) {
       return NextResponse.json({ error: 'Invalid email/username or password' }, { status: 401 })
     }

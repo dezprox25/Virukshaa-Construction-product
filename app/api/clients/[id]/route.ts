@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { Types } from "mongoose";
-import bcrypt from 'bcryptjs';
 import connectToDB from "@/lib/db";
 import Client, { IClient } from "@/models/ClientModel";
 
@@ -88,12 +87,11 @@ export async function PUT(
           { status: 400 }
         );
       }
-      const salt = await bcrypt.genSalt(10);
-      body.password = await bcrypt.hash(body.password, salt);
+      // Store password as plain text
+      body.password = body.password;
     } else if (body.password === '') {
       // If password is explicitly set to empty string, use a default one
-      const salt = await bcrypt.genSalt(10);
-      body.password = await bcrypt.hash('password123', salt);
+      body.password = 'password123';
     } else {
       // Remove password from body if not being updated
       delete body.password;
