@@ -891,11 +891,12 @@ export default function SupervisorsPage() {
               const arr = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : [json]
               // Find today's record for this supervisor (match local date or timestamps within local day)
               const match = arr.find((rec: any) => {
-                const supOk = (rec?.supervisorId || rec?.supervisor?._id || rec?.supervisor) == s._id
+                const recSupId = (rec?.supervisorId && typeof rec.supervisorId === 'object') ? rec.supervisorId._id : rec?.supervisorId
+                const supOk = (recSupId || rec?.supervisor?._id || rec?.supervisor) == s._id
                 if (!supOk) return false
                 const d = (rec?.date || "") as string
                 const d2 = (rec?.attendanceDate || rec?.day || "") as string
-                if (d === localDateStr || d.startsWith(localDateStr)) return true
+                if (d === localDateStr || (typeof d === 'string' && d.startsWith(localDateStr))) return true
                 if (d2 === localDateStr || (typeof d2 === 'string' && d2.startsWith(localDateStr))) return true
                 return (
                   isIsoWithinDay(rec?.checkIn, startOfDayIso, endOfDayIso) ||
@@ -907,7 +908,8 @@ export default function SupervisorsPage() {
               if (match) return match
               // Fallback: pick most recent record within the local day for this supervisor
               const candidates = arr.filter((rec: any) => {
-                const supOk = (rec?.supervisorId || rec?.supervisor?._id || rec?.supervisor) == s._id
+                const recSupId = (rec?.supervisorId && typeof rec.supervisorId === 'object') ? rec.supervisorId._id : rec?.supervisorId
+                const supOk = (recSupId || rec?.supervisor?._id || rec?.supervisor) == s._id
                 if (!supOk) return false
                 return (
                   isIsoWithinDay(rec?.checkIn, startOfDayIso, endOfDayIso) ||
@@ -969,10 +971,10 @@ export default function SupervisorsPage() {
               const arr = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : []
               const byId = new Map<string, any>()
               arr.forEach((rec: any) => {
-                const supId = rec?.supervisorId || rec?.supervisor?._id || rec?.supervisor || rec?.employeeId || rec?.supervisor_id || rec?.staffId
+                const supId = ((rec?.supervisorId && typeof rec.supervisorId === 'object') ? rec.supervisorId._id : rec?.supervisorId) || rec?.supervisor?._id || rec?.supervisor || rec?.employeeId || rec?.supervisor_id || rec?.staffId
                 if (!supId) return
                 const d = (rec?.date || "") as string
-                if (d === localDateStr || d.startsWith(localDateStr)) {
+                if (d === localDateStr || (typeof d === 'string' && d.startsWith(localDateStr))) {
                   byId.set(String(supId), rec)
                 }
               })
@@ -989,8 +991,7 @@ export default function SupervisorsPage() {
       // 4) Merge supervisors with attendance map (normalize supervisor id field)
       const attMap = new Map<string, AttendanceRecord>()
       attendanceRecords.forEach((rec: any) => {
-        const supId =
-          rec?.supervisorId || rec?.supervisor?._id || rec?.supervisor || rec?.employeeId || rec?.supervisor_id || rec?.staffId
+        const supId = ((rec?.supervisorId && typeof rec.supervisorId === 'object') ? rec.supervisorId._id : rec?.supervisorId) || rec?.supervisor?._id || rec?.supervisor || rec?.employeeId || rec?.supervisor_id || rec?.staffId
         if (supId) attMap.set(String(supId), rec as AttendanceRecord)
       })
 

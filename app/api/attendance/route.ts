@@ -82,11 +82,9 @@ export async function GET(req: NextRequest) {
     let filter: any = {};
 
     if (startDate && endDate) {
-      // Range query
+      // Range query - respect precise boundaries passed by client (already ISO/Z-aware)
       const start = new Date(startDate);
-      start.setUTCHours(0, 0, 0, 0);
       const end = new Date(endDate);
-      end.setUTCHours(23, 59, 59, 999); // include whole end day
       filter.date = { $gte: start, $lte: end };
     } else {
       // Single day query (default behavior)
