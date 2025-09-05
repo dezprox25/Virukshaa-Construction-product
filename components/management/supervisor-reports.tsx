@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Paperclip, X, FileText, Image as ImageIcon, Download } from 'lucide-react'
+import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
 
 type Project = {
   _id: string
@@ -57,6 +58,10 @@ const SupervisorReports: React.FC = () => {
   })
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [filePreviews, setFilePreviews] = useState<{ [key: string]: string }>({})
+  const [previewUrl, setPreviewUrl] = useState<string>('')
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewFileName, setPreviewFileName] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -181,14 +186,17 @@ const SupervisorReports: React.FC = () => {
       try {
         const formData = new FormData()
         formData.append('file', file)
-        formData.append('conversationId', 'reports')
+        formData.append('type', 'report')
 
         const response = await fetch('/api/upload', {
           method: 'POST',
           body: formData,
         })
 
-        if (!response.ok) throw new Error('Upload failed')
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || 'Upload failed')
+        }
         
         const data = await response.json()
         return {
@@ -199,6 +207,7 @@ const SupervisorReports: React.FC = () => {
         }
       } catch (error) {
         console.error(`File upload error for ${file.name}:`, error)
+        toast.error(`Failed to upload ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`)
         throw error
       }
     })
@@ -212,16 +221,23 @@ const SupervisorReports: React.FC = () => {
     setLoading(true)
     try {
       // Upload files first if any
-      let attachments: { fileName: string; fileSize: number; fileType: string; fileUrl: string }[] = []
+      let newAttachments: { fileName: string; fileSize: number; fileType: string; fileUrl: string }[] = []
       if (selectedFiles.length > 0) {
         try {
-          attachments = await uploadFiles(selectedFiles)
+          newAttachments = await uploadFiles(selectedFiles)
+          // Optionally update local form state, but do not rely on it for request payload
+          setForm(prev => ({
+            ...prev,
+            attachments: [...prev.attachments, ...newAttachments]
+          }))
         } catch (error) {
           toast.error('Failed to upload files. Please try again.')
           setLoading(false)
           return
         }
       }
+
+      const attachmentsToSend = [...form.attachments, ...newAttachments]
 
       const supervisorId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
       const res = await fetch('/api/reports', {
@@ -237,7 +253,7 @@ const SupervisorReports: React.FC = () => {
           employees: form.employees,
           supervisorId: supervisorId || undefined,
           date: new Date().toISOString(),
-          attachments: form.attachments,
+          attachments: attachmentsToSend,
         }),
       })
       if (!res.ok) {
@@ -293,6 +309,19 @@ const SupervisorReports: React.FC = () => {
     if (!editingId) return
     setLoading(true)
     try {
+      // If new files were selected during edit, upload and merge them
+      let uploadedNew: { fileName: string; fileSize: number; fileType: string; fileUrl: string }[] = []
+      if (selectedFiles.length > 0) {
+        try {
+          uploadedNew = await uploadFiles(selectedFiles)
+        } catch (e) {
+          toast.error('Failed to upload files. Please try again.')
+          setLoading(false)
+          return
+        }
+      }
+      const attachmentsToUpdate = [...form.attachments, ...uploadedNew]
+
       const res = await fetch(`/api/reports/${editingId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -303,7 +332,7 @@ const SupervisorReports: React.FC = () => {
           employeeSummary: form.employeeSummary || undefined,
           queries: form.queries || undefined,
           employees: form.employees,
-          attachments: form.attachments,
+          attachments: attachmentsToUpdate,
         }),
       })
       if (!res.ok) {
@@ -312,6 +341,8 @@ const SupervisorReports: React.FC = () => {
       }
       toast.success('Report updated')
       setEditingId(null)
+      setSelectedFiles([])
+      setFilePreviews({})
       // refresh list
       const sid = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
       if (sid) {
@@ -349,7 +380,8 @@ const SupervisorReports: React.FC = () => {
   }
 
   return (
-    <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <>
+      <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Left: form */}
       <div className="w-full p-4 md:p-6 bg-white rounded-lg border">
         <h2 className="text-xl font-semibold mb-4">Supervisor Daily Report</h2>
@@ -558,7 +590,18 @@ const SupervisorReports: React.FC = () => {
                           <div
                             key={idx}
                             className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded text-xs cursor-pointer hover:bg-gray-200"
-                            onClick={() => window.open(attachment.fileUrl, '_blank')}
+                            onClick={() => {
+                              if (attachment.fileType.startsWith('image/')) {
+                                // Show preview modal for images
+                                setPreviewLoading(true);
+                                setPreviewUrl(attachment.fileUrl);
+                                setPreviewFileName(attachment.fileName);
+                                setPreviewOpen(true);
+                              } else {
+                                // Direct download for non-image files
+                                window.open(attachment.fileUrl, '_blank');
+                              }
+                            }}
                           >
                             {getFileIcon(attachment.fileType)}
                             <span className="truncate max-w-[100px]">{attachment.fileName}</span>
@@ -578,8 +621,38 @@ const SupervisorReports: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
-  )
+      </div>
+      {/* Preview Modal */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="sm:max-w-[800px] h-auto relative">
+          <h3 className="text-lg font-semibold mb-2 pr-8 truncate">{previewFileName}</h3>
+          <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </DialogClose>
+          <div className="relative w-full h-full flex items-center justify-center mt-6">
+            {previewLoading ? (
+              <div className="flex items-center justify-center p-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+              </div>
+            ) : (
+              <img
+                src={previewUrl}
+                alt="Preview"
+                className="max-w-full max-h-[80vh] object-contain"
+                onLoad={() => setPreviewLoading(false)}
+                onError={(e) => {
+                  e.currentTarget.src = '/placeholder.svg'
+                  setPreviewLoading(false)
+                  toast.error('Failed to load image preview')
+                }}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+   )
 }
 
 export default SupervisorReports

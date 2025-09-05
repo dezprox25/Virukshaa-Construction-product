@@ -141,7 +141,7 @@ interface FormData {
   taxId: string
   website: string
   status: "Active" | "Inactive"
-  avatar: string
+  avatar?: string
 }
 
 // Message Dialog Component
@@ -170,7 +170,7 @@ const initialFormData: FormData = {
   taxId: "",
   website: "",
   status: "Active",
-  avatar: "",
+  avatar: undefined,
 }
 
 const initialProjectData: Omit<Project, "_id" | "client" | "createdAt" | "tasks"> & {
@@ -610,6 +610,18 @@ export default function ClientsManagement() {
       return
     }
 
+    if (!formData.username?.trim()) {
+      toast.error("Username is required")
+      return
+    }
+
+    // Username format validation (alphanumeric and minimum 4 characters)
+    const usernameRegex = /^[a-zA-Z0-9]{4,}$/
+    if (!usernameRegex.test(formData.username)) {
+      toast.error("Username must be at least 4 characters long and contain only letters and numbers")
+      return
+    }
+
     if (!formData.email?.trim()) {
       toast.error("Email is required")
       return
@@ -730,6 +742,46 @@ export default function ClientsManagement() {
     }
   }
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const file = e.target.files?.[0]
+      if (!file) return
+
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please upload an image file')
+        return
+      }
+
+      // Validate file size (5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('File size must be less than 5MB')
+        return
+      }
+
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to upload image')
+      }
+
+      const { fileUrl } = await response.json()
+      // Use functional update to avoid state update during render
+      setFormData(prev => ({ ...prev, avatar: fileUrl }))
+
+      toast.success('Profile photo uploaded successfully')
+    } catch (error) {
+      console.error('Error uploading avatar:', error)
+      toast.error('Failed to upload profile photo')
+    }
+  }
+
   const handleDelete = async (id: string) => {
     try {
       const clientToDelete = clients.find((c) => c._id === id)
@@ -764,9 +816,10 @@ export default function ClientsManagement() {
   }
 
   const openEditDialog = (client: Client) => {
-    setFormData({
+    setFormData(prev => ({
+      ...prev,
       name: client.name,
-      username: client.email.split("@")[0],
+      username: client.username,
       email: client.email,
       phone: client.phone,
       password: "",
@@ -781,7 +834,7 @@ export default function ClientsManagement() {
       website: client.website || "",
       status: client.status,
       avatar: client.avatar || "",
-    })
+    }))
     setEditingClient(client)
     setIsAddDialogOpen(true)
   }
@@ -1189,8 +1242,6 @@ export default function ClientsManagement() {
 
   return (
     <>
-      <Toaster richColors />
-    
       <div className="space-y-6">
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1444,6 +1495,34 @@ export default function ClientsManagement() {
                       onChange={(e) => setFormData({ ...formData, website: e.target.value })}
                       placeholder="https://example.com"
                     />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="avatar">Profile Photo</Label>
+                  <div className="flex items-center gap-4">
+                    {formData.avatar ? (
+                      <img
+                        src={formData.avatar}
+                        alt="Profile preview"
+                        className="w-16 h-16 rounded-full object-cover border"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center border">
+                        <User className="w-8 h-8 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <Input
+                        id="avatar"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleAvatarUpload}
+                        className="cursor-pointer"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Upload a profile photo (JPG, PNG, GIF up to 5MB)
+                      </p>
+                    </div>
                   </div>
                 </div>
                 <div className="space-y-2">

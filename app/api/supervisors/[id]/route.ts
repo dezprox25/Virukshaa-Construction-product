@@ -63,6 +63,32 @@ export async function PUT(
       }
     }
 
+    // Get current supervisor data for avatar handling
+    const currentSupervisor = await Supervisor.findById(id);
+    if (!currentSupervisor) {
+      return NextResponse.json(
+        { message: 'Supervisor not found' },
+        { status: 404 }
+      );
+    }
+
+    // Handle avatar deletion if requested
+    if (body.deleteAvatar && currentSupervisor.avatar) {
+      try {
+        const deleteResponse = await fetch(`${process.env.NEXTAUTH_URL}/api/upload/delete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileUrl: currentSupervisor.avatar })
+        });
+        
+        if (!deleteResponse.ok) {
+          console.error('Failed to delete old avatar:', await deleteResponse.text());
+        }
+      } catch (error) {
+        console.error('Error deleting old avatar:', error);
+      }
+    }
+
     // Create a clean update object with only allowed fields
     const updateData: Partial<ISupervisor> = {};
     const allowedFields: (keyof ISupervisor)[] = [
@@ -75,6 +101,11 @@ export async function PUT(
         (updateData as any)[field] = body[field];
       }
     });
+
+    // Clear avatar if deletion was requested
+    if (body.deleteAvatar) {
+      updateData.avatar = undefined;
+    }
 
     // Handle password update separately to hash it
     if (body.password) {

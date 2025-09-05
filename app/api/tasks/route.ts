@@ -30,7 +30,15 @@ export async function GET(req: NextRequest) {
       .populate('projectId', 'title startDate endDate address city state postalCode')
       .sort({ createdAt: -1 });
 
-    return NextResponse.json(tasks);
+    // Backward compatibility: if legacy documentUrl exists and documentUrls is missing, mirror it
+    const normalized = tasks.map((t: any) => {
+      if (!t.documentUrls && t.documentUrl) {
+        t.documentUrls = [{ url: t.documentUrl }];
+      }
+      return t;
+    });
+
+    return NextResponse.json(normalized);
   } catch (error) {
     console.error("Error fetching tasks:", error);
     return NextResponse.json(
@@ -58,12 +66,22 @@ export async function POST(req: NextRequest) {
         startDate: getStr('startDate'),
         endDate: getStr('endDate'),
         documentUrl: getStr('documentUrl'),
+        // Accept JSON stringified array for documentUrls in multipart too
+        documentUrls: (() => {
+          const raw = getStr('documentUrls');
+          if (!raw) return undefined;
+          try {
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : undefined;
+          } catch {
+            return undefined;
+          }
+        })(),
         documentType: getStr('documentType'),
         projectId: getStr('projectId'),
         projectTitle: getStr('projectTitle'),
         supervisorId: getStr('supervisorId'),
         status: getStr('status') || 'Pending',
-        // Note: if needed in future, handle File: form.get('document') as File
       }
     } else {
       payload = await req.json()
@@ -79,7 +97,8 @@ export async function POST(req: NextRequest) {
       projectId,
       projectTitle,
       supervisorId,
-      status = 'Pending' 
+      status = 'Pending',
+      documentUrls
     } = payload;
 
     if (!title || !supervisorId) {
@@ -116,12 +135,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const normalizedDocumentUrls = Array.isArray(documentUrls)
+      ? documentUrls.map((u: any) => (typeof u === 'string' ? { url: u } : u)).filter((u: any) => u && u.url)
+      : undefined;
+
     const newTask = new Task({
       title,
       description,
       startDate,
       endDate,
+      // Keep legacy single URL when provided
       documentUrl,
+      // New multi-attachments
+      ...(normalizedDocumentUrls ? { documentUrls: normalizedDocumentUrls } : {}),
       documentType,
       projectId: projectId || undefined,
       projectTitle: finalProjectTitle,

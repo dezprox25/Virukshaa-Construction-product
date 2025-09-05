@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { format } from "date-fns"
 import { Toaster, toast } from "sonner"
 import { cn } from "@/lib/utils"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar } from "@/components/common/Avatar"
+import { Avatar as UIAvatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -18,7 +19,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Briefcase, Calendar, CalendarPlus, Calculator, CheckCircle, ClipboardList, Clock, Edit, Eye, EyeOff, Filter, Folder, Grid3X3, Hash, HelpCircle, IndianRupee, List, Mail, MapPin, MessageCircle, Phone, Plus, RefreshCw, Search, Trash2, Users, XCircle, FileText, Lock, UserMinus } from 'lucide-react'
+import { Briefcase, Calendar, CalendarPlus, Calculator, CheckCircle, ClipboardList, Clock, Edit, Eye, EyeOff, Filter, Folder, Grid3X3, Hash, HelpCircle, IndianRupee, List, Mail, MapPin, MessageCircle, Phone, Plus, RefreshCw, Search, Trash2, Users, X, XCircle, FileText, Lock, UserMinus, Image, File, Download } from "lucide-react"
 import { SupervisorLeaveApprovalModal } from "@/components/management/SupervisorLeaveApprovalModal"
 import { AcroFormPasswordField } from "jspdf"
 
@@ -60,6 +61,12 @@ interface Supervisor {
   }
 }
 
+interface DocumentUrl {
+  url: string;
+  name?: string;
+  type?: string;
+}
+
 interface Task {
   _id: string
   title: string
@@ -67,7 +74,8 @@ interface Task {
   startDate: string
   endDate: string
   status: "Pending" | "In Progress" | "Completed"
-  documentUrl?: string
+  documentUrls: (string | DocumentUrl)[]
+  documentType?: string
   createdAt: string
   projectId?: string
   supervisorId?: string
@@ -91,6 +99,8 @@ interface FormData {
   username: string
   password: string
   confirmPassword: string
+  avatar?: File
+  avatarPreview?: string
 }
 
 interface TaskFormData {
@@ -100,8 +110,18 @@ interface TaskFormData {
   endDate: Date | undefined
   projectId: string
   documentType: string
-  documentUrl: string
-  file: File | undefined
+  documentUrls: Array<{
+    url: string
+    name: string
+    size: number
+    type?: string
+  }>
+  filePreviews: Array<{
+    name: string
+    size: number
+    url: string
+    type?: string
+  }>
 }
 
 const initialFormData: FormData = {
@@ -114,6 +134,8 @@ const initialFormData: FormData = {
   username: "",
   password: "",
   confirmPassword: "",
+  avatar: undefined,
+  avatarPreview: undefined,
 }
 
 const initialTaskFormData: TaskFormData = {
@@ -123,8 +145,8 @@ const initialTaskFormData: TaskFormData = {
   endDate: undefined,
   projectId: "",
   documentType: "",
-  documentUrl: "",
-  file: undefined,
+  documentUrls: [],
+  filePreviews: []
 }
 
 const attendanceOptions = [
@@ -578,6 +600,11 @@ export default function SupervisorsPage() {
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [isEditTaskFormOpen, setIsEditTaskFormOpen] = useState(false)
 
+  // File Preview
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState('')
+  const [previewFileName, setPreviewFileName] = useState('')
+
   // Projects/Employees
   const [availableProjects, setAvailableProjects] = useState<IProject[]>([])
   const [isLoadingProjects, setIsLoadingProjects] = useState(false)
@@ -808,7 +835,9 @@ export default function SupervisorsPage() {
       const y = now.getFullYear()
       const m = now.getMonth()
       const d = now.getDate()
-      const localDateStr = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`
+      const localDateStr = `${y}-${String(m + 1).padStart(2, "0")}-${String(
+        now.getDate()
+      ).padStart(2, "0")}`
       // Local day boundaries converted to UTC ISO
       const startOfDay = new Date(y, m, d, 0, 0, 0, 0)
       const endOfDay = new Date(y, m, d, 23, 59, 59, 999)
@@ -1248,11 +1277,57 @@ export default function SupervisorsPage() {
     setTaskFormData((prev) => ({ ...prev, documentType: value, file: undefined, documentUrl: "" }))
   }, [])
 
-  const handleFileChange = useCallback<React.ChangeEventHandler<HTMLInputElement>>((e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setTaskFormData((prev) => ({ ...prev, file }))
-    // In a real app, upload and set documentUrl
+  const handleFileChange = useCallback<React.ChangeEventHandler<HTMLInputElement>>(async (e) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    const uploadPromises = Array.from(files).map(async file => {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('type', 'task')
+
+      const loadingToast = toast.loading(`Uploading ${file.name}...`)
+
+      try {
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        })
+
+        if (!uploadRes.ok) {
+          const error = await uploadRes.json()
+          throw new Error(`Failed to upload ${file.name}: ${error.error || 'Unknown error'}`)
+        }
+
+        const { fileUrl, fileSize } = await uploadRes.json()
+        toast.dismiss(loadingToast)
+        toast.success(`${file.name} uploaded successfully`)
+
+        return {
+          name: file.name,
+          size: fileSize,
+          url: fileUrl,
+          type: file.type
+        }
+      } catch (error) {
+        toast.dismiss(loadingToast)
+        toast.error(error instanceof Error ? error.message : 'Upload failed')
+        return null
+      }
+    })
+
+    const uploadedFiles = (await Promise.all(uploadPromises)).filter(Boolean)
+
+    setTaskFormData(prev => ({
+      ...prev,
+      documentUrls: [...prev.documentUrls, ...uploadedFiles.map(f => ({
+        name: f.name,
+        size: f.size,
+        url: f.url,
+        type: f.type
+      }))],
+      filePreviews: [...prev.filePreviews, ...uploadedFiles]
+    }))
   }, [])
 
   const handleTaskDateChange = useCallback((date: Date | undefined, field: "startDate" | "endDate") => {
@@ -1262,72 +1337,60 @@ export default function SupervisorsPage() {
   const handleTaskSubmit = useCallback<React.FormEventHandler>(
     async (e) => {
       e.preventDefault()
+
       if (!selectedSupervisor) {
-        toast.error("Please select a supervisor first")
+        toast.error('Please select a supervisor first')
         return
       }
-      // Basic validation like edit flow
+
       if (!taskFormData.title || !taskFormData.startDate || !taskFormData.endDate || !taskFormData.projectId) {
-        toast.error("Please fill in all required fields")
+        toast.error('Please fill in all required fields')
         return
       }
+
+      const loadingToast = toast.loading('Creating task...')
+
       try {
-        const hasFile = Boolean(taskFormData.file)
+        // Files are already uploaded during handleFileChange
+        const documentUrls = taskFormData.documentUrls
 
-        let response: Response
-        if (hasFile) {
-          // Use multipart only when uploading a file
-          const fd = new FormData()
-          // Include scalar fields
-          Object.entries(taskFormData).forEach(([key, value]) => {
-            if (key === "file" || key === "startDate" || key === "endDate") return
-            if (value !== undefined && value !== null) {
-              fd.append(key, String(value))
+        // Create task with document URLs
+        const payload = {
+          title: taskFormData.title,
+          description: taskFormData.description,
+          startDate: taskFormData.startDate.toISOString(),
+          endDate: taskFormData.endDate.toISOString(),
+          projectId: taskFormData.projectId,
+          documentType: taskFormData.documentType,
+          documentUrls: documentUrls.map(url => {
+            if (typeof url === 'string') {
+              return { url }
             }
-          })
-          // Required dates
-          fd.append("startDate", taskFormData.startDate.toISOString())
-          fd.append("endDate", taskFormData.endDate.toISOString())
-          // File
-          if (taskFormData.file) {
-            fd.append("document", taskFormData.file)
-          }
-          // Link to supervisor
-          fd.append("supervisorId", selectedSupervisor._id)
-
-          response = await fetch("/api/tasks", { method: "POST", body: fd })
-        } else {
-          // JSON payload when not uploading a file
-          const payload = {
-            title: taskFormData.title,
-            description: taskFormData.description,
-            startDate: taskFormData.startDate.toISOString(),
-            endDate: taskFormData.endDate.toISOString(),
-            projectId: taskFormData.projectId,
-            documentType: taskFormData.documentType,
-            documentUrl: taskFormData.documentUrl,
-            supervisorId: selectedSupervisor._id,
-          }
-          response = await fetch("/api/tasks", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          })
+            return url
+          }),
+          supervisorId: selectedSupervisor._id
         }
+
+        const response = await fetch('/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
 
         if (!response.ok) {
-          const errText = await response.text().catch(() => "")
-          throw new Error(errText || "Failed to create task")
+          const errText = await response.text().catch(() => '')
+          throw new Error(errText || 'Failed to create task')
         }
-        // Some APIs return created task; ignore content if empty
-        try { await response.json() } catch { }
-        toast.success("Task created successfully")
+
+        toast.dismiss(loadingToast)
+        toast.success('Task created successfully')
         await fetchSupervisorTasks(selectedSupervisor._id)
         setTaskFormData(initialTaskFormData)
         setIsTaskFormOpen(false)
       } catch (error: any) {
-        console.error("Error creating task:", error)
-        toast.error(`Failed to create task${error?.message ? `: ${error.message}` : ""}`)
+        console.error('Error creating task:', error)
+        toast.dismiss(loadingToast)
+        toast.error(`Failed to create task${error?.message ? `: ${error.message}` : ''}`)
       }
     },
     [fetchSupervisorTasks, selectedSupervisor, taskFormData]
@@ -1341,9 +1404,23 @@ export default function SupervisorsPage() {
       startDate: new Date(task.startDate),
       endDate: new Date(task.endDate),
       projectId: task.projectId || "",
-      documentType: task.documentUrl ? "document" : "",
-      documentUrl: task.documentUrl || "",
-      file: undefined,
+      documentType: task.documentType || "",
+      documentUrls: task.documentUrls || [],
+      files: [],
+      filePreviews: task.documentUrls?.map((doc, index) => {
+        if (typeof doc === 'string') {
+          return {
+            name: `Document ${index + 1}`,
+            size: 0,
+            url: doc
+          }
+        }
+        return {
+          name: doc.name || `Document ${index + 1}`,
+          size: 0,
+          url: doc.url
+        }
+      }) || []
     })
     setIsEditTaskFormOpen(true)
   }, [])
@@ -1358,35 +1435,53 @@ export default function SupervisorsPage() {
     async (e) => {
       e.preventDefault()
       if (!editingTask?._id) {
-        toast.error("No task selected for editing")
+        toast.error('No task selected for editing')
         return
       }
       if (!taskFormData.title || !taskFormData.startDate || !taskFormData.endDate || !taskFormData.projectId) {
-        toast.error("Please fill in all required fields")
+        toast.error('Please fill in all required fields')
         return
       }
+
+      const loadingToast = toast.loading('Updating task...')
+
       try {
+        // Files are already uploaded during handleFileChange
+        const documentUrls = taskFormData.documentUrls
+
         const res = await fetch(`/api/tasks/${editingTask._id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            ...taskFormData,
+            title: taskFormData.title,
+            description: taskFormData.description,
             startDate: taskFormData.startDate.toISOString(),
             endDate: taskFormData.endDate.toISOString(),
-          }),
+            projectId: taskFormData.projectId,
+            documentType: taskFormData.documentType,
+            documentUrls
+          })
         })
-        if (!res.ok) throw new Error("Failed to update task")
+
+        if (!res.ok) throw new Error('Failed to update task')
+        
         const updated: Task = await res.json()
         setSupervisorTasks((prev) => prev.map((t) => (t._id === updated._id ? updated : t)))
+        
+        toast.dismiss(loadingToast)
+        toast.success('Task updated successfully')
+        
         setIsEditTaskFormOpen(false)
         setEditingTask(null)
-        toast.success("Task updated successfully")
+        setTaskFormData(initialTaskFormData)
+        
         if (selectedSupervisor?._id) {
           await fetchSupervisorTasks(selectedSupervisor._id)
         }
-      } catch (e) {
-        console.error(e)
-        toast.error("Failed to update task")
+      } catch (error: any) {
+        console.error('Error updating task:', error)
+        toast.dismiss(loadingToast)
+        toast.error(`Failed to update task${error?.message ? `: ${error.message}` : ''}`)
       }
     },
     [editingTask, fetchSupervisorTasks, selectedSupervisor, taskFormData]
@@ -1448,8 +1543,11 @@ export default function SupervisorsPage() {
   }, [])
 
   const resetForm = useCallback(() => {
+    if (formData.avatarPreview) {
+      URL.revokeObjectURL(formData.avatarPreview)
+    }
     setFormData(initialFormData)
-  }, [])
+  }, [formData.avatarPreview])
 
   const openEditDialog = useCallback((supervisor: Supervisor) => {
     setEditingSupervisor(supervisor)
@@ -1463,6 +1561,8 @@ export default function SupervisorsPage() {
       username: supervisor.username,
       password: supervisor.password,
       confirmPassword: supervisor.password,
+      avatar: undefined,
+      avatarPreview: supervisor.avatar
     })
     setIsAddDialogOpen(true)
   }, [])
@@ -1591,12 +1691,35 @@ export default function SupervisorsPage() {
       }
       setLoading(true)
       try {
+        let avatarUrl = editingSupervisor?.avatar
+
+        // Upload avatar to R2 if provided
+        if (formData.avatar) {
+          const formDataWithFile = new FormData()
+          formDataWithFile.append('file', formData.avatar)
+          formDataWithFile.append('type', 'avatar')
+          
+          const uploadRes = await fetch('/api/upload', {
+            method: 'POST',
+            body: formDataWithFile,
+          })
+
+          if (!uploadRes.ok) throw new Error('Failed to upload avatar')
+          const { fileUrl } = await uploadRes.json()
+          avatarUrl = fileUrl
+          setFormData(prev => ({ ...prev, avatarPreview: fileUrl }))
+        }
+
         const url = editingSupervisor ? `/api/supervisors/${editingSupervisor._id}` : "/api/supervisors"
         const method = editingSupervisor ? "PUT" : "POST"
         const res = await fetch(url, {
           method,
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...formData, status: editingSupervisor ? formData.status : "Active" }),
+          body: JSON.stringify({
+            ...formData,
+            avatar: avatarUrl,
+            status: editingSupervisor ? formData.status : "Active"
+          }),
         })
         if (!res.ok) throw new Error(await res.text())
         await fetchSupervisors()
@@ -1626,18 +1749,12 @@ export default function SupervisorsPage() {
           <CardContent className="p-6">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
-                <Avatar className="h-12 w-12">
-                  <AvatarImage
-                    src={supervisor.avatar || "/placeholder.svg?height=48&width=48&query=avatar"}
-                    alt={supervisor.name}
-                  />
-                  <AvatarFallback>
-                    {supervisor.name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")}
-                  </AvatarFallback>
-                </Avatar>
+                <Avatar
+                  src={supervisor.avatar}
+                  name={supervisor.name}
+                  size={48}
+                  className="shrink-0"
+                />
                 <div>
                   <h3 className="font-semibold text-lg">{supervisor.name}</h3>
                   <div className="mt-2" onClick={(e) => e.stopPropagation()}>
@@ -1756,18 +1873,12 @@ export default function SupervisorsPage() {
               >
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage
-                        src={supervisor.avatar || "/placeholder.svg?height=40&width=40&query=avatar"}
-                        alt={supervisor.name}
-                      />
-                      <AvatarFallback>
-                        {supervisor.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
-                      </AvatarFallback>
-                    </Avatar>
+                    <Avatar
+                      src={supervisor.avatar}
+                      name={supervisor.name}
+                      size={40}
+                      className="shrink-0"
+                    />
                     <div>
                       <div className="font-medium">{supervisor.name}</div>
                       <div className="text-sm text-muted-foreground">{supervisor.email}</div>
@@ -2064,9 +2175,42 @@ export default function SupervisorsPage() {
                 </div>
               </div>
 
+              <div className="space-y-4 mb-4">
+                <div className="flex items-center gap-4">
+                  <div className="shrink-0">
+                    <Avatar
+                      src={formData.avatarPreview || editingSupervisor?.avatar || "/placeholder.svg?height=96&width=96&query=avatar"}
+                      name={formData.name}
+                      size={96}
+                      className="h-24 w-24"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <Label htmlFor="avatar">Profile Photo (Optional)</Label>
+                    <Input
+                      id="avatar"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) {
+                          setFormData((prev) => ({
+                            ...prev,
+                            avatar: file,
+                            avatarPreview: URL.createObjectURL(file)
+                          }))
+                        }
+                      }}
+                      className="mt-2"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Recommended: Square image, max 5MB</p>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Numbeandr *</Label>
+                  <Label htmlFor="phone">Phone Number *</Label>
                   <Input
                     id="phone"
                     value={formData.phone}
@@ -2221,18 +2365,12 @@ export default function SupervisorsPage() {
             <div className="flex flex-col h-full">
               <SheetHeader className="shrink-0">
                 <div className="flex items-center gap-3">
-                  <Avatar className="h-16 w-16">
-                    <AvatarImage
-                      src={selectedSupervisor.avatar || "/placeholder.svg?height=64&width=64&query=avatar"}
-                      alt={selectedSupervisor.name}
-                    />
-                    <AvatarFallback className="text-xl">
-                      {selectedSupervisor.name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")}
-                    </AvatarFallback>
-                  </Avatar>
+                  <Avatar
+                    src={selectedSupervisor.avatar}
+                    name={selectedSupervisor.name}
+                    size={64}
+                    className="shrink-0"
+                  />
                   <div className="flex-1">
                     <SheetTitle className="text-2xl">{selectedSupervisor.name}</SheetTitle>
                     <div className="mt-1">
@@ -2431,17 +2569,57 @@ export default function SupervisorsPage() {
                                 </div>
                               </div>
                             </div>
-                            {task.documentUrl && (
-                              <div className="mt-2">
-                                <a
-                                  href={task.documentUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-600 hover:text-blue-800 text-sm inline-flex items-center"
-                                >
-                                  <FileText className="w-3 h-3 mr-1" />
-                                  View Document
-                                </a>
+                            {task.documentUrls && task.documentUrls.length > 0 && (
+                              <div className="mt-2 space-y-2">
+                                <p className="text-xs text-muted-foreground">Attached Documents:</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {task.documentUrls.map((doc, index) => {
+                                    // Handle both string and object formats
+                                    const docUrl = typeof doc === 'string' ? doc : doc.url;
+                                    const docName = typeof doc === 'string' 
+                                      ? doc.split('/').pop() || `Document ${index + 1}`
+                                      : doc.name || doc.url.split('/').pop() || `Document ${index + 1}`;
+                                    
+                                    const fileType = docName.split('.').pop()?.toLowerCase() || '';
+                                    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileType);
+                                    const isPdf = fileType === 'pdf';
+                                    const isDoc = ['doc', 'docx'].includes(fileType);
+                                    
+                                    return (
+                                      <div
+                                        key={index}
+                                        className="flex items-center gap-2 bg-gray-100 px-3 py-2 rounded cursor-pointer hover:bg-gray-200 group transition-colors duration-200"
+                                        onClick={() => {
+                                          if (isImage) {
+                                            setPreviewUrl(docUrl);
+                                            setPreviewFileName(docName);
+                                            setPreviewOpen(true);
+                                          } else {
+                                            window.open(docUrl, '_blank');
+                                          }
+                                        }}
+                                        title={docName}
+                                      >
+                                        {isImage ? (
+                                          <Image className="w-4 h-4 text-blue-500" />
+                                        ) : isPdf ? (
+                                          <FileText className="w-4 h-4 text-red-500" />
+                                        ) : isDoc ? (
+                                          <FileText className="w-4 h-4 text-blue-500" />
+                                        ) : (
+                                          <File className="w-4 h-4 text-gray-500" />
+                                        )}
+                                        <div className="flex flex-col">
+                                          <span className="text-sm font-medium">{docName}</span>
+                                          {typeof doc === 'object' && doc.size && (
+                                            <span className="text-xs text-muted-foreground">({(doc.size / 1024 / 1024).toFixed(2)} MB)</span>
+                                          )}
+                                        </div>
+                                        <Download className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity ml-auto text-muted-foreground" />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </div>
                             )}
                           </CardContent>
@@ -2473,15 +2651,12 @@ export default function SupervisorsPage() {
                         <Card key={emp._id} className="hover:shadow-md transition-shadow">
                           <CardContent className="p-4 flex items-center justify-between">
                             <div className="flex items-center gap-3">
-                              <Avatar className="h-8 w-8">
-                                <AvatarImage src={emp.avatar || "/placeholder.svg?height=32&width=32&query=avatar"} alt={emp.name} />
-                                <AvatarFallback>
-                                  {emp.name
-                                    .split(" ")
-                                    .map((n) => n[0])
-                                    .join("")}
-                                </AvatarFallback>
-                              </Avatar>
+                              <Avatar
+                                src={emp.avatar || "/placeholder.svg?height=32&width=32&query=avatar"}
+                                name={emp.name}
+                                size={32}
+                                className="h-8 w-8"
+                              />
                               <div>
                                 <h4 className="font-medium">{emp.name}</h4>
                                 <p className="text-sm text-muted-foreground">{emp.position}</p>
@@ -2511,6 +2686,28 @@ export default function SupervisorsPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* File Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="sm:max-w-[800px] h-auto relative">
+          <h3 className="text-lg font-semibold mb-2 pr-8 truncate">{previewFileName}</h3>
+          <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </DialogClose>
+          <div className="relative w-full h-full flex items-center justify-center mt-6">
+            <img
+              src={previewUrl}
+              alt="Preview"
+              className="max-w-full max-h-[80vh] object-contain"
+              onError={(e) => {
+                e.currentTarget.src = '/placeholder.svg';
+                toast.error('Failed to load image preview');
+              }}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Task create dialog */}
       <Dialog open={isTaskFormOpen} onOpenChange={setIsTaskFormOpen}>
@@ -2593,6 +2790,7 @@ export default function SupervisorsPage() {
                   id="file"
                   name="file"
                   type="file"
+                  multiple
                   accept={
                     taskFormData.documentType === "image"
                       ? "image/*"
@@ -2602,7 +2800,38 @@ export default function SupervisorsPage() {
                   }
                   onChange={handleFileChange}
                 />
-                {taskFormData.file && <div className="text-xs text-muted-foreground">Selected: {taskFormData.file.name}</div>}
+                {taskFormData.filePreviews.length > 0 && (
+                  <div className="mt-2 space-y-2">
+                    <Label>Selected Files</Label>
+                    <div className="space-y-1">
+                      {taskFormData.filePreviews.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                          <div className="flex items-center space-x-2">
+                            <FileText className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-sm">{file.name}</span>
+                            <span className="text-xs text-muted-foreground">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => {
+                              setTaskFormData(prev => ({
+                                ...prev,
+                                documentUrls: prev.documentUrls.filter((_, i) => i !== index),
+                                filePreviews: prev.filePreviews.filter((_, i) => i !== index)
+                              }))
+                              toast.success('File removed')
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             <div className="flex justify-end gap-2 pt-4">

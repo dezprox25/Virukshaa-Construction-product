@@ -10,11 +10,17 @@ export async function GET(
 ) {
   await dbConnect();
   try {
-        const task = await Task.findById(params.id).populate("assignedTo", "name");
+    const task = await Task.findById(params.id).populate("assignedTo", "name");
     if (!task) {
       return NextResponse.json({ message: "Task not found" }, { status: 404 });
     }
-    return NextResponse.json(task, { status: 200 });
+
+    const obj: any = task.toObject();
+    if (!obj.documentUrls && obj.documentUrl) {
+      obj.documentUrls = [{ url: obj.documentUrl }];
+    }
+
+    return NextResponse.json(obj, { status: 200 });
   } catch (error) {
     console.error("Error fetching task:", error);
     return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
@@ -38,7 +44,8 @@ export async function PUT(
       documentType,
       projectId,
       projectTitle,
-      status 
+      status,
+      documentUrls
     } = body;
 
     // If projectId is being updated, ensure we have the latest project title
@@ -46,9 +53,13 @@ export async function PUT(
     if (projectId && !projectTitle) {
       const project = await mongoose.model('Project').findById(projectId).select('title');
       if (project) {
-        finalProjectTitle = project.title;
+        finalProjectTitle = (project as any).title;
       }
     }
+
+    const normalizedDocumentUrls = Array.isArray(documentUrls)
+      ? documentUrls.map((u: any) => (typeof u === 'string' ? { url: u } : u)).filter((u: any) => u && u.url)
+      : undefined;
 
     const updateData: Record<string, any> = {
       title,
@@ -59,7 +70,8 @@ export async function PUT(
       documentType,
       ...(projectId && { projectId }),
       ...(finalProjectTitle && { projectTitle: finalProjectTitle }),
-      ...(status && { status })
+      ...(status && { status }),
+      ...(normalizedDocumentUrls ? { documentUrls: normalizedDocumentUrls } : {}),
     };
 
     const updatedTask = await Task.findByIdAndUpdate(
@@ -71,7 +83,13 @@ export async function PUT(
     if (!updatedTask) {
       return NextResponse.json({ message: "Task not found" }, { status: 404 });
     }
-    return NextResponse.json(updatedTask, { status: 200 });
+
+    const obj: any = updatedTask.toObject();
+    if (!obj.documentUrls && obj.documentUrl) {
+      obj.documentUrls = [{ url: obj.documentUrl }];
+    }
+
+    return NextResponse.json(obj, { status: 200 });
   } catch (error) {
     console.error("Error updating task:", error);
     return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
