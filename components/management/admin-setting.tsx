@@ -2,6 +2,8 @@ import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
 import { Search, Bold, Italic, Link, List, ListOrdered, X } from 'lucide-react';
 import { IAdminProfile } from '@/models/AdminProfile';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+import { uploadAdminFile } from '@/lib/upload-utils';
+import { toast } from 'sonner';
 
 interface INotification {
   id: string;
@@ -313,56 +315,98 @@ const SettingsContent = () => {
       case 'My Details':
         return (
           <div className="space-y-6">
-            <div className="p-2 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">My Details</h2>
+            {/* Section Header */}
+            <div className="flex items-center justify-between rounded-xl bg-gradient-to-r from-emerald-600 to-green-500 px-4 py-3 text-white shadow-sm">
+              <h2 className="text-lg font-semibold">My Details</h2>
             </div>
 
-            <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-              <div className="px-4 py-5 sm:px-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">Profile Information</h3>
-                <p className="mt-1 max-w-2xl text-sm text-gray-500">Personal details and information.</p>
-              </div>
-              <div className="border-t border-gray-200">
-                <dl>
-                  <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt className="text-sm font-medium text-gray-500">Full name</dt>
-                    <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                      {formData.adminName || 'Not provided'}
-                    </dd>
-                  </div>
-                  <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt className="text-sm font-medium text-gray-500">Email address</dt>
-                    <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                      {formData.email || 'Not provided'}
-                    </dd>
-                  </div>
-                  <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt className="text-sm font-medium text-gray-500">Company</dt>
-                    <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                      {formData.companyName || 'Not provided'}
-                    </dd>
-                  </div>
+            {/* Profile Card */}
+            <div className="rounded-xl border border-emerald-100 bg-white/70 backdrop-blur-sm shadow-sm overflow-hidden">
+              {/* Card Header */}
+              {/* <div className="px-6 py-5 bg-gradient-to-r from-emerald-50 to-emerald-100 border-b">
+                <h3 className="text-lg font-medium text-gray-900">Profile Information</h3>
+                <p className="mt-1 max-w-2xl text-sm text-gray-600">Personal details and information.</p>
+              </div> */}
 
-                  <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt className="text-sm font-medium text-gray-500">Website</dt>
-                    <dd className="mt-1 text-sm text-blue-600 hover:text-blue-500 sm:mt-0 sm:col-span-2">
-                      {formData.website ? (
-                        <a href={formData.website.startsWith('http') ? formData.website : `https://${formData.website}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="hover:underline">
-                          {formData.website}
-                        </a>
-                      ) : 'Not provided'}
-                    </dd>
+              {/* Card Body */}
+              <div className="divide-y divide-gray-100">
+                <div className="px-6 py-6 flex items-start space-x-8">
+                   {/* Profile Photo - Left Side */}
+                   <div className="flex-shrink-0  w-1/3">
+                     {formData.profileImage ? (
+                       <a
+                         href={formData.profileImage}
+                         target="_blank"
+                         rel="noopener noreferrer"
+                         className="cursor-pointer block"
+                       >
+                         <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
+                           <img
+                             src={formData.profileImage}
+                             alt="Profile"
+                             className="w-full h-[500px] object-cover"
+                           />
+                         </div>
+                       </a>
+                     ) : null}
+                   </div>
+
+                  {/* Admin Details - Right Side */}
+                  <div className="flex-1">
+                    <dl className="space-y-4">
+                      {/* Name */}
+                      <div className="sm:grid sm:grid-cols-3 sm:gap-6">
+                        <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">Full name</dt>
+                        <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                          {formData.adminName || 'Not provided'}
+                        </dd>
+                      </div>
+
+                      {/* Email */}
+                      <div className="sm:grid sm:grid-cols-3 sm:gap-6">
+                        <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">Email address</dt>
+                        <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                          {formData.email || 'Not provided'}
+                        </dd>
+                      </div>
+
+                      {/* Company */}
+                      <div className="sm:grid sm:grid-cols-3 sm:gap-6">
+                        <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">Company</dt>
+                        <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                          {formData.companyName || 'Not provided'}
+                        </dd>
+                      </div>
+
+                      {/* Website */}
+                      <div className="sm:grid sm:grid-cols-3 sm:gap-6">
+                        <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">Website</dt>
+                        <dd className="mt-1 text-sm sm:mt-0 sm:col-span-2">
+                          {formData.website ? (
+                            <a
+                              href={formData.website.startsWith('http') ? formData.website : `https://${formData.website}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center text-emerald-700 hover:text-emerald-800 hover:underline break-all"
+                            >
+                              {formData.website}
+                            </a>
+                          ) : (
+                            <span className="text-gray-500">Not provided</span>
+                          )}
+                        </dd>
+                      </div>
+
+                      {/* Bio */}
+                      <div className="sm:grid sm:grid-cols-3 sm:gap-6">
+                        <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">Bio</dt>
+                        <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2 whitespace-pre-line">
+                          {formData.bio || 'Not provided'}
+                        </dd>
+                      </div>
+                    </dl>
                   </div>
-                  <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt className="text-sm font-medium text-gray-500">Bio</dt>
-                    <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2 whitespace-pre-line">
-                      {formData.bio || 'Not provided'}
-                    </dd>
-                  </div>
-                </dl> 
+                </div>
               </div>
             </div>
           </div>
@@ -503,14 +547,32 @@ const SettingsContent = () => {
                     <input
                       type="file"
                       ref={fileInputRef}
-                      onChange={(e: ChangeEvent<HTMLInputElement>) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setFormData({ ...formData, profileImage: reader.result as string });
-                          };
-                          reader.readAsDataURL(file);
+                      onChange={async (e: ChangeEvent<HTMLInputElement>) => {
+                        try {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+
+                          if (!file.type.startsWith('image/')) {
+                            toast.error('Please upload an image file');
+                            return;
+                          }
+
+                          if (file.size > 5 * 1024 * 1024) {
+                            toast.error('File size must be less than 5MB');
+                            return;
+                          }
+
+                          const result = await uploadAdminFile(file, 'profile');
+                          if (!result) {
+                            toast.error('Upload failed');
+                            return;
+                          }
+
+                          setFormData(prev => ({ ...prev, profileImage: result.fileUrl }));
+                          toast.success('Profile photo uploaded successfully');
+                        } catch (err) {
+                          console.error('Profile upload error:', err);
+                          toast.error('Failed to upload profile photo');
                         }
                       }}
                       accept="image/*"

@@ -1,5 +1,3 @@
-
-
 // "use client"
 
 // import type React from "react"
@@ -9,7 +7,6 @@
 // import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 // import { Badge } from "@/components/ui/badge"
 // import { Input } from "@/components/ui/input"
-// import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 // import { Search, Download, PlusCircle, Filter, X, Edit, Calendar, Check, Trash2 } from "lucide-react"
 // import { jsPDF } from "jspdf"
 // import { useToast } from "@/hooks/use-toast"
@@ -122,8 +119,12 @@
 //   const filteredPayroll = useMemo(() => {
 //     if (!selectedDate) return []
 //     const ymd = selectedDate
-//     return payrollRecords.filter((r) => normalizeDateString(r.paymentDate) === ymd)
-//   }, [selectedDate, payrollRecords])
+//     // Filter records by date and ensure fresh data after any edits
+//     return payrollRecords.filter((r) => {
+//       const recordDate = normalizeDateString(r.paymentDate)
+//       return recordDate === ymd
+//     })
+//   }, [selectedDate, payrollRecords]) // Added payrollRecords dependency for real-time updates
 
 //   const filteredTotalAmount = useMemo(
 //     () => filteredPayroll.reduce((s, r) => s + Number(r.amount || 0), 0),
@@ -1270,6 +1271,39 @@
 //     }
 //   }
 
+//   const updatePayrollAmount = async (recordId: string, newAmount: number) => {
+//     try {
+//       const response = await fetch(`/api/payroll/${recordId}`, {
+//         method: "PATCH",
+//         headers: {
+//           "Content-Type": "application/json",
+//         },
+//         body: JSON.stringify({ amount: newAmount }),
+//       })
+
+//       if (response.ok) {
+//         // Immediately update local state to reflect changes in filtered view
+//         setPayrollRecords((prev) =>
+//           prev.map((record) =>
+//             record._id === recordId ? { ...record, amount: newAmount, updatedAt: new Date().toISOString() } : record,
+//           ),
+//         )
+
+//         // Refresh aggregates for suppliers
+//         const updatedRecords = await fetchPayrollRecords()
+//         const { agg } = buildSupplierAggregates(updatedRecords)
+//         setPayrollBySupplier(agg)
+
+//         toast.success("Payment amount updated successfully")
+//       } else {
+//         toast.error("Failed to update payment amount")
+//       }
+//     } catch (error) {
+//       console.error("Error updating payroll amount:", error)
+//       toast.error("Error updating payment amount")
+//     }
+//   }
+
 //   if (isLoading) {
 //     return (
 //       <div className="flex items-center justify-center p-12">
@@ -1436,11 +1470,20 @@
 //                             </Badge>
 //                           </TableCell>
 //                           <TableCell className="text-right">
-//                             {new Intl.NumberFormat("en-IN", {
-//                               style: "currency",
-//                               currency: "INR",
-//                               maximumFractionDigits: 0,
-//                             }).format(Number(rec.amount || 0))}
+//                             <div className="flex items-center justify-end gap-2">
+//                               <Input
+//                                 type="number"
+//                                 value={rec.amount || 0}
+//                                 onChange={(e) => {
+//                                   const newAmount = Number.parseFloat(e.target.value) || 0
+//                                   updatePayrollAmount(rec._id, newAmount)
+//                                 }}
+//                                 className="w-24 text-right text-sm"
+//                                 min="0"
+//                                 step="0.01"
+//                               />
+//                               <span className="text-xs text-muted-foreground">INR</span>
+//                             </div>
 //                           </TableCell>
 //                           <TableCell className="text-xs text-muted-foreground">{details}</TableCell>
 //                         </TableRow>
@@ -1459,6 +1502,15 @@
 //           </div>
 //         )}
 
+//         {selectedDate && (
+//           <div className="px-4 py-2 border-t bg-muted/20">
+//             <div className="flex items-center justify-between text-xs text-muted-foreground">
+//               <span>Showing payments for {new Date(selectedDate + "T00:00:00").toLocaleDateString()}</span>
+//               <span>Last updated: {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+//             </div>
+//           </div>
+//         )}
+
 //         <div className="rounded-b-md border">
 //           <Table>
 //             <TableHeader>
@@ -1468,9 +1520,10 @@
 //                   <>
 //                     <TableHead>Materials & Quantities</TableHead>
 //                     <TableHead>Active Projects</TableHead>
-//                     <TableHead>Supply Status</TableHead>
+//                     {/* <TableHead>Supply Status</TableHead> */}
 //                     <TableHead className="text-right">Total Value</TableHead>
-//                     <TableHead className="text-right">Amount Due</TableHead>
+//                     <TableHead className="text-right">Amount</TableHead>
+//                     <TableHead className="text-right">Due</TableHead>
 //                   </>
 //                 ) : (
 //                   <>
@@ -1514,7 +1567,6 @@
 //                           ) : (
 //                             <span className="text-muted-foreground text-sm">No materials</span>
 //                           )}
-
 //                         </TableCell>
 
 //                         <TableCell>
@@ -1541,7 +1593,7 @@
 //                           </div>
 //                         </TableCell>
 
-//                         <TableCell>
+//                         {/* <TableCell>
 //                           {(() => {
 //                             const materials = user.projectMaterials || []
 //                             if (materials.length === 0) {
@@ -1558,7 +1610,7 @@
 //                               return <Badge className="bg-red-100 text-red-800">Unpaid</Badge>
 //                             }
 //                           })()}
-//                         </TableCell>
+//                         </TableCell> */}
 
 //                         <TableCell className="text-right">
 //                           {editingId === user._id && editForm ? (
@@ -1568,73 +1620,15 @@
 //                                   (editForm.projectMaterials || []).reduce((sum, m) => sum + Number(m.amount || 0), 0),
 //                                 )}
 //                               </span>
-//                               <div className="space-y-1">
-//                                 {(editForm.projectMaterials || []).map((material, index) => (
-//                                   <div key={material._id} className="flex items-center gap-1 text-xs">
-//                                     <Input
-//                                       placeholder="Material type"
-//                                       value={material.materialType || ""}
-//                                       onChange={(e) =>
-//                                         handleMaterialChange(editForm._id, material._id, "materialType", e.target.value)
-//                                       }
-//                                       className="h-6 text-xs"
-//                                     />
-//                                     <Input
-//                                       type="number"
-//                                       placeholder="Qty"
-//                                       value={material.quantity || ""}
-//                                       onChange={(e) =>
-//                                         handleMaterialChange(
-//                                           editForm._id,
-//                                           material._id,
-//                                           "quantity",
-//                                           Number(e.target.value),
-//                                         )
-//                                       }
-//                                       className="h-6 w-16 text-xs"
-//                                     />
-//                                     <Input
-//                                       type="number"
-//                                       placeholder="Amount"
-//                                       value={material.amount || ""}
-//                                       onChange={(e) =>
-//                                         handleMaterialChange(
-//                                           editForm._id,
-//                                           material._id,
-//                                           "amount",
-//                                           Number(e.target.value),
-//                                         )
-//                                       }
-//                                       className="h-6 w-20 text-xs"
-//                                     />
-//                                     <Button
-//                                       size="sm"
-//                                       variant="outline"
-//                                       onClick={() => handleDeleteMaterial(editForm._id, material._id)}
-//                                       className="h-6 w-6 p-0 text-red-600"
-//                                     >
-//                                       <X className="h-3 w-3" />
-//                                     </Button>
-//                                   </div>
-//                                 ))}
-//                                 <Select onValueChange={(projectId) => handleAddMaterial(editForm._id, projectId)}>
-//                                   <SelectTrigger className="h-6 text-xs">
-//                                     <SelectValue placeholder="Add material to project" />
-//                                   </SelectTrigger>
-//                                   <SelectContent>
-//                                     {projects.map((project) => (
-//                                       <SelectItem key={project._id} value={project._id}>
-//                                         {project.name}
-//                                       </SelectItem>
-//                                     ))}
-//                                   </SelectContent>
-//                                 </Select>
-//                               </div>
 //                             </div>
 //                           ) : (
-//                             formatCurrency(
-//                               (user.projectMaterials || []).reduce((sum, m) => sum + Number(m.amount || 0), 0),
-//                             )
+//                             <div>
+//                               <div className="font-medium">
+//                                 {formatCurrency(
+//                                   (user.projectMaterials || []).reduce((sum, m) => sum + Number(m.amount || 0), 0),
+//                                 )}
+//                               </div>
+//                             </div>
 //                           )}
 //                         </TableCell>
 
@@ -1648,16 +1642,10 @@
 //                                 className="h-7 text-right text-sm"
 //                                 placeholder="Paid amount"
 //                               />
-//                               <div className="text-xs text-muted-foreground">
-//                                 Due: {formatCurrency(editForm.dueAmount || 0)}
-//                               </div>
 //                             </div>
 //                           ) : (
 //                             <div>
-//                               <div className="font-medium">{formatCurrency(user.dueAmount || 0)}</div>
-//                               <div className="text-xs text-muted-foreground">
-//                                 Paid: {formatCurrency(user.totalPaid || 0)}
-//                               </div>
+//                               <div className="font-medium">{formatCurrency(user.totalPaid || 0)}</div>
 //                             </div>
 //                           )}
 //                         </TableCell>
@@ -1704,9 +1692,9 @@
 //                           {user.lastPaymentDate ? (
 //                             <div>
 //                               <div className="text-sm">{formatDate(user.lastPaymentDate)}</div>
-//                               <div className="text-xs text-muted-foreground">
+//                               {/* <div className="text-xs text-muted-foreground">
 //                                 {formatCurrency(user.lastPaymentAmount || 0)}
-//                               </div>
+//                               </div> */}
 //                             </div>
 //                           ) : (
 //                             <span className="text-muted-foreground">No payments</span>
@@ -1714,6 +1702,12 @@
 //                         </TableCell>
 //                       </>
 //                     )}
+
+//                     <TableCell>
+//                       <div>
+//                         <div className="text-right">{formatCurrency(user.dueAmount || 0)}</div>
+//                       </div>
+//                     </TableCell>
 
 //                     <TableCell>
 //                       {selectedRole === "supplier" ? (
@@ -1798,6 +1792,7 @@
 
 // export default PayrollManagement
 
+
 "use client"
 
 import type React from "react"
@@ -1807,7 +1802,10 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Search, Download, PlusCircle, Filter, X, Edit, Calendar, Check, Trash2 } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
+import { Search, Download, Filter, X, Edit, Calendar, Check, Trash2, Plus } from "lucide-react"
 import { jsPDF } from "jspdf"
 import { useToast } from "@/hooks/use-toast"
 
@@ -1890,6 +1888,8 @@ const PayrollManagement = () => {
   const [editForm, setEditForm] = useState<User | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
+  const [selectedExportSections, setSelectedExportSections] = useState<string[]>(["all"])
   const [projects, setProjects] = useState<{ _id: string; name: string }[]>([])
   const [supplierMaterials, setSupplierMaterials] = useState<Record<string, any[]>>({})
   const [payrollBySupplier, setPayrollBySupplier] = useState<
@@ -1897,6 +1897,14 @@ const PayrollManagement = () => {
   >({})
   const [selectedDate, setSelectedDate] = useState<string>("")
   const [payrollRecords, setPayrollRecords] = useState<any[]>([])
+
+  const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false)
+  const [addPaymentForm, setAddPaymentForm] = useState({
+    role: "",
+    userId: "",
+    amount: "",
+    description: "",
+  })
 
   // Memoized cache: userId-projectId -> materials[]
   const materialsCache = useMemo(() => {
@@ -1919,8 +1927,12 @@ const PayrollManagement = () => {
   const filteredPayroll = useMemo(() => {
     if (!selectedDate) return []
     const ymd = selectedDate
-    return payrollRecords.filter((r) => normalizeDateString(r.paymentDate) === ymd)
-  }, [selectedDate, payrollRecords])
+    // Filter records by date and ensure fresh data after any edits
+    return payrollRecords.filter((r) => {
+      const recordDate = normalizeDateString(r.paymentDate)
+      return recordDate === ymd
+    })
+  }, [selectedDate, payrollRecords]) // Added payrollRecords dependency for real-time updates
 
   const filteredTotalAmount = useMemo(
     () => filteredPayroll.reduce((s, r) => s + Number(r.amount || 0), 0),
@@ -2104,30 +2116,30 @@ const PayrollManagement = () => {
         const allMaterials = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : raw ? [raw] : []
         const transformedMaterials = Array.isArray(allMaterials)
           ? allMaterials.map((material: any) => {
-            const qty = Number(material.quantity || material.qty || material.units || 0)
-            const price = Number(material.pricePerUnit || material.price || material.rate || 0)
-            const amountFallback = Number(
-              material.amount ||
-              material.totalAmount ||
-              material.total ||
-              material.cost ||
-              (price && qty ? price * qty : 0) ||
-              0,
-            )
-            const paid = Number(material.paidAmount || material.paid || 0)
-            return {
-              _id: material._id || `${userId}-${material.materialType}-${Date.now()}`,
-              materialType: material.materialType || material.name || material.type || "Unknown",
-              projectId: normalizeId(material.projectId || material.project || material.project_id) || "default",
-              amount: amountFallback,
-              quantity: qty,
-              pricePerUnit: price || (qty ? amountFallback / qty : 0),
-              totalAmount: amountFallback,
-              paidAmount: paid,
-              dueAmount: Math.max(0, amountFallback - paid),
-              createdAt: material.date || material.supplyDate || material.createdAt,
-            }
-          })
+              const qty = Number(material.quantity || material.qty || material.units || 0)
+              const price = Number(material.pricePerUnit || material.price || material.rate || 0)
+              const amountFallback = Number(
+                material.amount ||
+                  material.totalAmount ||
+                  material.total ||
+                  material.cost ||
+                  (price && qty ? price * qty : 0) ||
+                  0,
+              )
+              const paid = Number(material.paidAmount || material.paid || 0)
+              return {
+                _id: material._id || `${userId}-${material.materialType}-${Date.now()}`,
+                materialType: material.materialType || material.name || material.type || "Unknown",
+                projectId: normalizeId(material.projectId || material.project || material.project_id) || "default",
+                amount: amountFallback,
+                quantity: qty,
+                pricePerUnit: price || (qty ? amountFallback / qty : 0),
+                totalAmount: amountFallback,
+                paidAmount: paid,
+                dueAmount: Math.max(0, amountFallback - paid),
+                createdAt: material.date || material.supplyDate || material.createdAt,
+              }
+            })
           : []
 
         const totalSupplyValue = transformedMaterials.reduce(
@@ -2192,9 +2204,9 @@ const PayrollManagement = () => {
       const projectsData = await response.json()
       const transformedProjects = Array.isArray(projectsData)
         ? projectsData.map((project) => ({
-          _id: project._id || project.id,
-          name: project.title || project.name || "Unnamed Project",
-        }))
+            _id: project._id || project.id,
+            name: project.title || project.name || "Unnamed Project",
+          }))
         : []
       setProjects(transformedProjects)
     } catch (error) {
@@ -2273,14 +2285,14 @@ const PayrollManagement = () => {
         typeof user.salary === "string"
           ? Number.parseFloat(user.salary.replace(/[^0-9.]/g, ""))
           : Number(
-            user.salary ||
-            user.monthlySalary ||
-            user.basicSalary ||
-            user.grossSalary ||
-            user.netSalary ||
-            user.amount ||
-            0,
-          )
+              user.salary ||
+                user.monthlySalary ||
+                user.basicSalary ||
+                user.grossSalary ||
+                user.netSalary ||
+                user.amount ||
+                0,
+            )
       transformed = { ...baseUser, salary }
     } else if (role === "supervisor") {
       const salary =
@@ -2297,31 +2309,31 @@ const PayrollManagement = () => {
       const rawMaterials = user.projectMaterials || user.materials || []
       const supplierMaterials = Array.isArray(rawMaterials)
         ? rawMaterials.map((material: any) => {
-          const qty = Number(material.quantity || material.qty || material.units || 0)
-          const price = Number(material.pricePerUnit || material.price || material.rate || 0)
-          const amountFallback = Number(
-            material.amount ||
-            material.totalAmount ||
-            material.total ||
-            material.cost ||
-            (price && qty ? price * qty : 0) ||
-            0,
-          )
-          const paid = Number(material.paidAmount || material.paid || 0)
-          return {
-            _id:
-              material._id || `${baseUser._id}-${material.materialType || material.name || "Unknown"}-${Date.now()}`,
-            materialType: material.materialType || material.name || material.type || "Unknown",
-            projectId: normalizeId(material.projectId || material.project || material.project_id) || "default",
-            amount: amountFallback,
-            quantity: qty,
-            pricePerUnit: price || (qty ? amountFallback / qty : 0),
-            totalAmount: amountFallback,
-            paidAmount: paid,
-            dueAmount: Math.max(0, amountFallback - paid),
-            createdAt: material.date || material.supplyDate || material.createdAt,
-          }
-        })
+            const qty = Number(material.quantity || material.qty || material.units || 0)
+            const price = Number(material.pricePerUnit || material.price || material.rate || 0)
+            const amountFallback = Number(
+              material.amount ||
+                material.totalAmount ||
+                material.total ||
+                material.cost ||
+                (price && qty ? price * qty : 0) ||
+                0,
+            )
+            const paid = Number(material.paidAmount || material.paid || 0)
+            return {
+              _id:
+                material._id || `${baseUser._id}-${material.materialType || material.name || "Unknown"}-${Date.now()}`,
+              materialType: material.materialType || material.name || material.type || "Unknown",
+              projectId: normalizeId(material.projectId || material.project || material.project_id) || "default",
+              amount: amountFallback,
+              quantity: qty,
+              pricePerUnit: price || (qty ? amountFallback / qty : 0),
+              totalAmount: amountFallback,
+              paidAmount: paid,
+              dueAmount: Math.max(0, amountFallback - paid),
+              createdAt: material.date || material.supplyDate || material.createdAt,
+            }
+          })
         : []
 
       const calcSupply = supplierMaterials.reduce((s, m) => s + Number(m.amount || m.totalAmount || 0), 0)
@@ -2718,118 +2730,179 @@ const PayrollManagement = () => {
     })
   }
 
-  const handleExportToPDF = () => {
+  const handleExportToPDF = (sections: string[] = ["all"]) => {
     setIsExporting(true)
     try {
       const doc = new jsPDF()
       const currentDate = new Date().toLocaleDateString()
+      const pageWidth = doc.internal.pageSize.width
 
-      doc.setFontSize(18)
-      doc.text("Payroll Management Report", 14, 22)
-      doc.setFontSize(10)
-      doc.text(`Generated on: ${currentDate}`, 14, 30)
+      // Header with better styling
+      doc.setFontSize(20)
+      doc.setFont("helvetica", "bold")
+      doc.text("Payroll Management Report", pageWidth / 2, 25, { align: "center" })
 
-      const roles: Array<User["role"]> = ["employee", "supervisor", "client", "supplier"]
-      let startY = 40
+      doc.setFontSize(12)
+      doc.setFont("helvetica", "normal")
+      doc.text(`Generated on: ${currentDate}`, pageWidth / 2, 35, { align: "center" })
 
-      roles.forEach((role) => {
+      // Add a line separator
+      doc.setLineWidth(0.5)
+      doc.line(20, 40, pageWidth - 20, 40)
+
+      const roles: Array<User["role"]> = ["supervisor", "employee", "client", "supplier"]
+      let startY = 50
+
+      // Filter roles based on selection
+      const rolesToExport = sections.includes("all") ? roles : roles.filter((role) => sections.includes(role))
+
+      rolesToExport.forEach((role, roleIndex) => {
         const roleUsers = users.filter((user) => user.role === role)
         if (roleUsers.length === 0) return
 
-        doc.setFontSize(14)
-        doc.text(`${role.charAt(0).toUpperCase() + role.slice(1)}s`, 14, startY)
+        // Check if we need a new page
+        if (startY > 250) {
+          doc.addPage()
+          startY = 30
+        }
+
+        // Section header with background
+        doc.setFillColor(240, 240, 240)
+        doc.rect(20, startY - 5, pageWidth - 40, 12, "F")
+
+        doc.setFontSize(16)
+        doc.setFont("helvetica", "bold")
+        doc.setTextColor(0, 0, 0)
+        doc.text(`${role.charAt(0).toUpperCase() + role.slice(1)}s (${roleUsers.length})`, 25, startY + 3)
+        startY += 15
+
+        // Table setup with better spacing
+        const isSupplier = role === "supplier"
+
+        const headers = isSupplier
+          ? ["Name", "Email", "Materials", "Total Value", "Paid", "Due"]
+          : ["Name", "Email", "Phone", "Amount", "Paid", "Due", "Last Payment"]
+
+        const columnWidths = isSupplier
+          ? [30, 40, 35, 25, 20, 20] // Supplier columns without status
+          : [25, 35, 20, 20, 18, 18, 24] // Non-supplier columns without status
+
+        // Table header
+        doc.setFillColor(220, 220, 220)
+        doc.rect(20, startY, pageWidth - 40, 8, "F")
+
+        doc.setFontSize(10)
+        doc.setFont("helvetica", "bold")
+        let xPos = 22
+        headers.forEach((header, i) => {
+          doc.text(header, xPos, startY + 5)
+          xPos += columnWidths[i]
+        })
         startY += 10
 
-        const headers =
-          role === "supplier"
-            ? ["Name", "Email", "Materials", "Total Value", "Paid", "Due", "Status"]
-            : ["Name", "Email", "Phone", "Amount", "Total Paid", "Due", "Last Payment", "Status"]
-        const columnWidths = role === "supplier" ? [25, 35, 40, 25, 20, 20, 15] : [25, 40, 25, 20, 20, 20, 25, 15]
-
-        let x = 5
-        doc.setFontSize(9)
-        // @ts-ignore jspdf types
-        doc.setFont("helvetica", "bold")
-        headers.forEach((header, i) => {
-          doc.text(header, x, startY)
-          x += columnWidths[i]
-        })
-        startY += 4
-        doc.line(5, startY, 5 + columnWidths.reduce((a, b) => a + b, 0), startY)
-        startY += 4
-        // @ts-ignore jspdf types
+        // Table rows
         doc.setFont("helvetica", "normal")
+        doc.setFontSize(9)
 
-        roleUsers.forEach((user) => {
-          if (startY > 280) {
-            doc.addPage()
-            startY = 20
+        roleUsers.forEach((user, userIndex) => {
+          // Alternate row colors
+          if (userIndex % 2 === 0) {
+            doc.setFillColor(250, 250, 250)
+            doc.rect(20, startY, pageWidth - 40, 12, "F")
           }
-          let row: string[]
 
-          if (role === "supplier") {
-            const materialsText =
-              user.projectMaterials && user.projectMaterials.length > 0
-                ? user.projectMaterials
-                  .slice(0, 2)
-                  .map((m) => `${m.materialType} (${m.quantity}×₹${m.pricePerUnit})`)
-                  .join(", ") + (user.projectMaterials.length > 2 ? "..." : "")
-                : "No materials"
-            row = [
+          // Check for page break
+          if (startY > 270) {
+            doc.addPage()
+            startY = 30
+
+            // Repeat header on new page
+            doc.setFillColor(220, 220, 220)
+            doc.rect(20, startY, pageWidth - 40, 8, "F")
+            doc.setFont("helvetica", "bold")
+            xPos = 22
+            headers.forEach((header, i) => {
+              doc.text(header, xPos, startY + 5)
+              xPos += columnWidths[i]
+            })
+            startY += 10
+            doc.setFont("helvetica", "normal")
+          }
+
+          let rowData: string[]
+          if (isSupplier) {
+            const materialsText = user.projectMaterials?.length
+              ? `${user.projectMaterials[0].materialType} (${user.projectMaterials[0].quantity})`
+              : "No materials"
+
+            rowData = [
               user.name || "N/A",
               user.email || "N/A",
               materialsText,
-              `₹${(user.totalSupplyValue || 0).toFixed(2)}`,
-              `₹${user.totalPaid?.toFixed(2) || "0.00"}`,
-              `₹${user.dueAmount?.toFixed(2) || "0.00"}`,
-              user.status || "N/A",
+              `₹${(user.totalSupplyValue || 0).toLocaleString()}`,
+              `₹${(user.totalPaid || 0).toLocaleString()}`,
+              `₹${(user.dueAmount || 0).toLocaleString()}`,
             ]
           } else {
             let amount = "N/A"
-            switch (user.role) {
-              case "employee":
-              case "supervisor":
-                amount = user.salary ? `₹${user.salary.toFixed(2)}` : "N/A"
-                break
-              case "client":
-                amount = user.projectTotalAmount ? `₹${user.projectTotalAmount.toFixed(2)}` : "N/A"
-                break
+            if (user.role === "employee" || user.role === "supervisor") {
+              amount = user.salary ? `₹${user.salary.toLocaleString()}` : "N/A"
+            } else if (user.role === "client") {
+              amount = user.projectTotalAmount ? `₹${user.projectTotalAmount.toLocaleString()}` : "N/A"
             }
-            row = [
+
+            rowData = [
               user.name || "N/A",
               user.email || "N/A",
               user.phone || "N/A",
               amount,
-              `₹${user.totalPaid?.toFixed(2) || "0.00"}`,
-              `₹${user.dueAmount?.toFixed(2) || "0.00"}`,
+              `₹${(user.totalPaid || 0).toLocaleString()}`,
+              `₹${(user.dueAmount || 0).toLocaleString()}`,
               user.lastPaymentDate ? new Date(user.lastPaymentDate).toLocaleDateString() : "N/A",
-              user.status || "N/A",
             ]
           }
 
-          x = 5
-          row.forEach((cell, i) => {
-            const splitText = doc.splitTextToSize(cell, columnWidths[i] - 2)
-            doc.text(splitText, x + 1, startY + 5)
-            x += columnWidths[i]
+          xPos = 22
+          rowData.forEach((cell, i) => {
+            const maxWidth = columnWidths[i] - 4
+            const lines = doc.splitTextToSize(cell, maxWidth)
+            doc.text(lines, xPos, startY + 8)
+            xPos += columnWidths[i]
           })
-          startY += 10
-          if (startY < 280) {
-            doc.line(5, startY, 5 + columnWidths.reduce((a, b) => a + b, 0), startY)
-            startY += 2
-          }
+
+          startY += 12
         })
 
-        startY += 15
+        // Add spacing between sections
+        startY += 10
+
+        // Add section separator line
+        if (roleIndex < rolesToExport.length - 1) {
+          doc.setLineWidth(0.3)
+          doc.line(20, startY, pageWidth - 20, startY)
+          startY += 10
+        }
       })
 
-      doc.save(`payroll-report-${new Date().toISOString().split("T")[0]}.pdf`)
+      // Footer
+      const totalPages = doc.getNumberOfPages()
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i)
+        doc.setFontSize(8)
+        doc.setFont("helvetica", "normal")
+        doc.text(`Page ${i} of ${totalPages}`, pageWidth - 30, doc.internal.pageSize.height - 10)
+        doc.text("Payroll Management System", 20, doc.internal.pageSize.height - 10)
+      }
+
+      const sectionText = sections.includes("all") ? "complete" : sections.join("-")
+      doc.save(`payroll-report-${sectionText}-${new Date().toISOString().split("T")[0]}.pdf`)
       toast({ description: "PDF exported successfully!" })
     } catch (error) {
       console.error("Error generating PDF:", error)
       toast({ variant: "destructive", description: "Failed to generate PDF" })
     } finally {
       setIsExporting(false)
+      setIsExportDialogOpen(false)
     }
   }
 
@@ -3067,6 +3140,98 @@ const PayrollManagement = () => {
     }
   }
 
+  const updatePayrollAmount = async (recordId: string, newAmount: number) => {
+    try {
+      const response = await fetch(`/api/payroll/${recordId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ amount: newAmount }),
+      })
+
+      if (response.ok) {
+        // Immediately update local state to reflect changes in filtered view
+        setPayrollRecords((prev) =>
+          prev.map((record) =>
+            record._id === recordId ? { ...record, amount: newAmount, updatedAt: new Date().toISOString() } : record,
+          ),
+        )
+
+        // Refresh aggregates for suppliers
+        const updatedRecords = await fetchPayrollRecords()
+        const { agg } = buildSupplierAggregates(updatedRecords)
+        setPayrollBySupplier(agg)
+
+        toast.success("Payment amount updated successfully")
+      } else {
+        toast.error("Failed to update payment amount")
+      }
+    } catch (error) {
+      console.error("Error updating payroll amount:", error)
+      toast.error("Error updating payment amount")
+    }
+  }
+
+  const handleAddPayment = async () => {
+    if (!addPaymentForm.role || !addPaymentForm.userId || !addPaymentForm.amount) {
+      toast({ variant: "destructive", description: "Please fill in all required fields" })
+      return
+    }
+
+    try {
+      const selectedUser = users.find((u) => u._id === addPaymentForm.userId)
+      if (!selectedUser) {
+        toast({ variant: "destructive", description: "Selected user not found" })
+        return
+      }
+
+      const paymentData = {
+        userId: addPaymentForm.userId,
+        userName: selectedUser.name,
+        userRole: addPaymentForm.role,
+        amount: Number.parseFloat(addPaymentForm.amount),
+        description: addPaymentForm.description || `Payment to ${selectedUser.name}`,
+        paymentDate: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      }
+
+      // Add to payroll records
+      const newRecord = {
+        _id: Date.now().toString(),
+        ...paymentData,
+      }
+
+      setPayrollRecords((prev) => [...prev, newRecord])
+
+      // Update user's total paid amount
+      setUsers((prev) =>
+        prev.map((user) =>
+          user._id === addPaymentForm.userId
+            ? {
+                ...user,
+                totalPaid: (user.totalPaid || 0) + Number.parseFloat(addPaymentForm.amount),
+                lastPaymentDate: new Date().toISOString(),
+              }
+            : user,
+        ),
+      )
+
+      // Reset form and close dialog
+      setAddPaymentForm({ role: "", userId: "", amount: "", description: "" })
+      setIsAddPaymentOpen(false)
+
+      toast({ description: "Payment added successfully!" })
+    } catch (error) {
+      console.error("Error adding payment:", error)
+      toast({ variant: "destructive", description: "Failed to add payment" })
+    }
+  }
+
+  const getUsersByRole = (role: string) => {
+    return users.filter((user) => user.role === role)
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-12">
@@ -3082,22 +3247,26 @@ const PayrollManagement = () => {
           <h2 className="text-2xl font-bold tracking-tight">Payroll Management</h2>
           <p className="text-muted-foreground">Manage payments, salaries, and financial transactions</p>
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex gap-2">
           <Button
             variant="outline"
             size="sm"
             className="h-8 gap-1 bg-transparent"
-            onClick={handleExportToPDF}
+            onClick={() => setIsAddPaymentOpen(true)}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Add Payment</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1 bg-transparent"
+            onClick={() => setIsExportDialogOpen(true)}
             disabled={isExporting}
           >
             <Download className="h-3.5 w-3.5" />
-            <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-              {isExporting ? "Exporting..." : "Export"}
-            </span>
-          </Button>
-          <Button size="sm" className="h-8 gap-1">
-            <PlusCircle className="h-3.5 w-3.5" />
-            <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Add Payment</span>
+            <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Export</span>
           </Button>
         </div>
       </div>
@@ -3106,8 +3275,9 @@ const PayrollManagement = () => {
         {stats.map((stat, index) => (
           <Card
             key={index}
-            className={`shadow-sm cursor-pointer transition-all hover:scale-105 ${selectedRole === stat.role ? `${stat.color}` : ""
-              }`}
+            className={`shadow-sm cursor-pointer transition-all hover:scale-105 ${
+              selectedRole === stat.role ? `${stat.color}` : ""
+            }`}
             onClick={() => setSelectedRole(stat.role)}
           >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -3211,14 +3381,14 @@ const PayrollManagement = () => {
                       const details =
                         role === "supplier"
                           ? (() => {
-                            const mats: any[] = rec.supplierMaterials || rec.materials || []
-                            const first = mats
-                              .slice(0, 2)
-                              .map((m) => `${m.materialType || m.name} (${m.quantity || 0})`)
-                              .join(", ")
-                            const more = mats.length > 2 ? ` +${mats.length - 2} more` : ""
-                            return first || "Materials snapshot unavailable" + more
-                          })()
+                              const mats: any[] = rec.supplierMaterials || rec.materials || []
+                              const first = mats
+                                .slice(0, 2)
+                                .map((m) => `${m.materialType || m.name} (${m.quantity || 0})`)
+                                .join(", ")
+                              const more = mats.length > 2 ? ` +${mats.length - 2} more` : ""
+                              return first || "Materials snapshot unavailable" + more
+                            })()
                           : rec.notes || "—"
                       return (
                         <TableRow key={rec._id}>
@@ -3232,11 +3402,20 @@ const PayrollManagement = () => {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            {new Intl.NumberFormat("en-IN", {
-                              style: "currency",
-                              currency: "INR",
-                              maximumFractionDigits: 0,
-                            }).format(Number(rec.amount || 0))}
+                            <div className="flex items-center justify-end gap-2">
+                              <Input
+                                type="number"
+                                value={rec.amount || 0}
+                                onChange={(e) => {
+                                  const newAmount = Number.parseFloat(e.target.value) || 0
+                                  updatePayrollAmount(rec._id, newAmount)
+                                }}
+                                className="w-24 text-right text-sm"
+                                min="0"
+                                step="0.01"
+                              />
+                              <span className="text-xs text-muted-foreground">INR</span>
+                            </div>
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground">{details}</TableCell>
                         </TableRow>
@@ -3251,6 +3430,15 @@ const PayrollManagement = () => {
                   )}
                 </TableBody>
               </Table>
+            </div>
+          </div>
+        )}
+
+        {selectedDate && (
+          <div className="px-4 py-2 border-t bg-muted/20">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Showing payments for {new Date(selectedDate + "T00:00:00").toLocaleDateString()}</span>
+              <span>Last updated: {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
             </div>
           </div>
         )}
@@ -3364,7 +3552,6 @@ const PayrollManagement = () => {
                                   (editForm.projectMaterials || []).reduce((sum, m) => sum + Number(m.amount || 0), 0),
                                 )}
                               </span>
-
                             </div>
                           ) : (
                             <div>
@@ -3373,7 +3560,6 @@ const PayrollManagement = () => {
                                   (user.projectMaterials || []).reduce((sum, m) => sum + Number(m.amount || 0), 0),
                                 )}
                               </div>
-
                             </div>
                           )}
                         </TableCell>
@@ -3438,9 +3624,9 @@ const PayrollManagement = () => {
                           {user.lastPaymentDate ? (
                             <div>
                               <div className="text-sm">{formatDate(user.lastPaymentDate)}</div>
-                              <div className="text-xs text-muted-foreground">
+                              {/* <div className="text-xs text-muted-foreground">
                                 {formatCurrency(user.lastPaymentAmount || 0)}
-                              </div>
+                              </div> */}
                             </div>
                           ) : (
                             <span className="text-muted-foreground">No payments</span>
@@ -3451,9 +3637,7 @@ const PayrollManagement = () => {
 
                     <TableCell>
                       <div>
-                        <div className="text-right">
-                          {formatCurrency(user.dueAmount || 0)}
-                        </div>
+                        <div className="text-right">{formatCurrency(user.dueAmount || 0)}</div>
                       </div>
                     </TableCell>
 
@@ -3534,6 +3718,86 @@ const PayrollManagement = () => {
           </Table>
         </div>
       </Card>
+
+      <Dialog open={isAddPaymentOpen} onOpenChange={setIsAddPaymentOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add New Payment</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="role">Select Role</Label>
+              <Select
+                value={addPaymentForm.role}
+                onValueChange={(value) => {
+                  setAddPaymentForm((prev) => ({ ...prev, role: value, userId: "" }))
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="supervisor">Supervisor</SelectItem>
+                  <SelectItem value="employee">Employee</SelectItem>
+                  <SelectItem value="client">Client</SelectItem>
+                  <SelectItem value="supplier">Supplier</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {addPaymentForm.role && (
+              <div className="grid gap-2">
+                <Label htmlFor="user">Select {addPaymentForm.role}</Label>
+                <Select
+                  value={addPaymentForm.userId}
+                  onValueChange={(value) => {
+                    setAddPaymentForm((prev) => ({ ...prev, userId: value }))
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={`Choose a ${addPaymentForm.role}`} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getUsersByRole(addPaymentForm.role).map((user) => (
+                      <SelectItem key={user._id} value={user._id}>
+                        {user.name} - {user.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="grid gap-2">
+              <Label htmlFor="amount">Payment Amount</Label>
+              <Input
+                id="amount"
+                type="number"
+                placeholder="Enter amount"
+                value={addPaymentForm.amount}
+                onChange={(e) => setAddPaymentForm((prev) => ({ ...prev, amount: e.target.value }))}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="description">Description (Optional)</Label>
+              <Input
+                id="description"
+                placeholder="Payment description"
+                value={addPaymentForm.description}
+                onChange={(e) => setAddPaymentForm((prev) => ({ ...prev, description: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsAddPaymentOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddPayment}>Add Payment</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
