@@ -478,7 +478,7 @@ export default function EmployeesManagement() {
           <CardContent className="p-6">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
-                <Avatar className="h-12 w-12">
+                <Avatar className="h-12 w-12 hidden">
                   <AvatarImage src={employee.avatar || "/placeholder.svg"} alt={employee.name} />
                   <AvatarFallback>
                     {employee.name

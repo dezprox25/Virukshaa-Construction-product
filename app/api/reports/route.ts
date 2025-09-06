@@ -11,12 +11,14 @@ export async function GET(request: Request) {
     const type = searchParams.get('type') as 'client' | 'supervisor' | 'employee' | 'supplier' | null;
     const search = searchParams.get('search') || '';
     const supervisorId = searchParams.get('supervisorId') || '';
+    const role = searchParams.get('role') || '';
 
     await connectToDB();
 
     const query: any = {};
     if (type) query.type = type;
-    if (supervisorId) query.supervisorId = supervisorId;
+    // Only filter by supervisorId if not an admin
+    if (supervisorId && role !== 'admin') query.supervisorId = supervisorId;
     if (search) {
       query.$or = [
         { title: { $regex: search, $options: 'i' } },

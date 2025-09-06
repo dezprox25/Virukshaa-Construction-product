@@ -4,8 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Search, FileText, Trash2, Edit, X, Save, Loader2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Search, FileText, Trash2, Edit, X, Save, Loader2, Image } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 
@@ -21,6 +21,18 @@ interface Report {
   // optional relational fields that some reports may include
   supervisorId?: string;
   projectId?: string;
+  siteUpdate?: string;
+  employeeSummary?: string;
+  queries?: string;
+  employees?: string[];
+  attachments?: {
+    fileName: string;
+    fileSize: number;
+    fileType: string;
+    fileUrl: string;
+  }[];
+  // Debug function to validate report structure
+  validate?: () => boolean;
 }
 
 // Minimal view model for material requests (supplier tab)
@@ -60,6 +72,7 @@ const ReportManagement = () => {
   const [materialRequests, setMaterialRequests] = useState<MaterialRequestVM[]>([]);
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
   const [projects, setProjects] = useState<ProjectMini[]>([]);
+  const [employees, setEmployees] = useState<{_id: string, name: string}[]>([]);
   const [counts, setCounts] = useState<{ client: number; supervisor: number; supplier: number }>({ client: 0, supervisor: 0, supplier: 0 });
   const [searchTerm, setSearchTerm] = useState('');
   const [editingReport, setEditingReport] = useState<Report | null>(null);
@@ -71,6 +84,10 @@ const ReportManagement = () => {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [reportDeleteOpen, setReportDeleteOpen] = useState(false);
   const [reportDeleteTargetId, setReportDeleteTargetId] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string>('');
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewFileName, setPreviewFileName] = useState('');
 
   // Fetch reports from the API
   const fetchReports = useCallback(async () => {
@@ -95,9 +112,13 @@ const ReportManagement = () => {
         const params = new URLSearchParams();
         params.append('type', activeTab);
         if (searchTerm) params.append('search', searchTerm);
+        // Add role parameter to ensure admin access
+        const role = typeof window !== 'undefined' ? localStorage.getItem('userRole') : null;
+        if (role) params.append('role', role);
         const response = await fetch(`${API_BASE_URL}?${params.toString()}`, { cache: 'no-store' });
         if (!response.ok) throw new Error('Failed to fetch reports');
         const data = await response.json();
+        console.log('Fetched reports:', data); // Debug log to check report data
         setReports(data);
       }
     } catch (err) {
@@ -150,21 +171,29 @@ const ReportManagement = () => {
     refreshCounts();
   }, [refreshCounts]);
 
-  // Load supervisors for name resolution
+  // Load supervisors and employees for name resolution
   useEffect(() => {
-    const loadSupervisors = async () => {
+    const loadUsers = async () => {
       try {
-        const res = await fetch('/api/supervisors', { cache: 'no-store' });
-        if (!res.ok) return;
-        const data = await res.json();
-        // Map only fields we need
-        setSupervisors(Array.isArray(data) ? data.map((s: any) => ({ _id: s._id, name: s.name })) : []);
+        const [supervisorsRes, employeesRes] = await Promise.all([
+          fetch('/api/supervisors', { cache: 'no-store' }),
+          fetch('/api/employees', { cache: 'no-store' })
+        ]);
+        
+        if (supervisorsRes.ok) {
+          const supervisorsData = await supervisorsRes.json();
+          setSupervisors(Array.isArray(supervisorsData) ? supervisorsData.map((s: any) => ({ _id: s._id, name: s.name })) : []);
+        }
+
+        if (employeesRes.ok) {
+          const employeesData = await employeesRes.json();
+          setEmployees(Array.isArray(employeesData) ? employeesData.map((e: any) => ({ _id: e._id, name: e.name })) : []);
+        }
       } catch (e) {
-        // silent fail; names just won't resolve
-        console.error('Failed to load supervisors', e);
+        console.error('Failed to load users', e);
       }
     };
-    loadSupervisors();
+    loadUsers();
   }, []);
 
   // Load projects for title resolution
@@ -600,7 +629,11 @@ const ReportManagement = () => {
                             {Array.isArray((report as any).employees) && (report as any).employees.length > 0 && (
                               <>
                                 <div className="col-span-1 text-muted-foreground">Employees</div>
-                                <div className="col-span-2">{(report as any).employees.join(', ')}</div>
+                                <div className="col-span-2">
+                                  {(report as any).employees.map((empId: string) => 
+                                    employees.find(e => e._id === empId)?.name || empId
+                                  ).join(', ')}
+                                </div>
                               </>
                             )}
                           </div>
@@ -612,6 +645,37 @@ const ReportManagement = () => {
                                 {report.content}
                               </p>
                             </div>
+                            {console.log('Report attachments:', report.attachments) /* Debug log */}
+                            {report.attachments && report.attachments.length > 0 && (
+                              <div className="mt-4">
+                                <h5 className="text-sm font-medium mb-2">Attachments:</h5>
+                                <div className="flex flex-wrap gap-2">
+                                  {report.attachments.map((attachment, index) => (
+                                    <div
+                                      key={index}
+                                      className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-gray-100 hover:bg-gray-200 transition-colors cursor-pointer"
+                                      onClick={() => {
+                                        if (attachment.fileType.startsWith('image/')) {
+                                          setPreviewLoading(true);
+                                          setPreviewUrl(attachment.fileUrl);
+                                          setPreviewFileName(attachment.fileName);
+                                          setPreviewOpen(true);
+                                        } else {
+                                          window.open(attachment.fileUrl, '_blank');
+                                        }
+                                      }}
+                                    >
+                                      {attachment.fileType.startsWith('image/') ? (
+                                        <Image className="w-4 h-4 mr-1" />
+                                      ) : (
+                                        <FileText className="w-4 h-4 mr-1" />
+                                      )}
+                                      {attachment.fileName}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -687,6 +751,36 @@ const ReportManagement = () => {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Image Preview Modal */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="sm:max-w-[800px] h-auto relative">
+          <h3 className="text-lg font-semibold mb-2 pr-8 truncate">{previewFileName}</h3>
+          <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </DialogClose>
+          <div className="relative w-full h-full flex items-center justify-center mt-6">
+            {previewLoading ? (
+              <div className="flex items-center justify-center p-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+              </div>
+            ) : (
+              <img
+                src={previewUrl}
+                alt="Preview"
+                className="max-w-full max-h-[80vh] object-contain"
+                onLoad={() => setPreviewLoading(false)}
+                onError={(e) => {
+                  e.currentTarget.src = '/placeholder.svg';
+                  setPreviewLoading(false);
+                  toast.error('Failed to load image preview');
+                }}
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

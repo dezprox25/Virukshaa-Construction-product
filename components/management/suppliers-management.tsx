@@ -178,7 +178,35 @@ const SuppliersManagement: React.FC = () => {
 
   useEffect(() => {
     fetchSuppliers()
+    fetchProjects()
   }, [])
+
+  useEffect(() => {
+    if (selectedSupplier?._id) {
+      fetchSupplierMaterials(selectedSupplier._id)
+    }
+  }, [selectedSupplier?._id])
+
+  const fetchSupplierMaterials = async (supplierId: string) => {
+    try {
+      const response = await fetch(`/api/suppliers/${supplierId}/materials`)
+      if (!response.ok) throw new Error('Failed to fetch supplier materials')
+      const data = await response.json()
+      
+      const materialsObj: Record<string, ProjectMaterialLocal[]> = {}
+      data.forEach((material: ProjectMaterialLocal) => {
+        if (!materialsObj[material.projectId]) {
+          materialsObj[material.projectId] = []
+        }
+        materialsObj[material.projectId].push(material)
+      })
+      
+      setProjectMaterials(materialsObj)
+    } catch (error) {
+      console.error('Error fetching supplier materials:', error)
+      toast.error('Failed to load supplier materials')
+    }
+  }
 
   const fetchSuppliers = async () => {
     try {
@@ -816,7 +844,7 @@ const SuppliersManagement: React.FC = () => {
           <CardContent className="p-6">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
-                <Avatar className="h-12 w-12">
+                <Avatar className="h-12 w-12 hidden">
                   <AvatarImage
                     src={supplier.avatar || `https://avatar.vercel.sh/${supplier.email}.png`}
                     alt={supplier.companyName}
@@ -1938,6 +1966,7 @@ const SuppliersManagement: React.FC = () => {
                       })}
 
                       {/* Empty State */}
+                      
                       {Object.keys(projectMaterials).length === 0 && (
                         <div className="text-center py-10 rounded-lg border border-dashed bg-muted/20 space-y-2">
                           <Building2 className="w-10 h-10 mx-auto text-muted-foreground mb-1" />

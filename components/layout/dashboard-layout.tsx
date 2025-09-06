@@ -48,7 +48,7 @@ export default function DashboardLayout({
   onSectionChange,
 }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [adminProfile, setAdminProfile] = useState<{ adminName: string; email: string } | null>(null)
+  const [adminProfile, setAdminProfile] = useState<{ adminName: string; email: string; profileImage?: string } | null>(null)
   const [profileName, setProfileName] = useState<string>("")
   const [profileEmail, setProfileEmail] = useState<string>("")
   const [profileData, setProfileData] = useState<Record<string, any> | null>(null)
@@ -86,7 +86,8 @@ export default function DashboardLayout({
         if (isMounted) {
           setAdminProfile({
             adminName: data.adminName,
-            email: data.email
+            email: data.email,
+            profileImage: data.profileImage
           })
         }
       } catch (error) {
@@ -147,7 +148,17 @@ export default function DashboardLayout({
         if (role === 'admin') {
           setProfileName(adminProfile?.adminName || 'Admin')
           setProfileEmail(adminProfile?.email || emailLS || '')
-          setProfileData(adminProfile ? { role: 'admin', ...adminProfile } : { role: 'admin', email: emailLS })
+          setProfileData(adminProfile ? 
+            { 
+              role: 'admin', 
+              ...adminProfile,
+              profileImage: adminProfile.profileImage || '/placeholder-user.jpg'
+            } : 
+            { 
+              role: 'admin', 
+              email: emailLS,
+              profileImage: '/placeholder-user.jpg'
+            })
           return
         }
 
@@ -326,8 +337,10 @@ export default function DashboardLayout({
                 <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                   <Avatar className="h-8 w-8">
                     <AvatarImage 
-                      src={"/placeholder-user.jpg"} 
-                      alt="User" 
+                      src={profileData?.avatar || 
+                           (userRole === 'admin' && adminProfile?.profileImage) || 
+                           '/placeholder-user.jpg'} 
+                      alt={`${userRole.charAt(0).toUpperCase() + userRole.slice(1)} Profile`}
                       className="object-cover"
                     />
                     <AvatarFallback>{userRole.charAt(0).toUpperCase()}</AvatarFallback>
@@ -385,15 +398,19 @@ export default function DashboardLayout({
         <div className="absolute top-4 right-20 z-10 flex gap-2">
           {backgroundImage && (
             <button
+              type="button"
               onClick={() => {
                 setBackgroundImage(null);
                 localStorage.removeItem('dashboardBackground');
+                // Reset the file input
+                const fileInput = document.getElementById('background-upload') as HTMLInputElement;
+                if (fileInput) fileInput.value = '';
                 toast({
                   title: 'Background Removed',
                   description: 'Dashboard background has been reset to default.',
                 });
               }}
-              className="inline-flex items-center gap-2 px-3 py-2 bg-white/80 hover:bg-white/90 rounded-md shadow-sm transition-colors text-red-600 hover:text-red-700"
+              className="inline-flex items-center hidden gap-2 px-3 py-2 bg-white/80 hover:bg-white/90 rounded-md shadow-sm transition-colors text-red-600 hover:text-red-700"
             >
               <X className="w-4 h-4" />
               <span className="text-sm">Remove</span>
@@ -419,6 +436,7 @@ export default function DashboardLayout({
                       description: 'Please select an image under 5MB.',
                       variant: 'destructive',
                     });
+                    e.target.value = '';
                     return;
                   }
 
@@ -429,6 +447,7 @@ export default function DashboardLayout({
                       description: 'Please select an image file.',
                       variant: 'destructive',
                     });
+                    e.target.value = '';
                     return;
                   }
 
@@ -441,10 +460,19 @@ export default function DashboardLayout({
                     body: formData,
                   });
                   
-                  if (!response.ok) throw new Error('Upload failed');
-                  
                   const data = await response.json();
+                  
+                  if (!response.ok) {
+                    throw new Error(data.error || 'Upload failed');
+                  }
+                  
+                  if (!data.fileUrl) {
+                    throw new Error('No file URL received from server');
+                  }
+
                   setBackgroundImage(data.fileUrl);
+                  localStorage.setItem('dashboardBackground', data.fileUrl);
+                  
                   toast({
                     title: 'Background Updated',
                     description: 'Dashboard background has been changed successfully.',
