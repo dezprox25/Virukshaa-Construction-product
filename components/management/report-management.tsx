@@ -756,8 +756,9 @@ const ReportManagement = () => {
 
       {/* Image Preview Modal */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="sm:max-w-[800px] h-auto relative">
-          <h3 className="text-lg font-semibold mb-2 pr-8 truncate">{previewFileName}</h3>
+        <DialogContent className="sm:max-w-[800px] h-auto absolute" aria-describedby="preview-description">
+          <DialogTitle className="text-lg font-semibold mb-2 pr-8 truncate">{previewFileName}</DialogTitle>
+          <DialogDescription id="preview-description" className="sr-only">Preview of {previewFileName}</DialogDescription>
           <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
             <X className="h-4 w-4" />
             <span className="sr-only">Close</span>
