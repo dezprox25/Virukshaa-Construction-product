@@ -29,7 +29,10 @@ import {
   Settings,
   LogOut,
   Truck,
+  Image,
+  X
 } from "lucide-react"
+import { useToast } from "@/components/ui/use-toast"
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -50,6 +53,23 @@ export default function DashboardLayout({
   const [profileEmail, setProfileEmail] = useState<string>("")
   const [profileData, setProfileData] = useState<Record<string, any> | null>(null)
   const [lastUpdated, setLastUpdated] = useState<number>(Date.now())
+  const [backgroundImage, setBackgroundImage] = useState<string | null>(null)
+  const { toast } = useToast()
+
+  // Load saved background image
+  useEffect(() => {
+    const savedBackground = localStorage.getItem('dashboardBackground')
+    if (savedBackground) {
+      setBackgroundImage(savedBackground)
+    }
+  }, [])
+
+  // Save background image when it changes
+  useEffect(() => {
+    if (backgroundImage) {
+      localStorage.setItem('dashboardBackground', backgroundImage)
+    }
+  }, [backgroundImage])
   const router = useRouter()
 
   // Fetch admin profile data with auto-update
@@ -301,13 +321,15 @@ export default function DashboardLayout({
           </div>
 
           <div className="flex items-center gap-4">
-          
-
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src="/placeholder-user.jpg" alt="User" />
+                    <AvatarImage 
+                      src={"/placeholder-user.jpg"} 
+                      alt="User" 
+                      className="object-cover"
+                    />
                     <AvatarFallback>{userRole.charAt(0).toUpperCase()}</AvatarFallback>
                   </Avatar>
                 </Button>
@@ -359,11 +381,92 @@ export default function DashboardLayout({
           </div>
         </header>
 
+        {/* Background Image Upload */}
+        <div className="absolute top-4 right-20 z-10 flex gap-2">
+          {backgroundImage && (
+            <button
+              onClick={() => {
+                setBackgroundImage(null);
+                localStorage.removeItem('dashboardBackground');
+                toast({
+                  title: 'Background Removed',
+                  description: 'Dashboard background has been reset to default.',
+                });
+              }}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-white/80 hover:bg-white/90 rounded-md shadow-sm transition-colors text-red-600 hover:text-red-700"
+            >
+              <X className="w-4 h-4" />
+              <span className="text-sm">Remove</span>
+            </button>
+          )}
+          <label htmlFor="background-upload" className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 bg-white/80 hover:bg-white/90 rounded-md shadow-sm transition-colors">
+            <Image className="w-4 h-4" />
+            <span className="text-sm">Change Background</span>
+          </label>
+          <input
+            id="background-upload"
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                try {
+                  // Validate file size (5MB limit)
+                  if (file.size > 5 * 1024 * 1024) {
+                    toast({
+                      title: 'File Too Large',
+                      description: 'Please select an image under 5MB.',
+                      variant: 'destructive',
+                    });
+                    return;
+                  }
+
+                  // Validate file type
+                  if (!file.type.startsWith('image/')) {
+                    toast({
+                      title: 'Invalid File Type',
+                      description: 'Please select an image file.',
+                      variant: 'destructive',
+                    });
+                    return;
+                  }
+
+                  const formData = new FormData();
+                  formData.append('file', file);
+                  formData.append('type', 'background');
+                  
+                  const response = await fetch('/api/admin/upload-logo', {
+                    method: 'POST',
+                    body: formData,
+                  });
+                  
+                  if (!response.ok) throw new Error('Upload failed');
+                  
+                  const data = await response.json();
+                  setBackgroundImage(data.fileUrl);
+                  toast({
+                    title: 'Background Updated',
+                    description: 'Dashboard background has been changed successfully.',
+                  });
+                } catch (error) {
+                  console.error('Background upload error:', error);
+                  toast({
+                    title: 'Upload Failed',
+                    description: 'Failed to upload background image. Please try again.',
+                    variant: 'destructive',
+                  });
+                }
+              }
+            }}
+          />
+        </div>
+
         {/* Main Content Area */}
         <main
           className="flex-1 overflow-auto p-6"
           style={{
-            backgroundImage: 'url(/virukshaa3.png)',
+            backgroundImage: `url(${backgroundImage || '/virukshaa3.png'})`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
           }}

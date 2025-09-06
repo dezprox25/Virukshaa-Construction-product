@@ -27,7 +27,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine folder based on type
-    const folder = type === 'logo' ? 'admin/logos' : 'admin/profiles'
+    let folder = 'admin/profiles'
+    if (type === 'logo') folder = 'admin/logos'
+    else if (type === 'background') folder = 'admin/backgrounds'
 
     // Upload to Cloudflare R2
     const uploadResult = await uploadToR2(file, folder)
