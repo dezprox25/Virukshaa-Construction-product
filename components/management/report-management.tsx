@@ -645,7 +645,6 @@ const ReportManagement = () => {
                                 {report.content}
                               </p>
                             </div>
-                            {console.log('Report attachments:', report.attachments) /* Debug log */}
                             {report.attachments && report.attachments.length > 0 && (
                               <div className="mt-4">
                                 <h5 className="text-sm font-medium mb-2">Attachments:</h5>

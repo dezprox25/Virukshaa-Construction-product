@@ -1244,65 +1244,66 @@ export default function ClientsManagement() {
     <>
       <div className="space-y-6">
         {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Clients</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-base sm:text-sm font-medium">Total Clients</CardTitle>
+              <Users className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totalClients}</div>
-              <p className="text-xs text-muted-foreground">Registered clients</p>
+              <div className="text-3xl sm:text-2xl font-bold">{totalClients}</div>
+              <p className="text-sm sm:text-xs text-muted-foreground">Registered clients</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Clients</CardTitle>
-              <CheckCircle className="h-4 w-4 text-green-600" />
+              <CardTitle className="text-base sm:text-sm font-medium">Active Clients</CardTitle>
+              <CheckCircle className="h-5 w-5 sm:h-4 sm:w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{activeClients}</div>
-              <p className="text-xs text-muted-foreground">Currently active</p>
+              <div className="text-3xl sm:text-2xl font-bold text-green-600">{activeClients}</div>
+              <p className="text-sm sm:text-xs text-muted-foreground">Currently active</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Inactive Clients</CardTitle>
-              <XCircle className="h-4 w-4 text-red-600" />
+              <CardTitle className="text-base sm:text-sm font-medium">Inactive Clients</CardTitle>
+              <XCircle className="h-5 w-5 sm:h-4 sm:w-4 text-red-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">{inactiveClients}</div>
-              <p className="text-xs text-muted-foreground">Currently inactive</p>
+              <div className="text-3xl sm:text-2xl font-bold text-red-600">{inactiveClients}</div>
+              <p className="text-sm sm:text-xs text-muted-foreground">Currently inactive</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-              <IndianRupee className="h-4 w-4 text-blue-600" />
+              <CardTitle className="text-base sm:text-sm font-medium">Total Revenue</CardTitle>
+              <IndianRupee className="h-5 w-5 sm:h-4 sm:w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">₹{totalRevenue.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">Total project value</p>
+              <div className="text-3xl sm:text-2xl font-bold text-blue-600">₹{totalRevenue.toLocaleString()}</div>
+              <p className="text-sm sm:text-xs text-muted-foreground">Total project value</p>
             </CardContent>
           </Card>
         </div>
 
         {/* Header with Actions */}
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-bold tracking-tight">Clients</h1>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <h1 className="text-4xl sm:text-3xl font-bold tracking-tight">Clients</h1>
             <Button
               onClick={() => {
                 setLoading(true)
                 fetchClients()
               }}
-              className="ml-2"
+              className="ml-2 h-12 w-12 sm:h-10 sm:w-10"
               disabled={loading}
               title="Refresh clients"
+              variant="outline"
             >
               {loading ? (
                 <svg
-                  className="animate-spin h-5 w-5 text-blue-600"
+                  className="animate-spin h-6 w-6 sm:h-5 sm:w-5 text-blue-600"
                   xmlns="http://www.w3.org/2000/svg"
                   fill="none"
                   viewBox="0 0 24 24"
@@ -1315,14 +1316,14 @@ export default function ClientsManagement() {
                   ></path>
                 </svg>
               ) : (
-                <RefreshCw className="w-5 h-5" />
+                <RefreshCw className="h-6 w-6 sm:h-5 sm:w-5" />
               )}
             </Button>
           </div>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
-              <Button onClick={resetForm}>
-                <Plus className="w-4 h-4 mr-2" />
+              <Button onClick={resetForm} className="w-full sm:w-auto h-12 sm:h-10 text-base sm:text-sm">
+                <Plus className="h-5 w-5 sm:h-4 sm:w-4 mr-2" />
                 Add Client
               </Button>
             </DialogTrigger>
@@ -1563,20 +1564,20 @@ export default function ClientsManagement() {
 
         {/* Filters and View Toggle */}
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          <div className="flex flex-col sm:flex-row gap-4 flex-1">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+          <div className="flex flex-col sm:flex-row gap-4 w-full sm:flex-1">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-5 w-5 sm:h-4 sm:w-4" />
               <Input
                 placeholder="Search clients..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
+                className="pl-10 h-11 sm:h-10 text-base sm:text-sm"
               />
             </div>
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-muted-foreground" />
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Filter className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground" />
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-32">
+                <SelectTrigger className="w-full sm:w-32 h-11 sm:h-10">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1586,27 +1587,27 @@ export default function ClientsManagement() {
                 </SelectContent>
               </Select>
             </div>
-            <Badge variant="secondary" className="self-center">
+            <Badge variant="secondary" className="self-center h-7 text-base sm:text-sm">
               {filteredClients.length} Total
             </Badge>
           </div>
           {/* View Toggle */}
-          <div className="flex items-center gap-2 bg-muted p-1 rounded-lg">
+          <div className="flex items-center gap-2 bg-muted p-1 rounded-lg w-full sm:w-auto justify-center sm:justify-start">
             <Button
               variant={viewMode === "grid" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("grid")}
-              className="h-8 px-3"
+              className="h-10 sm:h-8 px-4 sm:px-3 flex-1 sm:flex-none"
             >
-              <Grid3X3 className="w-4 h-4" />
+              <Grid3X3 className="h-5 w-5 sm:h-4 sm:w-4" />
             </Button>
             <Button
               variant={viewMode === "list" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("list")}
-              className="h-8 px-3"
+              className="h-10 sm:h-8 px-4 sm:px-3 flex-1 sm:flex-none"
             >
-              <List className="w-4 h-4" />
+              <List className="h-5 w-5 sm:h-4 sm:w-4" />
             </Button>
           </div>
         </div>

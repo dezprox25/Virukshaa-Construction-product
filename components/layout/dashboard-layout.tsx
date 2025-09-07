@@ -418,7 +418,7 @@ export default function DashboardLayout({
           )}
           <label htmlFor="background-upload" className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 bg-white/80 hover:bg-white/90 rounded-md shadow-sm transition-colors">
             <Image className="w-4 h-4" />
-            <span className="text-sm">Change Background</span>
+            <span className="text-sm lg:block hidden">Change Background</span>
           </label>
           <input
             id="background-upload"

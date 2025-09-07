@@ -1,15 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import connectToDB from "@/lib/db";
 import Supervisor from "@/models/Supervisor";
 
 // GET single supervisor
 export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     await connectToDB();
-    const supervisor = await Supervisor.findById(params.id);
+    const supervisor = await Supervisor.findById(id);
     
     if (!supervisor) {
       return NextResponse.json(
@@ -35,11 +36,11 @@ import { Types } from 'mongoose';
 
 // UPDATE supervisor
 export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = params;
   try {
+    const { id } = await params;
     if (!Types.ObjectId.isValid(id)) {
       return NextResponse.json({ message: 'Invalid supervisor ID' }, { status: 400 });
     }
@@ -138,12 +139,13 @@ export async function PUT(
 
 // DELETE supervisor
 export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     await connectToDB();
-    const deletedSupervisor = await Supervisor.findByIdAndDelete(params.id);
+    const deletedSupervisor = await Supervisor.findByIdAndDelete(id);
     
     if (!deletedSupervisor) {
       return NextResponse.json(

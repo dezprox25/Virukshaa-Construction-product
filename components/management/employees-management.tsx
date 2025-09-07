@@ -748,51 +748,51 @@ export default function EmployeesManagement() {
     <div className="space-y-6">
       <Toaster richColors />
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Employees</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-base sm:text-sm font-medium">Total Employees</CardTitle>
+            <Users className="h-5 w-5 sm:h-4 sm:w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalEmployees}</div>
-            <p className="text-xs text-muted-foreground">Active workforce</p>
+            <div className="text-3xl sm:text-2xl font-bold">{totalEmployees}</div>
+            <p className="text-sm sm:text-xs text-muted-foreground">Active workforce</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Shifts Today</CardTitle>
-            <Clock4 className="h-4 w-4 text-orange-600" />
+            <CardTitle className="text-base sm:text-sm font-medium">Total Shifts Today</CardTitle>
+            <Clock4 className="h-5 w-5 sm:h-4 sm:w-4 text-orange-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{totalShiftsToday}</div>
-            <p className="text-xs text-muted-foreground">Across daily employees</p>
+            <div className="text-3xl sm:text-2xl font-bold text-orange-600">{totalShiftsToday}</div>
+            <p className="text-sm sm:text-xs text-muted-foreground">Across daily employees</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Today's Salary Total</CardTitle>
-            <IndianRupee className="h-4 w-4 text-green-600" />
+            <CardTitle className="text-base sm:text-sm font-medium">Today's Salary Total</CardTitle>
+            <IndianRupee className="h-5 w-5 sm:h-4 sm:w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
+            <div className="text-3xl sm:text-2xl font-bold text-green-600">
               {formatINR(totalSalaryToday)}
             </div>
-            <p className="text-xs text-muted-foreground">Daily shifts total</p>
+            <p className="text-sm sm:text-xs text-muted-foreground">Daily shifts total</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Monthly Salary Total</CardTitle>
-            <IndianRupee className="h-4 w-4 text-teal-600" />
+            <CardTitle className="text-base sm:text-sm font-medium">Monthly Salary Total</CardTitle>
+            <IndianRupee className="h-5 w-5 sm:h-4 sm:w-4 text-teal-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-teal-600">
+            <div className="text-3xl sm:text-2xl font-bold text-teal-600">
               {formatINR(employees
                 .filter(e => e.workType === 'Monthly')
                 .reduce((sum, emp) => sum + (emp.salary || 0), 0))}
             </div>
-            <p className="text-xs text-muted-foreground">Monthly staff total</p>
+            <p className="text-sm sm:text-xs text-muted-foreground">Monthly staff total</p>
           </CardContent>
         </Card>
       </div>
@@ -800,7 +800,7 @@ export default function EmployeesManagement() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-2">
-          <h2 className="text-2xl font-bold">Employees Management</h2>
+          <h2 className="text-3xl sm:text-2xl font-bold">Employees Management</h2>
           <Button
             size="icon"
             variant="outline"
@@ -808,7 +808,7 @@ export default function EmployeesManagement() {
               setLoading(true)
               fetchEmployees()
             }}
-            className="ml-2"
+            className="ml-2 h-10 w-10 sm:h-9 sm:w-9"
             disabled={loading}
             title="Refresh employees"
           >
