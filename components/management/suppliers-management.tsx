@@ -71,7 +71,6 @@ interface Supplier {
   materialTypes: string[]
   supplyStartDate?: string
   address: string
-  status: "Active" | "Inactive"
   avatar?: string
   bankDetails?: BankDetail[]
   projectMaterials?: ProjectMaterial[]
@@ -109,7 +108,6 @@ const initialFormData = {
   materialTypes: [] as string[],
   supplyStartDate: undefined as Date | undefined,
   address: "",
-  status: "Active" as "Active" | "Inactive",
   avatar: "",
   bankDetails: [] as Array<{
     accountNumber?: string;
@@ -125,7 +123,6 @@ const initialFormData = {
 
 const SuppliersManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isDetailSheetOpen, setIsDetailSheetOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
@@ -167,14 +164,9 @@ const SuppliersManagement: React.FC = () => {
         supplier.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
         supplier.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
         supplier.phone.includes(searchTerm);
-
-      const matchesStatus = statusFilter === 'all' ||
-        (statusFilter === 'active' && supplier.status === 'Active') ||
-        (statusFilter === 'inactive' && supplier.status === 'Inactive');
-
-      return matchesSearch && matchesStatus;
+      return matchesSearch;
     });
-  }, [suppliers, searchTerm, statusFilter]);
+  }, [suppliers, searchTerm]);
 
   useEffect(() => {
     fetchSuppliers()
@@ -286,7 +278,6 @@ const SuppliersManagement: React.FC = () => {
       materialTypes: [...supplier.materialTypes],
       supplyStartDate: supplier.supplyStartDate ? new Date(supplier.supplyStartDate) : undefined,
       address: supplier.address,
-      status: supplier.status,
       avatar: supplier.avatar || "",
       bankDetails: supplier.bankDetails ? [...supplier.bankDetails] : [],
     })
@@ -789,22 +780,11 @@ const SuppliersManagement: React.FC = () => {
     }
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Active":
-        return "bg-green-100 text-green-800"
-      case "Inactive":
-        return "bg-red-100 text-red-800"
-      default:
-        return "bg-gray-100 text-gray-800"
-    }
-  }
+  
 
  
   // Calculate statistics
   const totalSuppliers = suppliers.length
-  const activeSuppliers = suppliers.filter((supplier) => supplier.status === "Active").length
-  const inactiveSuppliers = suppliers.filter((supplier) => supplier.status === "Inactive").length
 
   // Early loading state
   if (loading && suppliers.length === 0) {
@@ -849,7 +829,7 @@ const SuppliersManagement: React.FC = () => {
                   <p className="text-sm text-muted-foreground">{supplier.contactPerson}</p>
                 </div>
               </div>
-              <Badge className={getStatusColor(supplier.status)}>{supplier.status}</Badge>
+              
             </div>
             <div className="space-y-2 mb-4">
               <div className="flex items-center gap-2 text-sm">
@@ -963,7 +943,7 @@ const SuppliersManagement: React.FC = () => {
             <TableRow>
               <TableHead>Company</TableHead>
               <TableHead>Contact Person</TableHead>
-              <TableHead>Status</TableHead>
+              
               <TableHead>Materials</TableHead>
               <TableHead>Contact</TableHead>
               <TableHead>Actions</TableHead>
@@ -999,9 +979,7 @@ const SuppliersManagement: React.FC = () => {
                 <TableCell>
                   <div className="font-medium">{supplier.contactPerson}</div>
                 </TableCell>
-                <TableCell>
-                  <Badge className={getStatusColor(supplier.status)}>{supplier.status}</Badge>
-                </TableCell>
+                
                 <TableCell>
                   <div className="flex flex-wrap gap-1 max-w-xs">
                     {supplier.materialTypes.slice(0, 2).map((material) => (
@@ -1060,7 +1038,7 @@ const SuppliersManagement: React.FC = () => {
     <div className="space-y-6">
       <Toaster richColors />
       {/* Statistics Cards */}
-      <div className="md:grid hidden sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="md:grid hidden sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Suppliers</CardTitle>
@@ -1071,26 +1049,7 @@ const SuppliersManagement: React.FC = () => {
             <p className="text-xs text-muted-foreground">Registered suppliers</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Suppliers</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{activeSuppliers}</div>
-            <p className="text-xs text-muted-foreground">Currently active</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Inactive Suppliers</CardTitle>
-            <XCircle className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{inactiveSuppliers}</div>
-            <p className="text-xs text-muted-foreground">Currently inactive</p>
-          </CardContent>
-        </Card>
+        
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Credit Suppliers</CardTitle>
@@ -1572,21 +1531,7 @@ const SuppliersManagement: React.FC = () => {
             />
           </div>
 
-          {/* Filter */}
-          <div className="flex items-center gap-2 w-full sm:w-48 lg:w-48">
-            <Filter className="w-4 h-4 text-muted-foreground" />
-            <select
-              value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter(e.target.value as "all" | "active" | "inactive")
-              }
-              className="p-2 border rounded-md w-full"
-            >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </div>
+          
 
           {/* Badge */}
           <Badge variant="default" className="ml-auto">
@@ -1660,16 +1605,6 @@ const SuppliersManagement: React.FC = () => {
                   <div className="flex-1">
                     <SheetTitle className="text-2xl">{selectedSupplier.companyName}</SheetTitle>
                     <p className="text-muted-foreground">{selectedSupplier.contactPerson}</p>
-                    <div className="mt-1">
-                      <Badge className={getStatusColor(selectedSupplier.status)} variant="secondary">
-                        {selectedSupplier.status === "Active" ? (
-                          <CheckCircle className="w-3 h-3 mr-1" />
-                        ) : (
-                          <XCircle className="w-3 h-3 mr-1" />
-                        )}
-                        {selectedSupplier.status}
-                      </Badge>
-                    </div>
                   </div>
                   <Button
                     variant="outline"

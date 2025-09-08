@@ -53,7 +53,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const allowedFields: (keyof ISupplier)[] = [
       'companyName', 'contactPerson', 'email', 'phone', 
       'materialTypes', 'projectMaterials', 'address', 
-      'supplyStartDate', 'avatar', 'totalPaid', 'dueAmount', 'lastPaymentDate', 'status'
+      'supplyStartDate', 'avatar', 'totalPaid', 'dueAmount', 'lastPaymentDate'
     ];
 
     // Process projectMaterials if provided

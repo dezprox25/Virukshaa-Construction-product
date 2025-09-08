@@ -17,7 +17,6 @@ export interface ISupplier extends Document {
   projectMaterials?: IProjectMaterial[];
   supplyStartDate?: Date;
   address: string;
-  status: 'Active' | 'Inactive';
   totalPaid?: number;
   dueAmount?: number;
   lastPaymentDate?: Date;
@@ -86,11 +85,6 @@ const supplierSchema = new Schema<ISupplier>({
     },
     isPrimary: { type: Boolean, default: false }
   }],
-  status: {
-    type: String,
-    enum: ['Active', 'Inactive'],
-    default: 'Active'
-  },
   totalPaid: { type: Number, default: 0 },
   dueAmount: { type: Number, default: 0 },
   lastPaymentDate: { type: Date },
