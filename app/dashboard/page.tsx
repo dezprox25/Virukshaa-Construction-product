@@ -26,14 +26,22 @@ export default function Dashboard() {
 
   const renderDashboard = () => {
     switch (userRole) {
-      case "admin":
+      case "superadmin":
         return <AdminDashboard />
       case "supervisor":
         return <SupervisorDashboard />
       case "client":
         return <ClientDashboard />
       default:
-        return <AdminDashboard />
+        return (
+          <div className="flex items-center justify-center min-h-screen">
+            <div className="text-center space-y-2">
+              <h1 className="text-2xl font-semibold">Not Found</h1>
+              <p className="text-muted-foreground">Role not recognized. Please login again.</p>
+              <a href="/" className="text-blue-600 hover:underline">Go to Login</a>
+            </div>
+          </div>
+        )
     }
   }
 

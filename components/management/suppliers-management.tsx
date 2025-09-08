@@ -280,6 +280,16 @@ const SuppliersManagement: React.FC = () => {
     }
   }
 
+  // Remove a selected material from the form selection
+  const removeMaterial = (material: string, e?: React.MouseEvent) => {
+    // Prevent bubbling to popover trigger or parent handlers
+    if (e) e.stopPropagation()
+    setFormData((prev) => ({
+      ...prev,
+      materialTypes: prev.materialTypes.filter((m) => m !== material),
+    }))
+  }
+
   const resetForm = () => {
     setFormData(initialFormData)
     setEditingSupplier(null)
@@ -1250,6 +1260,23 @@ const SuppliersManagement: React.FC = () => {
                     </Command>
                   </PopoverContent>
                 </Popover>
+                {formData.materialTypes.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {formData.materialTypes.map((material) => (
+                      <Badge key={material} variant="secondary" className="flex items-center gap-1 pr-1">
+                        <span>{material}</span>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${material}`}
+                          className="ml-1 rounded hover:bg-muted/60 p-0.5"
+                          onClick={(e) => removeMaterial(material, e)}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between items-center">

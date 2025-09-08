@@ -13,10 +13,10 @@ type ProjectMaterial = {
 // GET /api/suppliers/[id]/materials
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await ctx.params;
     
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json(
@@ -49,10 +49,10 @@ export async function GET(
 // POST /api/suppliers/[id]/materials
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await ctx.params;
     const { projectId, materialType, quantity, amount, date } = await request.json();
     
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -120,10 +120,10 @@ export async function POST(
 // DELETE /api/suppliers/[id]/materials
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await ctx.params;
     const { projectId, materialType } = await request.json();
     
     if (!mongoose.Types.ObjectId.isValid(id)) {

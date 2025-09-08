@@ -4,15 +4,15 @@ import Supplier, { ISupplier } from "@/models/SupplierModel";
 import { Types } from 'mongoose';
 
 type Params = {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 };
 
 export async function GET(request: Request, { params }: Params) {
   try {
     await dbConnect();
-    const { id } = params;
+    const { id } = await params;
 
     const supplier = await Supplier.findById(id);
     if (!supplier) {
@@ -32,8 +32,8 @@ export async function GET(request: Request, { params }: Params) {
   }
 }
 
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
-  const { id } = params;
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   try {
     if (!Types.ObjectId.isValid(id)) {
       return NextResponse.json({ message: 'Invalid supplier ID' }, { status: 400 });
@@ -119,7 +119,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 export async function DELETE(request: Request, { params }: Params) {
   try {
     await dbConnect();
-    const { id } = params;
+    const { id } = await params;
 
     const deletedSupplier = await Supplier.findByIdAndDelete(id);
 

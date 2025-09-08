@@ -4,9 +4,9 @@ import dbConnect from "@/lib/db"
 import Supplier from "@/models/SupplierModel"
 
 // POST /api/suppliers/[id]/projects - assign a project to a supplier
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params
+    const { id } = await ctx.params
     const { projectId } = await request.json()
 
     if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(projectId)) {
@@ -33,9 +33,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
 }
 
 // DELETE /api/suppliers/[id]/projects - unassign a project from a supplier
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params
+    const { id } = await ctx.params
     const { projectId } = await request.json()
 
     if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(projectId)) {
