@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: 'Virukshaa-Construction-product',
   description: 'One of the Dezprox company products under building',
   icons: {
-    icon: '/dezproxlogo.png',
+    icon: '/Viruksha-tab-Logo.png',
   },
 }
 
