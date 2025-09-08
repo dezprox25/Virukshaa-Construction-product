@@ -15,6 +15,7 @@ export interface ISupplier extends Document {
   phone: string;
   materialTypes: string[];
   projectMaterials?: IProjectMaterial[];
+  assignedProjects?: mongoose.Types.ObjectId[];
   supplyStartDate?: Date;
   address: string;
   totalPaid?: number;
@@ -69,6 +70,7 @@ const supplierSchema = new Schema<ISupplier>({
   username: { type: String, unique: true, sparse: true }, // Added to handle existing index
   materialTypes: [{ type: String, required: true }],
   projectMaterials: [projectMaterialSchema],
+  assignedProjects: [{ type: Schema.Types.ObjectId, ref: 'Project' }],
   supplyStartDate: { type: Date },
   address: { type: String, required: true },
   bankDetails: [{

@@ -72,6 +72,7 @@ interface Supplier {
   supplyStartDate?: string
   address: string
   avatar?: string
+  assignedProjects?: string[]
   bankDetails?: BankDetail[]
   projectMaterials?: ProjectMaterial[]
   createdAt: string
@@ -192,7 +193,19 @@ const SuppliersManagement: React.FC = () => {
         }
         materialsObj[material.projectId].push(material)
       })
-      
+      // Also ensure assigned projects render even if no materials
+      try {
+        const supRes = await fetch(`/api/suppliers/${supplierId}`)
+        if (supRes.ok) {
+          const sup = await supRes.json()
+          if (Array.isArray(sup.assignedProjects)) {
+            for (const pid of sup.assignedProjects) {
+              if (!materialsObj[pid]) materialsObj[pid] = []
+            }
+          }
+        }
+      } catch {}
+
       setProjectMaterials(materialsObj)
     } catch (error) {
       console.error('Error fetching supplier materials:', error)
@@ -221,6 +234,12 @@ const SuppliersManagement: React.FC = () => {
               date: pm.date
             })
           })
+        }
+        // Ensure assigned projects render even without materials
+        if (Array.isArray(supplier.assignedProjects)) {
+          for (const pid of supplier.assignedProjects) {
+            if (!projectMaterialsObj[pid]) projectMaterialsObj[pid] = []
+          }
         }
         return {
           ...supplier,
@@ -412,13 +431,31 @@ const SuppliersManagement: React.FC = () => {
     }
   }
 
-  const handleProjectSelect = (projectId: string) => {
+  const handleProjectSelect = async (projectId: string) => {
     setSelectedProjectForMaterial(projectId);
-    if (!projectMaterials[projectId]) {
-      setProjectMaterials((prev) => ({
+    if (!selectedSupplier?._id) return
+    try {
+      // Persist assignment
+      await fetch(`/api/suppliers/${selectedSupplier._id}/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId })
+      })
+      // Ensure empty bucket exists so it renders immediately
+      if (!projectMaterials[projectId]) {
+        setProjectMaterials((prev) => ({
+          ...prev,
+          [projectId]: [],
+        }));
+      }
+      // Update selected supplier local state
+      setSelectedSupplier(prev => prev ? ({
         ...prev,
-        [projectId]: [],
-      }));
+        assignedProjects: Array.from(new Set([...(prev.assignedProjects || []), projectId]))
+      }) : prev)
+    } catch (e) {
+      console.error('Failed to assign project', e)
+      toast.error('Failed to assign site to supplier')
     }
     // Initialize input state for this project if it doesn't exist
     if (!projectMaterialInputs[projectId]) {
@@ -676,6 +713,13 @@ const SuppliersManagement: React.FC = () => {
         )
       );
 
+      // Unassign project itself
+      await fetch(`/api/suppliers/${selectedSupplier._id}/projects`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId })
+      })
+
       // Update local state to remove the project and its materials
       setProjectMaterials(prev => {
         const updated = { ...prev };
@@ -685,12 +729,13 @@ const SuppliersManagement: React.FC = () => {
 
       // Update the projectMaterials in the selectedSupplier state
       if (selectedSupplier) {
-        const updatedProjectMaterials = { ...selectedSupplier.projectMaterials };
+        const updatedProjectMaterials = { ...selectedSupplier.projectMaterials } as any;
         delete updatedProjectMaterials[projectId];
 
         setSelectedSupplier({
           ...selectedSupplier,
-          projectMaterials: updatedProjectMaterials
+          projectMaterials: updatedProjectMaterials,
+          assignedProjects: (selectedSupplier.assignedProjects || []).filter(p => p !== projectId)
         });
       }
 
