@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 interface Report {
   _id: string;
   title: string;
-  type: 'client' | 'supervisor' | 'employee' | 'supplier';
+  type: 'supervisor' | 'employee' | 'supplier';
   content?: string;
   date: string;
   createdBy?: string;
@@ -67,13 +67,13 @@ const API_BASE_URL = '/api/reports';
 
 const ReportManagement = () => {
   const { data: session } = useSession();
-  const [activeTab, setActiveTab] = useState<'client' | 'supervisor' | 'supplier' | null>('supervisor');
+  const [activeTab, setActiveTab] = useState<'supervisor' | 'supplier' | null>('supervisor');
   const [reports, setReports] = useState<Report[]>([]);
   const [materialRequests, setMaterialRequests] = useState<MaterialRequestVM[]>([]);
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
   const [projects, setProjects] = useState<ProjectMini[]>([]);
   const [employees, setEmployees] = useState<{_id: string, name: string}[]>([]);
-  const [counts, setCounts] = useState<{ client: number; supervisor: number; supplier: number }>({ client: 0, supervisor: 0, supplier: 0 });
+  const [counts, setCounts] = useState<{ supervisor: number; supplier: number }>({ supervisor: 0, supplier: 0 });
   const [searchTerm, setSearchTerm] = useState('');
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [editedContent, setEditedContent] = useState('');
@@ -214,10 +214,9 @@ const ReportManagement = () => {
       ]);
       if (!reportsRes.ok) throw new Error('Failed to fetch reports for counts');
       const reportsData: Report[] = await reportsRes.json();
-      const next = { client: 0, supervisor: 0, supplier: 0 } as { client: number; supervisor: number; supplier: number };
+      const next = { supervisor: 0, supplier: 0 } as { supervisor: number; supplier: number };
       for (const r of reportsData) {
-        if (r.type === 'client') next.client++;
-        else if (r.type === 'supervisor') next.supervisor++;
+        if (r.type === 'supervisor') next.supervisor++;
       }
       if (supplierRes.ok) {
         const supplierData: any[] = await supplierRes.json();
@@ -395,8 +394,6 @@ const ReportManagement = () => {
 
   const renderReportType = (type: string) => {
     switch (type) {
-      case 'client':
-        return 'Client Report';
       case 'supervisor':
         return 'Supervisor Report';
       case 'supplier':
@@ -415,14 +412,14 @@ const ReportManagement = () => {
 
       {/* Report Type Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {['supervisor', 'client', 'supplier'].map((type) => {
+        {['supervisor', 'supplier'].map((type) => {
           const count = counts[type as keyof typeof counts];
           const isActive = activeTab === type;
 
           return (
             <Card
               key={type}
-              className={`cursor-pointer transition-colors ${isActive ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+              className={`cursor-pointer transition-colors ${isActive ? 'border-primary bg-primary/50 text-white' : 'hover:bg-muted/50'
                 }`}
               onClick={() => setActiveTab(type as any)}
             >
