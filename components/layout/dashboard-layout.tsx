@@ -148,14 +148,14 @@ export default function DashboardLayout({
         if (role === 'admin') {
           setProfileName(adminProfile?.adminName || 'Admin')
           setProfileEmail(adminProfile?.email || emailLS || '')
-          setProfileData(adminProfile ? 
-            { 
-              role: 'admin', 
+          setProfileData(adminProfile ?
+            {
+              role: 'admin',
               ...adminProfile,
               profileImage: adminProfile.profileImage || '/placeholder-user.jpg'
-            } : 
-            { 
-              role: 'admin', 
+            } :
+            {
+              role: 'admin',
               email: emailLS,
               profileImage: '/placeholder-user.jpg'
             })
@@ -273,10 +273,8 @@ export default function DashboardLayout({
   // bg-[#051118] 
   const Sidebar = ({ mobile = false }) => (
     <div className={`flex flex-col h-full ${mobile ? "w-full" : "w-64"} bg-[#fff0] shadow-md`}>
-      <div className="flex items-center gap-2 p-6">
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center">
-          <Building2 className="w-5 h-5 text-[#37db44]" />
-        </div>
+      <div className="flex items-center gap-0 p-6">
+        <img src="/virukshaa3.png" alt="" className="min-w-[20px] h-8" />
         <span className="font-bold text-xl text-[#37db44]">Virukshaa</span>
       </div>
 
@@ -294,6 +292,8 @@ export default function DashboardLayout({
           </Button>
         ))}
       </nav>
+      <div className="text-center text-[12px] py-2 text-muted-foreground">developed by <a href="http://dezprox.com" target="_blank" className="text-green-600" rel="noopener noreferrer">Dezprox</a></div>
+
     </div>
   )
 
@@ -336,10 +336,10 @@ export default function DashboardLayout({
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                   <Avatar className="h-8 w-8">
-                    <AvatarImage 
-                      src={profileData?.avatar || 
-                           (userRole === 'admin' && adminProfile?.profileImage) || 
-                           '/placeholder-user.jpg'} 
+                    <AvatarImage
+                      src={profileData?.avatar ||
+                        (userRole === 'admin' && adminProfile?.profileImage) ||
+                        '/placeholder-user.jpg'}
                       alt={`${userRole.charAt(0).toUpperCase() + userRole.slice(1)} Profile`}
                       className="object-cover"
                     />
@@ -454,25 +454,25 @@ export default function DashboardLayout({
                   const formData = new FormData();
                   formData.append('file', file);
                   formData.append('type', 'background');
-                  
+
                   const response = await fetch('/api/admin/upload-logo', {
                     method: 'POST',
                     body: formData,
                   });
-                  
+
                   const data = await response.json();
-                  
+
                   if (!response.ok) {
                     throw new Error(data.error || 'Upload failed');
                   }
-                  
+
                   if (!data.fileUrl) {
                     throw new Error('No file URL received from server');
                   }
 
                   setBackgroundImage(data.fileUrl);
                   localStorage.setItem('dashboardBackground', data.fileUrl);
-                  
+
                   toast({
                     title: 'Background Updated',
                     description: 'Dashboard background has been changed successfully.',

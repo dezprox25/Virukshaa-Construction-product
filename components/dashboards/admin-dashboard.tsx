@@ -200,14 +200,14 @@ export default function AdminDashboard() {
         { name: "reports", url: `${baseUrl}/api/reports` },
       ]
 
-      console.log(
-        "Fetching data from endpoints:",
-        endpoints.map((e) => e.url),
-      )
+      // console.log(
+      //   "Fetching data from endpoints:",
+      //   endpoints.map((e) => e.url),
+      // )
 
       const fetchPromises = endpoints.map(async ({ name, url }) => {
         try {
-          console.log(`[${name}] Starting fetch from:`, url)
+          // console.log(`[${name}] Starting fetch from:`, url)
           const response = await fetch(url)
           if (!response.ok) {
             const errorText = await response.text()
@@ -227,7 +227,7 @@ export default function AdminDashboard() {
             }
           }
           const responseData = await response.json()
-          console.log(`[${name}] Success response:`, responseData)
+          // console.log(`[${name}] Success response:`, responseData)
           return {
             name,
             data: responseData,
@@ -253,18 +253,18 @@ export default function AdminDashboard() {
 
       const results = await Promise.all(fetchPromises)
 
-      console.log("=== RAW API RESULTS ===")
+      // console.log("=== RAW API RESULTS ===")
       results.forEach((result, index) => {
-        console.log(`Result ${index + 1} (${result.name}):`, {
-          success: result.data?.success,
-          dataLength: Array.isArray(result.data?.data) ? result.data.data.length : "Not an array",
-          error: result.error,
-          sampleData: Array.isArray(result.data?.data) && result.data.data.length > 0 ? result.data.data[0] : "No data",
-        })
+        // console.log(`Result ${index + 1} (${result.name}):`, {
+          // success: result.data?.success,
+          // dataLength: Array.isArray(result.data?.data) ? result.data.data.length : "Not an array",
+          // error: result.error,
+          // sampleData: Array.isArray(result.data?.data) && result.data.data.length > 0 ? result.data.data[0] : "No data",
+        // })
       })
 
       const data = results.reduce<Partial<ApiData>>((acc, { name, data: responseData }) => {
-        console.log(`[${name}] Raw response:`, responseData)
+        // console.log(`[${name}] Raw response:`, responseData)
 
         let processedData = []
 
@@ -276,10 +276,10 @@ export default function AdminDashboard() {
           processedData = [responseData]
         }
 
-        console.log(`[${name}] Processed data:`, {
-          count: processedData.length,
-          sampleItem: processedData[0] || "No items",
-        })
+        // console.log(`[${name}] Processed data:`, {
+        //   count: processedData.length,
+        //   sampleItem: processedData[0] || "No items",
+        // })
 
         return {
           ...acc,
@@ -312,12 +312,12 @@ export default function AdminDashboard() {
         })
       }
 
-      console.log("User lookup map created:", allUsers.size, "users")
+      // console.log("User lookup map created:", allUsers.size, "users")
 
       // Enhanced payroll data processing with user resolution
       const payrollData = Array.isArray(data.payroll?.data)
         ? data.payroll.data.map((item: any) => {
-          console.log("Processing payroll item:", item)
+          // console.log("Processing payroll item:", item)
 
           let resolvedUser = item.user
 
@@ -330,7 +330,7 @@ export default function AdminDashboard() {
                 name: foundUser.name || foundUser.firstName + " " + foundUser.lastName || "Unknown User",
                 email: foundUser.email,
               }
-              console.log("Resolved user from ID:", item.user, "to:", resolvedUser)
+              // console.log("Resolved user from ID:", item.user, "to:", resolvedUser)
             } else {
               // Create a placeholder user object
               resolvedUser = {
@@ -338,7 +338,7 @@ export default function AdminDashboard() {
                 name: `User ${item.user.slice(-4)}`,
                 email: "unknown@example.com",
               }
-              console.log("Created placeholder user for ID:", item.user)
+              // console.log("Created placeholder user for ID:", item.user)
             }
           }
 
@@ -353,7 +353,7 @@ export default function AdminDashboard() {
         })
         : []
 
-      console.log("Enhanced payroll data:", payrollData)
+      // console.log("Enhanced payroll data:", payrollData)
 
       // Process data for the dashboard
       const dashboardUpdate: DashboardData = {
@@ -453,17 +453,17 @@ export default function AdminDashboard() {
           : [],
       }
 
-      console.log("=== FINAL DASHBOARD DATA ===", JSON.stringify(dashboardUpdate, null, 2))
+      // console.log("=== FINAL DASHBOARD DATA ===", JSON.stringify(dashboardUpdate, null, 2))
       setDashboardData(dashboardUpdate)
       toast.success("Dashboard data loaded successfully!")
     } catch (err: any) {
-      console.error("Error in fetchDashboardData:", err)
+      // console.error("Error in fetchDashboardData:", err)
       const errorMessage = err.message || "Failed to load dashboard data. Please try again later."
-      console.error("Error details:", {
-        message: err.message,
-        stack: err.stack,
-        name: err.name,
-      })
+      // console.error("Error details:", {
+      //   message: err.message,
+      //   stack: err.stack,
+      //   name: err.name,
+      // })
       setError(errorMessage)
       toast.error("Failed to load dashboard data")
     } finally {

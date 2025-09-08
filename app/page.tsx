@@ -117,15 +117,16 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Building2 className="w-6 h-6 text-white" />
+          <div className="mx-auto mb-4 rounded-lg flex items-center justify-center">
+            <img src="/virukshaa4.png" alt="" className="h-20 " />
+
           </div>
           <CardTitle className="text-2xl font-bold">Virukshaa Construction Product</CardTitle>
           <CardDescription>Construction Management System</CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="login" className="w-full">
-           
+
 
             <TabsContent value="login" className="space-y-4">
               <div className="space-y-2">
@@ -172,25 +173,24 @@ export default function LoginPage() {
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={isLoading}
                 >
-                  <option value="">Select a role</option> 
+                  <option value="">Select a role</option>
                   <option value="superadmin">Super Admin</option>
                   <option value="supervisor">Supervisor</option>
                   <option value="client">Client</option>
                 </select>
               </div>
 
-              <Button 
-                onClick={() => handleLogin()} 
+              <Button
+                onClick={() => handleLogin()}
                 disabled={isLoading || !role}
                 className={`w-full ${isLoading ? "bg-gray-400" : ""}`}
               >
                 {isLoading ? "Signing in..." : "Sign In"}
               </Button>
             </TabsContent>
-
-          
           </Tabs>
         </CardContent>
+        <div className="text-center text-[12px] py-2 text-muted-foreground">developed by <a href="http://dezprox.com" target="_blank" className="text-green-600" rel="noopener noreferrer">Dezprox</a></div>
       </Card>
     </div>
   )

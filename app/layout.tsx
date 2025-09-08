@@ -4,6 +4,7 @@ import './globals.css'
 import { AuthProvider } from '@/components/providers/auth-provider'
 import SonnerToaster from '@/components/providers/sonner-toaster'
 import { ClientProvider } from '@/contexts/ClientContext'
+import ConsoleErrorSuppressor from '@/components/providers/console-error-suppressor'
 
 export const metadata: Metadata = {
   title: 'Virukshaa-Construction-product',
@@ -25,6 +26,7 @@ export default function RootLayout({
       <body className={inter.className} suppressHydrationWarning>
         <AuthProvider>
           <ClientProvider>
+            <ConsoleErrorSuppressor />
             {children}
             <SonnerToaster />
           </ClientProvider>
