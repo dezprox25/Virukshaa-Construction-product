@@ -3271,6 +3271,63 @@ const PayrollManagement = () => {
         </div>
       </div>
 
+      {/* Export Dialog */}
+      <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Export Report</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">Choose which sections to include:</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { key: 'all', label: 'All' },
+                { key: 'supervisor', label: 'Supervisors' },
+                { key: 'employee', label: 'Employees' },
+                { key: 'client', label: 'Clients' },
+                { key: 'supplier', label: 'Suppliers' },
+              ].map((opt) => {
+                const active = selectedExportSections.includes(opt.key)
+                return (
+                  <Button
+                    key={opt.key}
+                    type="button"
+                    variant={active ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-8"
+                    onClick={() => {
+                      if (opt.key === 'all') {
+                        setSelectedExportSections(['all'])
+                        return
+                      }
+                      setSelectedExportSections((prev) => {
+                        const next = prev.includes('all') ? [] : [...prev]
+                        if (next.includes(opt.key)) return next.filter((k) => k !== opt.key)
+                        return [...next, opt.key]
+                      })
+                    }}
+                  >
+                    {opt.label}
+                  </Button>
+                )
+              })}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsExportDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => handleExportToPDF(selectedExportSections)}
+                disabled={isExporting}
+              >
+                {isExporting ? 'Exporting…' : 'Export PDF'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat, index) => (
           <Card

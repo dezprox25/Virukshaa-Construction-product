@@ -108,10 +108,9 @@ export async function PUT(
       updateData.avatar = undefined;
     }
 
-    // Handle password update separately to hash it
+    // Handle password update (store as plain string, no hashing)
     if (body.password) {
-      const bcrypt = await import('bcryptjs');
-      updateData.password = await bcrypt.hash(body.password, 10);
+      updateData.password = body.password;
     }
     
     const updatedSupervisor = await Supervisor.findByIdAndUpdate(

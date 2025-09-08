@@ -1251,7 +1251,7 @@ export default function AdminDashboard() {
         return <AdminSetting />
       default:
         return (
-          <div className="space-y-6">
+          <div className="flex flex-col space-y-6">
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md flex items-center">
                 <AlertCircle className="h-5 w-5 mr-2" />
@@ -1263,7 +1263,7 @@ export default function AdminDashboard() {
             )}
 
             {/* Enhanced Stats Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
+            <div className="order-1 md:order-none grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
               {stats.map((stat) => (
                 <Card
                   key={stat.id}
@@ -1298,7 +1298,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* Quick Actions Section */}
-            <Card className="bg-gradient-to-r from-indigo-50 to-blue-100 border-0 shadow-lg">
+            <Card className="order-3 md:order-none bg-gradient-to-r from-indigo-50 to-blue-100 border-0 shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Activity className="h-5 w-5 text-indigo-600" />
@@ -1326,7 +1326,7 @@ export default function AdminDashboard() {
             </Card>
 
             {/* Details Panel */}
-            <Card className="shadow-lg border-0">
+            <Card className="order-2 md:order-none shadow-lg border-0">
               <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100">
                 <CardTitle className="flex items-center gap-2">
                   {selectedStat ? (

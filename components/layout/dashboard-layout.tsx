@@ -410,10 +410,10 @@ export default function DashboardLayout({
                   description: 'Dashboard background has been reset to default.',
                 });
               }}
-              className="inline-flex items-center hidden gap-2 px-3 py-2 bg-white/80 hover:bg-white/90 rounded-md shadow-sm transition-colors text-red-600 hover:text-red-700"
+              className="inline-flex items-center  lg:gap-2 gap-1 px-3 py-2 bg-white/80 hover:bg-white/90 rounded-md shadow-sm transition-colors text-red-600 hover:text-red-700"
             >
               <X className="w-4 h-4" />
-              <span className="text-sm">Remove</span>
+              <span className="text-sm lg:block hidden">Remove</span>
             </button>
           )}
           <label htmlFor="background-upload" className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 bg-white/80 hover:bg-white/90 rounded-md shadow-sm transition-colors">

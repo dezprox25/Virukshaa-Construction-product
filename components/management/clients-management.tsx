@@ -1460,6 +1460,7 @@ export default function ClientsManagement() {
                     <Input
                       id="postalCode"
                       value={formData.postalCode}
+                      type="number"
                       onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
                       placeholder="Postal Code"
                       required
@@ -1920,7 +1921,9 @@ export default function ClientsManagement() {
                     <TabsTrigger value="projects">Sites</TabsTrigger>
                     <TabsTrigger value="invoices">Invoices</TabsTrigger>
                   </TabsList>
-                  <TabsContent value="overview" className="mt-6 space-y-6">
+
+
+                  <TabsContent value="overview" className="mt-6 space-y-6 max-h-[70vh] overflow-y-auto pr-2">
                     {/* Quick Stats */}
                     <div className="grid grid-cols-2 gap-4">
                       <Card>
@@ -2055,7 +2058,7 @@ export default function ClientsManagement() {
                       </CardContent>
                     </Card>
                   </TabsContent>
-                  <TabsContent value="projects" className="mt-6 space-y-4">
+                  <TabsContent value="projects" className="mt-6 space-y-4 max-h-[70vh] overflow-y-auto pr-2">
                     <div className="flex justify-between items-center">
                       <h3 className="text-lg font-semibold">Client Sites</h3>
                       <div className="flex gap-2">
@@ -2209,7 +2212,7 @@ export default function ClientsManagement() {
                       )}
                     </div>
                   </TabsContent>
-                  <TabsContent value="invoices" className="mt-6 space-y-4">
+                  <TabsContent value="invoices" className="mt-6 space-y-4 max-h-[70vh] overflow-y-auto pr-2">
                     <div className="flex justify-between items-center">
                       <h3 className="text-lg font-semibold">Invoices</h3>
                       <Button size="sm" onClick={openNewInvoiceDialog}>

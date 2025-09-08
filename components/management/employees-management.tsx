@@ -771,11 +771,11 @@ export default function EmployeesManagement() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base sm:text-sm font-medium">Today's Salary Total</CardTitle>
+            <CardTitle className="text-base sm:text-sm font-medium">Today's Salary</CardTitle>
             <IndianRupee className="h-5 w-5 sm:h-4 sm:w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl sm:text-2xl font-bold text-green-600">
+            <div className="text-lg sm:text-2xl font-bold text-green-600">
               {formatINR(totalSalaryToday)}
             </div>
             <p className="text-sm sm:text-xs text-muted-foreground">Daily shifts total</p>
@@ -787,7 +787,7 @@ export default function EmployeesManagement() {
             <IndianRupee className="h-5 w-5 sm:h-4 sm:w-4 text-teal-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl sm:text-2xl font-bold text-teal-600">
+            <div className="text-lg sm:text-2xl font-bold text-teal-600">
               {formatINR(employees
                 .filter(e => e.workType === 'Monthly')
                 .reduce((sum, emp) => sum + (emp.salary || 0), 0))}
@@ -1110,10 +1110,10 @@ export default function EmployeesManagement() {
               </SheetHeader>
 
               <Tabs defaultValue="overview" className="mt-6 flex flex-col h-[calc(100%-100px)]">
-                <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsList className="grid w-full grid-cols-1 mb-4">
                   <TabsTrigger value="overview">Overview</TabsTrigger>
                   {/* <TabsTrigger value="performance">Performance</TabsTrigger> */}
-                  <TabsTrigger value="projects">Projects</TabsTrigger>
+                  {/* <TabsTrigger value="projects">Projects</TabsTrigger> */}
                 </TabsList>
 
                 <TabsContent value="overview" className="flex-1 overflow-y-auto pr-2 space-y-6">
