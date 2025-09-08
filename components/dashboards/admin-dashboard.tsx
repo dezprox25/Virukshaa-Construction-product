@@ -1,9 +1,10 @@
 "use client"
 import { useState, useEffect } from "react"
+import dynamic from "next/dynamic"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import ClientsManagement from "@/components/management/clients-management"
+const ClientsManagement = dynamic(() => import("@/components/management/clients-management"), { ssr: false })
 import DashboardLayout from "@/components/layout/dashboard-layout"
 import {
   Users,
@@ -25,20 +26,20 @@ import {
 } from "lucide-react"
 import { ChartContainer, ChartTooltipContent, ChartLegendContent } from "@/components/ui/chart"
 import * as RechartsPrimitive from "recharts"
-import MaterialsManagement from "@/components/management/materials-management"
+const MaterialsManagement = dynamic(() => import("@/components/management/materials-management"), { ssr: false })
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import SupervisorsManagement from "@/components/management/supervisors-management"
-import SuppliersManagement from "@/components/management/suppliers-management"
-import EmployeesManagement from "@/components/management/employees-management"
-import AllWorkersOverview from "@/components/management/all-workers-overview"
-import UserManagement from "@/components/management/user-management"
-import Reportmanagement from "@/components/management/report-management"
-import PayrollManagement from "@/components/management/payroll-management"
-import AdminSetting from "@/components/management/admin-setting"
+const SupervisorsManagement = dynamic(() => import("@/components/management/supervisors-management"), { ssr: false })
+const SuppliersManagement = dynamic(() => import("@/components/management/suppliers-management"), { ssr: false })
+const EmployeesManagement = dynamic(() => import("@/components/management/employees-management"), { ssr: false })
+const AllWorkersOverview = dynamic(() => import("@/components/management/all-workers-overview"), { ssr: false })
+const UserManagement = dynamic(() => import("@/components/management/user-management"), { ssr: false })
+const Reportmanagement = dynamic(() => import("@/components/management/report-management"), { ssr: false })
+const PayrollManagement = dynamic(() => import("@/components/management/payroll-management"), { ssr: false })
+const AdminSetting = dynamic(() => import("@/components/management/admin-setting"), { ssr: false })
 import { Skeleton } from "@/components/ui/skeleton"
 import UserDetailsModal from "@/components/ui/user-details-model"
-import MessageBox from "@/components/common/MessageBox"
+const MessageBox = dynamic(() => import("@/components/common/MessageBox"), { ssr: false })
 import { toast } from "sonner"
 
 interface ApiResponse<T> {
