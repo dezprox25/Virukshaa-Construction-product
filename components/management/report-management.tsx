@@ -598,7 +598,7 @@ const ReportManagement = () => {
                       <div>
                         <h4 className="font-medium">
                           {((report as any).supervisorId && (supervisors.find(s => s._id === (report as any).supervisorId)?.name))
-                            || report.createdBy || 'Unknown'}
+                            || report.createdBy }
                           {(report as any).projectId && (
                             <>
                               {' '}• Project: {projects.find(p => p._id === (report as any).projectId)?.title || (report as any).projectId}
@@ -606,7 +606,7 @@ const ReportManagement = () => {
                           )}
                         </h4>
                         <p className="text-sm text-muted-foreground">
-                          {new Date(report.date).toLocaleDateString()} • {report.createdBy || 'Unknown'}
+                          {new Date(report.date).toLocaleDateString()} • {report.createdBy}
                           {report.updatedAt && (
                             <span className="text-xs text-muted-foreground/70">
                               {' '}• Updated {new Date(report.updatedAt).toLocaleString()}
