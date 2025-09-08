@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { Search, FileText, Trash2, Edit, X, Save, Loader2, Image } from 'lucide-react';
+import { Search, FileText, Trash2, Edit, X, Save, Loader2, Image, Eye, Download } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 
@@ -88,6 +88,76 @@ const ReportManagement = () => {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewFileName, setPreviewFileName] = useState('');
+  const [previewTimer, setPreviewTimer] = useState<number | null>(null);
+
+  // Helper to render appropriate file icon (ported from supervisor-reports)
+  const getFileIcon = (fileType: string) => {
+    if (!fileType) return <FileText className="h-4 w-4" />;
+    if (fileType.startsWith('image/')) return <Image className="h-4 w-4" />;
+    if (fileType === 'application/pdf') return <FileText className="h-4 w-4 text-red-500" />;
+    if (fileType.includes('word') || fileType.includes('document')) return <FileText className="h-4 w-4 text-blue-500" />;
+    if (fileType.includes('sheet') || fileType.includes('excel')) return <FileText className="h-4 w-4 text-green-500" />;
+    return <FileText className="h-4 w-4" />;
+  };
+
+  // Force-download via server proxy to avoid CORS and ensure attachment disposition
+  const handleDownloadPreview = () => {
+    if (!previewUrl) return;
+    const apiUrl = `/api/download?url=${encodeURIComponent(previewUrl)}&name=${encodeURIComponent(previewFileName || 'attachment')}`;
+    window.location.href = apiUrl;
+  };
+
+  // Cache-bust helper to avoid stale cached URLs (esp. with R2 presigned or CDN)
+  const cacheBusted = (url: string) => {
+    try {
+      const hasQuery = url.includes('?');
+      return `${url}${hasQuery ? '&' : '?'}cb=${Date.now()}`;
+    } catch {
+      return url;
+    }
+  };
+
+  // Open image preview with preloading to reduce perceived delay
+  const openImagePreview = (url: string, name: string) => {
+    const finalUrl = cacheBusted(url);
+    setPreviewFileName(name);
+    setPreviewLoading(true);
+    setPreviewUrl(finalUrl);
+    setPreviewOpen(true);
+
+    // Preload image; when loaded, stop the spinner
+    if (typeof window !== 'undefined') {
+      const pre = new window.Image();
+      pre.onload = () => setPreviewLoading(false);
+      pre.onerror = () => {
+        setPreviewLoading(false);
+        toast.error('Failed to load image preview');
+      };
+      pre.src = finalUrl;
+
+      // Fallback: if it takes too long, open in new tab
+      if (previewTimer) {
+        window.clearTimeout(previewTimer);
+        setPreviewTimer(null);
+      }
+      const timerId = window.setTimeout(() => {
+        if (previewLoading) {
+          setPreviewLoading(false);
+          window.open(finalUrl, '_blank');
+        }
+      }, 10000); // 10s timeout
+      setPreviewTimer(timerId);
+    }
+  };
+
+  // Clear pending preview timer when dialog closes or component unmounts
+  useEffect(() => {
+    return () => {
+      if (previewTimer) {
+        window.clearTimeout(previewTimer);
+      }
+    };
+  }, [previewTimer]);
 
   // Fetch reports from the API
   const fetchReports = useCallback(async () => {
@@ -638,45 +708,41 @@ const ReportManagement = () => {
                             )}
                           </div>
                         </div>
-                        {(report.content || '').length > 0 && (
-                          <div className="md:w-7/12 w-full mt-3 md:mt-0">
+                        <div className="md:w-7/12 w-full mt-3 md:mt-0">
+                          {(report.content || '').length > 0 && (
                             <div className="rounded-md border bg-muted/30 p-3">
                               <p className="text-sm text-muted-foreground whitespace-pre-line line-clamp-5">
                                 {report.content}
                               </p>
                             </div>
-                            {report.attachments && report.attachments.length > 0 && (
-                              <div className="mt-4">
-                                <h5 className="text-sm font-medium mb-2">Attachments:</h5>
-                                <div className="flex flex-wrap gap-2">
-                                  {report.attachments.map((attachment, index) => (
-                                    <div
-                                      key={index}
-                                      className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-gray-100 hover:bg-gray-200 transition-colors cursor-pointer"
-                                      onClick={() => {
-                                        if (attachment.fileType.startsWith('image/')) {
-                                          setPreviewLoading(true);
-                                          setPreviewUrl(attachment.fileUrl);
-                                          setPreviewFileName(attachment.fileName);
-                                          setPreviewOpen(true);
-                                        } else {
-                                          window.open(attachment.fileUrl, '_blank');
-                                        }
-                                      }}
-                                    >
-                                      {attachment.fileType.startsWith('image/') ? (
-                                        <Image className="w-4 h-4 mr-1" />
-                                      ) : (
-                                        <FileText className="w-4 h-4 mr-1" />
-                                      )}
-                                      {attachment.fileName}
-                                    </div>
-                                  ))}
-                                </div>
+                          )}
+                          {Array.isArray(report.attachments) && report.attachments.length > 0 && (
+                            <div className="mt-4">
+                              <h5 className="text-sm font-medium mb-2">Attachments:</h5>
+                              <div className="flex flex-wrap gap-2 mt-1">
+                                {report.attachments.map((attachment, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded text-xs cursor-pointer hover:bg-gray-200"
+                                    onClick={() => {
+                                      if (attachment.fileType.startsWith('image/')) {
+                                        // Preload and open image preview with cache-busting
+                                        openImagePreview(attachment.fileUrl, attachment.fileName);
+                                      } else {
+                                        // Direct open/download for non-image files
+                                        window.open(attachment.fileUrl, '_blank');
+                                      }
+                                    }}
+                                  >
+                                    {getFileIcon(attachment.fileType)}
+                                    <span className="truncate max-w-[100px]">{attachment.fileName}</span>
+                                    <Eye className="h-3 w-3" />
+                                  </div>
+                                ))}
                               </div>
-                            )}
-                          </div>
-                        )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </CardContent>
@@ -758,6 +824,17 @@ const ReportManagement = () => {
         <DialogContent className="sm:max-w-[800px] h-auto absolute" aria-describedby="preview-description">
           <DialogTitle className="text-lg font-semibold mb-2 pr-8 truncate">{previewFileName}</DialogTitle>
           <DialogDescription id="preview-description" className="sr-only">Preview of {previewFileName}</DialogDescription>
+          {/* Download button */}
+          {previewUrl && (
+            <button
+              type="button"
+              onClick={handleDownloadPreview}
+              className="absolute right-12 top-3 p-2 rounded-md hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+              title="Download"
+            >
+              <Download className="h-4 w-4" />
+            </button>
+          )}
           <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
             <X className="h-4 w-4" />
             <span className="sr-only">Close</span>

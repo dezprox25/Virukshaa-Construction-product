@@ -7,8 +7,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Paperclip, X, FileText, Image as ImageIcon, Download } from 'lucide-react'
-import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
+import { Paperclip, X, FileText, Image as ImageIcon, Eye, Download } from 'lucide-react'
+import { Dialog, DialogContent, DialogClose, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 
 type Project = {
   _id: string
@@ -63,6 +63,7 @@ const SupervisorReports: React.FC = () => {
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewFileName, setPreviewFileName] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [previewTimer, setPreviewTimer] = useState<number | null>(null)
 
   useEffect(() => {
     // Load projects and employees for selection
@@ -117,6 +118,82 @@ const SupervisorReports: React.FC = () => {
     const { name, value } = e.target
     setForm((prev) => ({ ...prev, [name]: value }))
   }
+
+  // Cache-bust helper to avoid stale cached URLs (esp. CDN/R2)
+  const cacheBusted = (url: string) => {
+    try {
+      const hasQuery = url.includes('?')
+      return `${url}${hasQuery ? '&' : '?'}cb=${Date.now()}`
+    } catch {
+      return url
+    }
+  }
+
+  // Force-download via server proxy to avoid CORS and ensure attachment disposition
+  const handleDownloadPreview = () => {
+    if (!previewUrl) return
+    const apiUrl = `/api/download?url=${encodeURIComponent(previewUrl)}&name=${encodeURIComponent(previewFileName || 'attachment')}`
+    window.location.href = apiUrl
+  }
+
+  // Unified open image preview with preloading and timeout fallback
+  const openImagePreview = (url: string, name: string) => {
+    const finalUrl = cacheBusted(url)
+    setPreviewFileName(name)
+    setPreviewLoading(true)
+    setPreviewUrl(finalUrl)
+    setPreviewOpen(true)
+
+    if (typeof window !== 'undefined') {
+      const pre = new window.Image()
+      pre.onload = () => {
+        setPreviewLoading(false)
+        if (previewTimer) {
+          window.clearTimeout(previewTimer)
+          setPreviewTimer(null)
+        }
+      }
+      pre.onerror = () => {
+        setPreviewLoading(false)
+        if (previewTimer) {
+          window.clearTimeout(previewTimer)
+          setPreviewTimer(null)
+        }
+        toast.error('Failed to load image preview')
+      }
+      pre.src = finalUrl
+
+      // 10s fallback: open in new tab if still loading
+      if (previewTimer) {
+        window.clearTimeout(previewTimer)
+        setPreviewTimer(null)
+      }
+      const timerId = window.setTimeout(() => {
+        if (previewLoading) {
+          setPreviewLoading(false)
+          window.open(finalUrl, '_blank')
+        }
+      }, 10000)
+      setPreviewTimer(timerId)
+    }
+  }
+
+  // Clear pending preview timer on unmount
+  React.useEffect(() => {
+    return () => {
+      if (previewTimer) {
+        window.clearTimeout(previewTimer)
+      }
+    }
+  }, [previewTimer])
+
+  // Whenever preview finishes loading, ensure timer is cleared
+  React.useEffect(() => {
+    if (!previewLoading && previewTimer) {
+      window.clearTimeout(previewTimer)
+      setPreviewTimer(null)
+    }
+  }, [previewLoading, previewTimer])
 
   const toggleEmployee = (id: string) => {
     setForm((prev) => {
@@ -592,20 +669,15 @@ const SupervisorReports: React.FC = () => {
                             className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded text-xs cursor-pointer hover:bg-gray-200"
                             onClick={() => {
                               if (attachment.fileType.startsWith('image/')) {
-                                // Show preview modal for images
-                                setPreviewLoading(true);
-                                setPreviewUrl(attachment.fileUrl);
-                                setPreviewFileName(attachment.fileName);
-                                setPreviewOpen(true);
+                                openImagePreview(attachment.fileUrl, attachment.fileName)
                               } else {
-                                // Direct download for non-image files
-                                window.open(attachment.fileUrl, '_blank');
+                                window.open(attachment.fileUrl, '_blank')
                               }
                             }}
                           >
                             {getFileIcon(attachment.fileType)}
                             <span className="truncate max-w-[100px]">{attachment.fileName}</span>
-                            <Download className="h-3 w-3" />
+                            <Eye className="h-3 w-3" />
                           </div>
                         ))}
                       </div>
@@ -622,10 +694,22 @@ const SupervisorReports: React.FC = () => {
         )}
       </div>
       </div>
-      {/* Preview Modal */}
+      {/* Image Preview Modal (unified with report-management) */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="sm:max-w-[800px] h-auto relative">
-          <h3 className="text-lg font-semibold mb-2 pr-8 truncate">{previewFileName}</h3>
+        <DialogContent className="sm:max-w-[800px] h-auto absolute" aria-describedby="preview-description">
+          <DialogTitle className="text-lg font-semibold mb-2 pr-8 truncate">{previewFileName}</DialogTitle>
+          <DialogDescription id="preview-description" className="sr-only">Preview of {previewFileName}</DialogDescription>
+          {/* Download button */}
+          {previewUrl && (
+            <button
+              type="button"
+              onClick={handleDownloadPreview}
+              className="absolute right-12 top-3 p-2 rounded-md hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+              title="Download"
+            >
+              <Download className="h-4 w-4" />
+            </button>
+          )}
           <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
             <X className="h-4 w-4" />
             <span className="sr-only">Close</span>

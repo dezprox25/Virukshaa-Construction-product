@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
@@ -14,12 +15,17 @@ import {
   AlertCircle,
   Search,
   Filter,
+  FileText,
+  Image,
+  Download,
+  X,
 } from "lucide-react"
 interface TaskItem {
   _id: string
   title: string
   status: "Pending" | "In Progress" | "Completed"
   priority: "Low" | "Medium" | "High"
+  description?: string
   projectTitle?: string
   startDate?: string
   endDate?: string
@@ -30,6 +36,7 @@ interface TaskItem {
   city?: string
   state?: string
   postalCode?: string
+  documentUrls?: { url: string; name?: string; type?: string; size?: number }[]
 }
 
 export default function SupervisorProjects() {
@@ -39,6 +46,11 @@ export default function SupervisorProjects() {
   const [priorityFilter, setPriorityFilter] = useState("All")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Image preview state
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string>("")
+  const [previewFileName, setPreviewFileName] = useState<string>("")
 
   useEffect(() => {
     fetchTasks()
@@ -70,6 +82,7 @@ export default function SupervisorProjects() {
         title: t.title,
         status: t.status,
         priority: t.priority,
+        description: t.description,
         projectTitle: t.projectTitle || t.projectId?.title,
         startDate: t.startDate,
         endDate: t.endDate,
@@ -80,6 +93,9 @@ export default function SupervisorProjects() {
         city: t.projectId?.city,
         state: t.projectId?.state,
         postalCode: t.projectId?.postalCode,
+        documentUrls: Array.isArray(t.documentUrls)
+          ? t.documentUrls.map((u: any) => (typeof u === 'string' ? { url: u } : u))
+          : (t.documentUrl ? [{ url: t.documentUrl }] : []),
       }))
       setTasks(mapped)
     } catch (e: any) {
@@ -88,6 +104,25 @@ export default function SupervisorProjects() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Format bytes to human readable text
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes || bytes <= 0) return ''
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`
+  }
+
+  // Choose an icon for attachment
+  const getAttachmentIcon = (name?: string, type?: string) => {
+    const t = (type || '').toLowerCase()
+    const ext = (name || '').split('.').pop()?.toLowerCase() || ''
+    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']
+    if (t.startsWith('image/') || imageExts.includes(ext)) return <Image className="w-4 h-4 text-blue-500" />
+    if (ext === 'pdf' || t === 'application/pdf') return <FileText className="w-4 h-4 text-red-500" />
+    return <FileText className="w-4 h-4 text-muted-foreground" />
   }
 
   const getStatusColor = (status: string) => {
@@ -200,7 +235,7 @@ export default function SupervisorProjects() {
             <option value="Pending">Pending</option>
           </select>
         </div>
-        <div className="flex items-center gap-2">
+        <div className=" items-center gap-`2 hidden">
           <select
             value={priorityFilter}
             onChange={(e) => setPriorityFilter(e.target.value)}
@@ -229,7 +264,7 @@ export default function SupervisorProjects() {
                 </div>
                 <div className="flex flex-col gap-2 items-end">
                   <Badge className={getStatusColor(task.status)}>{task.status}</Badge>
-                  <Badge className={getPriorityColor(task.priority)}>{task.priority}</Badge>
+                  {/* <Badge className={getPriorityColor(task.priority)}>{task.priority}</Badge> */}
                 </div>
               </div>
               <div className="space-y-3 text-sm text-muted-foreground">
@@ -247,6 +282,14 @@ export default function SupervisorProjects() {
                         {task.startDate ? " · " : ""}Due {new Date(task.endDate).toLocaleDateString()}
                       </>
                     )}
+                  </div>
+                )}
+
+                {/* Description */}
+                {task.description && (
+                  <div>
+                    <span className="font-medium text-foreground">Description:</span>
+                    <p className="mt-1 text-muted-foreground whitespace-pre-line line-clamp-4">{task.description}</p>
                   </div>
                 )}
 
@@ -274,6 +317,56 @@ export default function SupervisorProjects() {
                     </div>
                   )}
                 </div>
+
+                {/* Attachments */}
+                {Array.isArray(task.documentUrls) && task.documentUrls.length > 0 && (
+                  <div className="mt-2">
+                    <div className="font-medium text-foreground mb-1">Attachments:</div>
+                    <div className="flex flex-wrap gap-2">
+                      {task.documentUrls.map((doc, idx) => {
+                        const name = doc.name || doc.url.split('/').pop() || `Document ${idx + 1}`
+                        const ext = (name || '').split('.').pop()?.toLowerCase() || ''
+                        const isImage = (doc.type || '').toLowerCase().startsWith('image/') || ['jpg','jpeg','png','gif','webp'].includes(ext)
+                        return (
+                          <div
+                            key={`${task._id}-doc-${idx}`}
+                            className="group flex items-center gap-2 bg-gray-100 px-3 py-2 rounded cursor-pointer hover:bg-gray-200"
+                            onClick={() => {
+                              if (isImage) {
+                                setPreviewUrl(doc.url)
+                                setPreviewFileName(name)
+                                setPreviewOpen(true)
+                              } else {
+                                window.open(doc.url, '_blank')
+                              }
+                            }}
+                            title={name}
+                          >
+                            {getAttachmentIcon(name, doc.type)}
+                            <div className="flex flex-col">
+                              <span className="text-sm font-medium max-w-[220px] truncate">{name}</span>
+                              {doc.size ? (
+                                <span className="text-xs text-muted-foreground">({formatFileSize(doc.size)})</span>
+                              ) : null}
+                            </div>
+                            <Download
+                              className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity ml-auto text-muted-foreground"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                const a = document.createElement('a')
+                                a.href = `/api/download?url=${encodeURIComponent(doc.url)}&name=${encodeURIComponent(name)}`
+                                a.target = '_blank'
+                                document.body.appendChild(a)
+                                a.click()
+                                document.body.removeChild(a)
+                              }}
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -291,6 +384,37 @@ export default function SupervisorProjects() {
           </p>
         </div>
       )}
+      {/* Image Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="sm:max-w-[800px] h-auto absolute">
+          <h3 className="text-lg font-semibold mb-2 pr-8 truncate">{previewFileName}</h3>
+          <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </DialogClose>
+          <div className="relative w-full h-full flex items-center justify-center mt-4">
+            {previewUrl ? (
+              <img src={previewUrl} alt={previewFileName} className="max-h-[70vh] w-auto object-contain rounded" />
+            ) : null}
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button
+              className="inline-flex items-center gap-2 px-3 py-2 rounded bg-primary text-primary-foreground hover:opacity-90"
+              onClick={() => {
+                const a = document.createElement('a')
+                a.href = `/api/download?url=${encodeURIComponent(previewUrl)}&name=${encodeURIComponent(previewFileName || 'file')}`
+                a.target = '_blank'
+                document.body.appendChild(a)
+                a.click()
+                document.body.removeChild(a)
+              }}
+            >
+              <Download className="w-4 h-4" />
+              Download
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

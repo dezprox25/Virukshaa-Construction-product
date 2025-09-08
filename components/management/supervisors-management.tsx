@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, startTransition } from "react"
 import { format } from "date-fns"
 import { Toaster, toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -600,10 +600,22 @@ export default function SupervisorsPage() {
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [isEditTaskFormOpen, setIsEditTaskFormOpen] = useState(false)
 
+  // Role (for enabling admin-only controls)
+  const [userRole, setUserRole] = useState<string | null>(null)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const role = localStorage.getItem('userRole')
+      setUserRole(role)
+    }
+  }, [])
+
   // File Preview
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewUrl, setPreviewUrl] = useState('')
   const [previewFileName, setPreviewFileName] = useState('')
+
+  // Track tasks being updated to avoid multiple concurrent updates and disable UI
+  const [updatingTaskIds, setUpdatingTaskIds] = useState<Set<string>>(new Set())
 
   // Projects/Employees
   const [availableProjects, setAvailableProjects] = useState<IProject[]>([])
@@ -797,6 +809,44 @@ export default function SupervisorsPage() {
       setIsLoadingTasks(false)
     }
   }, [])
+
+  // Update task status (admin only UI will call this; API should enforce auth/authorization)
+  const updateTaskStatus = useCallback(async (taskId: string, status: Task["status"]) => {
+    try {
+      // mark as updating
+      setUpdatingTaskIds(prev => {
+        const next = new Set(prev)
+        next.add(taskId)
+        return next
+      })
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      })
+      if (!res.ok) {
+        throw new Error('Failed to update task status')
+      }
+      // apply update after server confirms
+      startTransition(() => {
+        setSupervisorTasks((prev) => prev.map(t => t._id === taskId ? { ...t, status } : t))
+      })
+      toast.success('Task status updated')
+    } catch (e: any) {
+      console.error(e)
+      toast.error(e?.message || 'Could not update task status')
+      // fallback: refetch tasks for selected supervisor
+      if (selectedSupervisor?._id) {
+        fetchSupervisorTasks(selectedSupervisor._id)
+      }
+    } finally {
+      setUpdatingTaskIds(prev => {
+        const next = new Set(prev)
+        next.delete(taskId)
+        return next
+      })
+    }
+  }, [fetchSupervisorTasks, selectedSupervisor])
 
   const fetchSupervisorPaidLeaveDays = useCallback(async (supervisorId: string, month: string): Promise<number> => {
     try {
@@ -1500,21 +1550,21 @@ export default function SupervisorsPage() {
     }
   }, [])
 
-  const updateTaskStatus = useCallback(async (taskId: string, status: Task["status"]) => {
-    try {
-      const res = await fetch(`/api/tasks/${taskId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      })
-      if (!res.ok) throw new Error("Failed to update task status")
-      setSupervisorTasks((prev) => prev.map((t) => (t._id === taskId ? { ...t, status } : t)))
-      toast.success("Task status updated")
-    } catch (e) {
-      console.error(e)
-      toast.error("Failed to update task status")
-    }
-  }, [])
+  // const updateTaskStatus = useCallback(async (taskId: string, status: Task["status"]) => {
+  //   try {
+  //     const res = await fetch(`/api/tasks/${taskId}`, {
+  //       method: "PATCH",
+  //       headers: { "Content-Type": "application/json" },
+  //       body: JSON.stringify({ status }),
+  //     })
+  //     if (!res.ok) throw new Error("Failed to update task status")
+  //     setSupervisorTasks((prev) => prev.map((t) => (t._id === taskId ? { ...t, status } : t)))
+  //     toast.success("Task status updated")
+  //   } catch (e) {
+  //     console.error(e)
+  //     toast.error("Failed to update task status")
+  //   }
+  // }, [])
 
   // Employees assign
   // const handleEmployeeAssign = useCallback(
@@ -2531,18 +2581,23 @@ export default function SupervisorsPage() {
                             <div className="flex justify-between items-start mb-2">
                               <h4 className="font-medium">{task.title}</h4>
                               <div className="flex items-center gap-2">
-                                <Badge
-                                  className={cn("cursor-pointer hover:opacity-80 transition-opacity", getTaskStatusColor(task.status))}
-                                  variant="secondary"
-                                  onClick={() => {
-                                    const statuses: Array<Task["status"]> = ["Pending", "In Progress", "Completed"]
-                                    const currentIndex = statuses.indexOf(task.status)
-                                    const nextStatus = statuses[(currentIndex + 1) % statuses.length]
-                                    updateTaskStatus(task._id, nextStatus)
-                                  }}
+                                <Select
+                                  value={task.status}
+                                  onValueChange={(val) => updateTaskStatus(task._id, val as Task['status'])}
+                                  disabled={updatingTaskIds.has(task._id)}
                                 >
-                                  {task.status}
-                                </Badge>
+                                  <SelectTrigger
+                                    className={cn("h-7 w-40", getTaskStatusColor(task.status), updatingTaskIds.has(task._id) && 'opacity-70')}
+                                    aria-busy={updatingTaskIds.has(task._id)}
+                                  >
+                                    <SelectValue placeholder="Select status" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="Pending">Pending</SelectItem>
+                                    <SelectItem value="In Progress">In Progress</SelectItem>
+                                    <SelectItem value="Completed">Completed</SelectItem>
+                                  </SelectContent>
+                                </Select>
                                 <Button variant="outline" size="sm" onClick={() => openEditTaskForm(task)} className="h-7 w-7 p-0">
                                   <Edit className="w-3 h-3" />
                                 </Button>
@@ -2690,7 +2745,7 @@ export default function SupervisorsPage() {
 
       {/* File Preview Dialog */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="sm:max-w-[800px] h-auto relative">
+        <DialogContent className="sm:max-w-[800px] h-auto absolute">
           <h3 className="text-lg font-semibold mb-2 pr-8 truncate">{previewFileName}</h3>
           <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
             <X className="h-4 w-4" />
