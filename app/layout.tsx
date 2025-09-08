@@ -8,7 +8,7 @@ import ConsoleErrorSuppressor from '@/components/providers/console-error-suppres
 
 export const metadata: Metadata = {
   title: 'Virukshaa-Construction-product',
-  description: 'One of the Dezprox company products under building',
+  description: 'Virukshaa by Dezprox — a modern construction management platform to streamline projects, teams, and site operations.',
   icons: {
     icon: '/Viruksha-tab-Logo.png',
   },
